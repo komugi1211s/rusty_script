@@ -27,40 +27,68 @@ pub enum TokenType {
 
     // 概念　
     Str(String),
-    Int(i32),
-    Iden,
-    EOF
+    Iden(String),
+    Digit(f32),
+    EOF,
 }
 
-impl fmt::Display for TokenType {
+#[derive(Debug)]
+struct ErrData {
+    line: i32,
+    col: i32,
+    text: String
+}
+
+impl fmt::Display for ErrData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        write!(f, "{} ({}行目 {}文字目)", self.text, self.line, self.col)
     }
 }
 
+impl ErrData {
+    fn new(line: i32, col: i32, text: &str) -> Self {
+        Self {
+            line: line,
+            col: col,
+            text: text.to_string()
+        }
+    }
+}
+
+// Mostly Syntax Error
+#[derive(Debug)]
+pub enum ScannerError {
+    UnexpectedToken(usize, usize, String),
+    ReservedWord(usize, usize, String),
+    UnterminatedString(usize, usize, String),
+}
+
 // Do we need a clone?
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Token {
     tokentype: TokenType,
-    lexeme: String,
     line: usize
 }
 
 impl Token {
-    fn new(tokentype: TokenType, lexeme: &str, line: usize) -> Self {
+    fn new(tokentype: TokenType, line: usize) -> Self {
         Token {
             tokentype: tokentype,
-            lexeme: lexeme.to_string(),
             line: line,
         }
     }
 
     pub fn to_info_str(&self) -> String {
-        format!("トークン {} - \"{}\" ({}行目)", self.tokentype, self.lexeme, self.line)
+        self.to_string()
     }
 }
 
-#[derive(Debug)]
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "トークン {:?}, {}行目", self.tokentype, self.line)
+    }
+}
+
 pub struct CodeScanner {
     source: String,
     tokens: Vec<Token>,
@@ -80,18 +108,22 @@ impl CodeScanner {
         }
     }
 
-    pub fn scan(&mut self) -> Result<&Vec<Token>, ()> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, ScannerError> {
         let chars: Vec<char> = self.source.chars().collect::<Vec<char>>();
+
+        println!("追跡を開始します。");
+        println!("文字列の長さ: {}", self.source.len());
+        println!("現在位置: {}", self.current);
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_next_token(&chars)?;
         }
 
-        self.tokens.push(Token::new(TokenType::EOF, "/eof/", self.line));
-        Ok(&self.tokens)
+        self.tokens.push(Token::new(TokenType::EOF, self.line));
+        Ok(self.tokens.clone())
     }
 
-    fn scan_next_token(&mut self, chars: &Vec<char>) -> Result<(), ()>{
+    fn scan_next_token(&mut self, chars: &Vec<char>) -> Result<(), ScannerError>{
         let c: char = self.advance(chars);
         return match c {
             '(' => self.add_token(TokenType::OpenParen),
@@ -128,13 +160,14 @@ impl CodeScanner {
 
             // 文字列を追加
             '"' => self.add_string(chars),
+            a @ '0' ..= '9' => self.add_digit(a),
 
             // Default
-            _ => return Err(())
+            _ => return Err(ScannerError::UnexpectedToken(self.current, self.line, "認知できないトークンです。".to_string()))
         };
     }
 
-    fn add_string(&mut self, chars: &Vec<char>) -> Result<(), ()> {
+    fn add_string(&mut self, chars: &Vec<char>) -> Result<(), ScannerError> {
         while chars[self.current] != '"' && !self.is_at_end() {
             if chars[self.current] == '\n' { self.line += 1; }
             self.advance(chars);
@@ -142,7 +175,7 @@ impl CodeScanner {
 
         // Unterminated String
         if self.is_at_end() {
-            return Err(());
+            return Err(ScannerError::UnterminatedString(self.current, self.line, "文字列が閉じられていません。".to_string()));
         }
 
         self.advance(chars);
@@ -152,16 +185,21 @@ impl CodeScanner {
         self.add_token(TokenType::Str(given_string))
     }
 
+    fn add_digit(&mut self, digit: char) -> Result<(), ScannerError> {
+        Ok(())
+    }
+
     fn advance(&mut self, chars:&Vec<char>) -> char {
         self.current += 1;
         chars[self.current -1]
     }
 
-    fn add_token(&mut self, tokentype: TokenType) -> Result<(), ()> {
-
+    fn add_token(&mut self, tokentype: TokenType) -> Result<(), ScannerError> { 
+        self.tokens.push(Token::new(tokentype, self.line));
+        Ok(())
     }
 
     fn is_at_end(&self) -> bool {
-        self.source.len() < self.current
+        self.source.len() <= self.current
     }
 }

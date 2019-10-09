@@ -37,7 +37,13 @@ fn run_file(path: &String) -> Result<(), ()>{
 
     f.read_to_string(&mut strings).expect("ファイルの読み込みに失敗しました。");
     println!("{}", &strings);
-    isekai::core::start(&strings)
+    match isekai::core::start(&strings) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            println!("エラーが発生しました。: {:?}", e);
+            Err(())
+        },
+    }
 }
 
 fn main() {
@@ -49,6 +55,9 @@ fn main() {
     }
     exit_process(match run_file(&arguments[1]) {
         Ok(_) => true,
-        Err(_) => false,
+        Err(_) => {
+            println!("パースに失敗。");
+            false
+        },
     })
 }
