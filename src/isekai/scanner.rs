@@ -1,5 +1,13 @@
 use std::fmt;
 
+/*
+ 10 + 2 * 4
+ expression -> (unary)calcnum operator (unary)calcnum;
+ calcnum -> ;
+ digit -> 0..9;
+ 
+
+*/
 #[derive(Clone, Debug)]
 pub enum TokenType {
     // 予約語
@@ -32,22 +40,27 @@ pub enum TokenType {
     EOF,
 }
 
+
+// Mostly Syntax Error
 #[derive(Debug)]
-struct ErrData {
-    line: i32,
-    col: i32,
+pub enum ErrorType {
+    UnexpectedToken,
+    ReservedWord,
+    UnterminatedString,
+}
+
+#[derive(Debug)]
+pub struct SyntaxError {
+    _type: ErrorType,
+    line: usize,
+    col: usize,
     text: String
 }
 
-impl fmt::Display for ErrData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} ({}行目 {}文字目)", self.text, self.line, self.col)
-    }
-}
-
-impl ErrData {
-    fn new(line: i32, col: i32, text: &str) -> Self {
+impl SyntaxError {
+    fn new(_type: ErrorType, line: usize, col: usize, text: &str) -> Self {
         Self {
+            _type: _type,
             line: line,
             col: col,
             text: text.to_string()
@@ -55,12 +68,10 @@ impl ErrData {
     }
 }
 
-// Mostly Syntax Error
-#[derive(Debug)]
-pub enum ScannerError {
-    UnexpectedToken(usize, usize, String),
-    ReservedWord(usize, usize, String),
-    UnterminatedString(usize, usize, String),
+impl fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}: {} ({}行目 {}文字目)", self._type, self.text, self.line, self.col)
+    }
 }
 
 // Do we need a clone?
@@ -108,7 +119,7 @@ impl CodeScanner {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, ScannerError> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
         let chars: Vec<char> = self.source.chars().collect::<Vec<char>>();
 
         println!("追跡を開始します。");
@@ -123,7 +134,7 @@ impl CodeScanner {
         Ok(self.tokens.clone())
     }
 
-    fn scan_next_token(&mut self, chars: &Vec<char>) -> Result<(), ScannerError>{
+    fn scan_next_token(&mut self, chars: &Vec<char>) -> Result<(), SyntaxError>{
         let c: char = self.advance(chars);
         return match c {
             '(' => self.add_token(TokenType::OpenParen),
@@ -163,11 +174,15 @@ impl CodeScanner {
             a @ '0' ..= '9' => self.add_digit(a),
 
             // Default
-            _ => return Err(ScannerError::UnexpectedToken(self.current, self.line, "認知できないトークンです。".to_string()))
+            _ => return Err(SyntaxError::new(
+                    ErrorType::UnexpectedToken,
+                    self.line,
+                    self.current,
+                    "認知できないトークンです。"))
         };
     }
 
-    fn add_string(&mut self, chars: &Vec<char>) -> Result<(), ScannerError> {
+    fn add_string(&mut self, chars: &Vec<char>) -> Result<(), SyntaxError> {
         while chars[self.current] != '"' && !self.is_at_end() {
             if chars[self.current] == '\n' { self.line += 1; }
             self.advance(chars);
@@ -175,7 +190,7 @@ impl CodeScanner {
 
         // Unterminated String
         if self.is_at_end() {
-            return Err(ScannerError::UnterminatedString(self.current, self.line, "文字列が閉じられていません。".to_string()));
+            return Err(SyntaxError::new(ErrorType::UnterminatedString, self.line, self.current, "文字列が閉じられていません。"));
         }
 
         self.advance(chars);
@@ -185,8 +200,8 @@ impl CodeScanner {
         self.add_token(TokenType::Str(given_string))
     }
 
-    fn add_digit(&mut self, digit: char) -> Result<(), ScannerError> {
-        Ok(())
+    fn add_digit(&mut self, digit: char) -> Result<(), SyntaxError> {
+       
     }
 
     fn advance(&mut self, chars:&Vec<char>) -> char {
@@ -194,7 +209,7 @@ impl CodeScanner {
         chars[self.current -1]
     }
 
-    fn add_token(&mut self, tokentype: TokenType) -> Result<(), ScannerError> { 
+    fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> { 
         self.tokens.push(Token::new(tokentype, self.line));
         Ok(())
     }

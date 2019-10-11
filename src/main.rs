@@ -25,23 +25,23 @@ fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0x0000 } else { 0x0100 });
 }
 
-fn run_file(path: &String) -> Result<(), ()>{
+fn run_file(path: &String) -> bool {
     let mut strings = String::new();
     let mut f = match File::open(path) {
         Ok(n) => n,
         _ => {
-            ise_print!("ファイルの読み込みに失敗しました。");
-            exit_process(false);
+            ise_print!("ファイルを開けませんでした。");
+            return false;
         }
     };
 
     f.read_to_string(&mut strings).expect("ファイルの読み込みに失敗しました。");
     println!("{}", &strings);
     match isekai::core::start(&strings) {
-        Ok(_) => Ok(()),
+        Ok(_) => true,
         Err(e) => {
-            println!("エラーが発生しました。: {:?}", e);
-            Err(())
+            println!("エラーが発生しました。: {}", e.to_string());
+            false
         },
     }
 }
@@ -53,11 +53,5 @@ fn main() {
         ise_print!("usage: isekai [filename].kai");
         exit_process(true);
     }
-    exit_process(match run_file(&arguments[1]) {
-        Ok(_) => true,
-        Err(_) => {
-            println!("パースに失敗。");
-            false
-        },
-    })
+    exit_process(run_file(&arguments[1]))
 }
