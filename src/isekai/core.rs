@@ -7,7 +7,7 @@ pub fn start(code: &str)  -> Result<(), SyntaxError> {
     let _tokens: Vec<Token> = _scanner.scan()?;
     
     for t in _tokens.iter() {
-        println!("{}", t.to_info_str());
+        println!("{}", t.to_string());
     }
 
     Ok(())

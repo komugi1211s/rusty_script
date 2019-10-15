@@ -4,12 +4,6 @@ use std::io::prelude::*;
 
 use isekai_language::isekai;
 
-macro_rules! ise_print {
-    ($x: expr) => {
-        println!("isekai: {}", $x);
-    }
-}
-
 #[cfg(target_os = "macos")]
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
@@ -30,13 +24,20 @@ fn run_file(path: String) -> bool {
     let mut f = match File::open(path) {
         Ok(n) => n,
         _ => {
-            ise_print!("ファイルを開けませんでした。");
+            println!("ファイルを開けませんでした。");
             return false;
         }
     };
 
     f.read_to_string(&mut strings).expect("ファイルの読み込みに失敗しました。");
-    println!("{}", &strings);
+    println!("======== プログラム開始 =======");
+    println!("");
+    for (i, l) in strings.lines().enumerate() {
+        println!("{}: {}", i + 1, l);
+    }
+    println!("");
+    println!("======== プログラム終了 =======");
+    
     match isekai::core::start(strings.as_str()) {
         Ok(_) => true,
         Err(e) => {
@@ -50,7 +51,7 @@ fn main() {
     let arguments: Vec<String> = env::args().collect();
     
     if arguments.len() <= 1 { // もし引数が無かったら
-        ise_print!("usage: isekai [filename].kai");
+        println!("usage: isekai [filename].kai");
         exit_process(true);
     }
     exit_process(run_file(arguments[1].clone()))

@@ -43,9 +43,9 @@ pub enum TokenType {
 
 #[derive(Debug)]
 pub enum ErrorType {
-    UnexpectedToken,
+    UnexpectedToken(char),
     ReservedWord,
-    UnterminatedString,
+    UnterminatedString(String),
 }
 
 #[derive(Debug)]
@@ -84,10 +84,6 @@ impl Token {
             line: line,
         }
     }
-
-    pub fn to_info_str(&self) -> String {
-        self.to_string()
-    }
 }
 
 impl fmt::Display for Token {
@@ -102,6 +98,7 @@ pub struct CodeScanner {
     start: usize,
     current: usize,
     line: usize,
+    column: usize,
 }
 
 impl CodeScanner {
@@ -112,6 +109,7 @@ impl CodeScanner {
             start: 0,
             current: 0,
             line: 1,
+            column: 1,
         }
     }
 
@@ -133,7 +131,7 @@ impl CodeScanner {
 
     fn scan_next_token(&mut self, chars: &[char]) -> Result<(), SyntaxError>{
         let c: char = self.advance(chars);
-        return match c {
+        match c {
             '(' => self.add_token(TokenType::OpenParen),
             ')' => self.add_token(TokenType::CloseParen),
             '{' => self.add_token(TokenType::OpenBrace),
@@ -158,35 +156,40 @@ impl CodeScanner {
             },
 
             // スペース、特殊文字は全て無視
-            ' ' | '\r' | '\t' => return Ok(()),
+            ' ' | '\r' | '\t' => Ok(()),
 
             // 改行
             '\n' => {
                 self.line += 1;
-                return Ok(());
+                self.column = 1;
+                Ok(())
             }
 
             // 文字列を追加
             '"' => self.add_string(chars),
+            
+            // 数字全般を単発で判定
             a @ '0' ..= '9' => self.add_digit(a),
 
             // Default
-            _ => return Err(SyntaxError::new(
-                    ErrorType::UnexpectedToken,
+            def => return Err(SyntaxError::new(
+                    ErrorType::UnexpectedToken(def),
                     self.line,
-                    self.current))
-        };
+                    self.column
+                ))
+        }
     }
 
     fn add_string(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
-        while chars[self.current] != '"' && !self.is_at_end() {
-            if chars[self.current] == '\n' { self.line += 1; }
+        while !self.is_at_end() && chars[self.current] != '"' {
+            if chars[self.current] == '\n' { self.line += 1; self.column = 1; }
             self.advance(chars);
         }
 
         // Unterminated String
         if self.is_at_end() {
-            return Err(SyntaxError::new(ErrorType::UnterminatedString, self.line, self.current));
+            let given_string: String = (&chars[(self.start + 1) .. (self.current - 1)]).iter().collect();
+            return Err(SyntaxError::new(ErrorType::UnterminatedString(given_string), self.line, self.column));
         }
 
         self.advance(chars);
@@ -202,6 +205,7 @@ impl CodeScanner {
 
     fn advance(&mut self, chars:&[char]) -> char {
         self.current += 1;
+        self.column += 1;
         chars[self.current -1]
     }
 
