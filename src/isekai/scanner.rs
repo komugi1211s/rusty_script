@@ -5,7 +5,7 @@ use std::fmt;
  expression -> (unary)calcnum operator (unary)calcnum;
  calcnum -> ;
  digit -> 0..9;
- 
+
 
 */
 #[derive(Clone, Debug)]
@@ -22,24 +22,23 @@ pub enum TokenType {
 
     // 括弧とか文字とか
     DoubleQuote, // ""
-    Slash, // /
-    OpenParen, // (
-    CloseParen, // )
-    OpenBrace, // {
-    CloseBrace, // }
-    AtMark, // @
-    Colon, // :
-    SemiColon, // ;
-    Equal, // =
-    Dot, // .
+    Slash,       // /
+    OpenParen,   // (
+    CloseParen,  // )
+    OpenBrace,   // {
+    CloseBrace,  // }
+    AtMark,      // @
+    Colon,       // :
+    SemiColon,   // ;
+    Equal,       // =
+    Dot,         // .
 
-    // 概念　
+    // 概念
     Str(String),
     Iden(String),
     Digit(f32),
     EOF,
 }
-
 
 #[derive(Debug)]
 pub enum ErrorType {
@@ -74,7 +73,7 @@ impl fmt::Display for SyntaxError {
 #[derive(Clone)]
 pub struct Token {
     tokentype: TokenType,
-    line: usize
+    line: usize,
 }
 
 impl Token {
@@ -129,7 +128,7 @@ impl CodeScanner {
         Ok(self.tokens.clone())
     }
 
-    fn scan_next_token(&mut self, chars: &[char]) -> Result<(), SyntaxError>{
+    fn scan_next_token(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
         let c: char = self.advance(chars);
         match c {
             '(' => self.add_token(TokenType::OpenParen),
@@ -145,7 +144,7 @@ impl CodeScanner {
                 // 次の文字列も '/' であれば、これはコメントである
                 if chars[self.current] == '/' {
                     // 改行、若しくは最後の文字にぶつかるまでループ
-                    while !self.is_at_end() && chars[self.current] != '\n' { 
+                    while !self.is_at_end() && chars[self.current] != '\n' {
                         self.advance(chars);
                     }
                     Ok(())
@@ -153,7 +152,7 @@ impl CodeScanner {
                     // ただのスラッシュだった…
                     self.add_token(TokenType::Slash)
                 }
-            },
+            }
 
             // スペース、特殊文字は全て無視
             ' ' | '\r' | '\t' => Ok(()),
@@ -167,33 +166,44 @@ impl CodeScanner {
 
             // 文字列を追加
             '"' => self.add_string(chars),
-            
+
             // 数字全般を単発で判定
-            a @ '0' ..= '9' => self.add_digit(a),
+            a @ '0'..='9' => self.add_digit(a),
 
             // Default
-            def => return Err(SyntaxError::new(
+            def => {
+                return Err(SyntaxError::new(
                     ErrorType::UnexpectedToken(def),
                     self.line,
-                    self.column
+                    self.column,
                 ))
+            }
         }
     }
 
     fn add_string(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
         while !self.is_at_end() && chars[self.current] != '"' {
-            if chars[self.current] == '\n' { self.line += 1; self.column = 1; }
+            if chars[self.current] == '\n' {
+                self.line += 1;
+                self.column = 1;
+            }
             self.advance(chars);
         }
 
         // Unterminated String
         if self.is_at_end() {
-            let given_string: String = (&chars[(self.start + 1) .. (self.current - 1)]).iter().collect();
-            return Err(SyntaxError::new(ErrorType::UnterminatedString(given_string), self.line, self.column));
+            let given_string: String = (&chars[(self.start + 1)..(self.current - 1)])
+                .iter()
+                .collect();
+            return Err(SyntaxError::new(
+                ErrorType::UnterminatedString(given_string),
+                self.line,
+                self.column,
+            ));
         }
 
         self.advance(chars);
-        let given_string: &[char] = &chars[(self.start + 1) .. (self.current - 1)];
+        let given_string: &[char] = &chars[(self.start + 1)..(self.current - 1)];
         let given_string: String = given_string.iter().collect();
 
         self.add_token(TokenType::Str(given_string))
@@ -203,13 +213,13 @@ impl CodeScanner {
         Ok(())
     }
 
-    fn advance(&mut self, chars:&[char]) -> char {
+    fn advance(&mut self, chars: &[char]) -> char {
         self.current += 1;
         self.column += 1;
-        chars[self.current -1]
+        chars[self.current - 1]
     }
 
-    fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> { 
+    fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> {
         self.tokens.push(Token::new(tokentype, self.line));
         Ok(())
     }
