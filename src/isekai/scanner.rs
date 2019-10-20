@@ -5,20 +5,24 @@ use std::fmt;
  expression -> (unary)calcnum operator (unary)calcnum;
  calcnum -> ;
  digit -> 0..9;
-
-
 */
 #[derive(Clone, Debug)]
 pub enum TokenType {
     // 予約語
-    Define,
-    Reveal,
+    Define, // define {}
+    Reveal, // reveal(foreshadow)
+
+    // 変数定義
+    Var, // var Character = {}
 
     // データ型
-    ForeShadow,
-    Plot,
-    Chapter,
-    Story,
+    ForeShadow, // foreshadow ABC;
+    Chapter,    // chapter "chapterName" {}
+    Story,      // story "storyname" {}
+
+    // 組み込み
+    If,    // if (expr) {
+    Print, // print "message";
 
     // 括弧とか文字とか
     DoubleQuote, // ""
@@ -39,6 +43,7 @@ pub enum TokenType {
     Digit(f32),
     EOF,
 }
+
 
 #[derive(Debug)]
 pub enum ErrorType {
@@ -168,7 +173,9 @@ impl CodeScanner {
             '"' => self.add_string(chars),
 
             // 数字全般を単発で判定
-            a @ '0'..='9' => self.add_digit(a),
+            '0'..='9' => self.add_digit(chars),
+
+            'A'..='z' => self.add_possible_iden(chars),
 
             // Default
             def => {
@@ -209,7 +216,28 @@ impl CodeScanner {
         self.add_token(TokenType::Str(given_string))
     }
 
-    fn add_digit(&mut self, digit: char) -> Result<(), SyntaxError> {
+    fn add_digit(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
+        // FIXME: How to manage both is_at_end && check_if_digit
+        while !self.is_at_end() {
+            match chars[self.current] {
+                '0'..='9' => self.advance(chars),
+                '.' => {
+                    if let '0'..='9' = chars[self.current + 1] {
+                        self.advance(chars)
+                    } else {
+                        break;
+                    }
+                }
+                _ => break,
+            };
+        }
+
+        let stri: String = chars[self.start..self.current].iter().collect();
+        let digits: f32 = stri.parse().unwrap();
+        self.add_token(TokenType::Digit(digits))
+    }
+
+    fn add_possible_iden(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
         Ok(())
     }
 
