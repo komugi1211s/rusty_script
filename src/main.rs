@@ -31,11 +31,11 @@ fn run_file(path: String) -> bool {
 
     f.read_to_string(&mut strings).expect("ファイルの読み込みに失敗しました。");
     println!("======== プログラム開始 =======");
-    println!("");
+    println!();
     for (i, l) in strings.lines().enumerate() {
         println!("{}: {}", i + 1, l);
     }
-    println!("");
+    println!();
     println!("======== プログラム終了 =======");
     
     match isekai::core::start(strings.as_str()) {

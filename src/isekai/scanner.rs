@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem;
 
 /*
  10 + 2 * 4
@@ -13,7 +14,7 @@ pub enum TokenType {
     Reveal, // reveal(foreshadow)
 
     // 変数定義
-    Var, // var Character = {}
+    Var, // var Character = ...
 
     // データ型
     ForeShadow, // foreshadow ABC;
@@ -36,6 +37,9 @@ pub enum TokenType {
     SemiColon,   // ;
     Equal,       // =
     Dot,         // .
+    
+    // 計算
+    Expression(&Expr),
 
     // 概念
     Str(String),
@@ -43,7 +47,6 @@ pub enum TokenType {
     Digit(f32),
     EOF,
 }
-
 
 #[derive(Debug)]
 pub enum ErrorType {
@@ -62,9 +65,9 @@ pub struct SyntaxError {
 impl SyntaxError {
     fn new(_type: ErrorType, line: usize, col: usize) -> Self {
         Self {
-            _type: _type,
-            line: line,
-            col: col,
+            _type,
+            line,
+            col,
         }
     }
 }
@@ -84,8 +87,8 @@ pub struct Token {
 impl Token {
     fn new(tokentype: TokenType, line: usize) -> Self {
         Token {
-            tokentype: tokentype,
-            line: line,
+            tokentype,
+            line,
         }
     }
 }
@@ -117,23 +120,26 @@ impl CodeScanner {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
+    pub fn scan(&mut self) -> Result<&Vec<Token>, SyntaxError> {
         let vectors = self.source.chars().collect::<Vec<char>>();
-        let chars: &[char] = vectors.as_slice();
+        let chars: &[char] = &vectors.as_slice();
+        println!("&vectors: {}", mem::size_of_val(&vectors));
+        println!("&[char]: {}", mem::size_of_val(chars));
+
 
         println!("追跡を開始します。");
         println!("文字列の長さ: {}", self.source.len());
-        println!("現在位置: {}", self.current);
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_next_token(chars)?;
         }
 
         self.tokens.push(Token::new(TokenType::EOF, self.line));
-        Ok(self.tokens.clone())
+        Ok(&self.tokens)
     }
 
     fn scan_next_token(&mut self, chars: &[char]) -> Result<(), SyntaxError> {
+        println!("scan &[char]: {}", mem::size_of_val(chars));
         let c: char = self.advance(chars);
         match c {
             '(' => self.add_token(TokenType::OpenParen),
@@ -179,7 +185,7 @@ impl CodeScanner {
 
             // Default
             def => {
-                return Err(SyntaxError::new(
+                Err(SyntaxError::new(
                     ErrorType::UnexpectedToken(def),
                     self.line,
                     self.column,
@@ -232,8 +238,10 @@ impl CodeScanner {
             };
         }
 
-        let stri: String = chars[self.start..self.current].iter().collect();
-        let digits: f32 = stri.parse().unwrap();
+        let digits: f32 = {
+            let stri: String = chars[self.start..self.current].iter().collect();
+            stri.parse().unwrap()
+        };
         self.add_token(TokenType::Digit(digits))
     }
 
