@@ -1,4 +1,5 @@
-use super::scanner::{CodeScanner, SyntaxError, Token};
+use super::token::Token;
+use super::scanner::{CodeScanner, SyntaxError};
 // use self::error::*;
 
 pub fn start(code: &str) -> Result<(), SyntaxError> {

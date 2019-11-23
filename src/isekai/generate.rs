@@ -1,8 +1,44 @@
  
-trait Expr {
+
+use std::rc::Rc;
+type TokenType = i32;
+
+pub trait Visitor<T>
+{
+    fn visit(&mut self, t: &T);
 }
 
-struct Binary<EX> {
+
+#[derive(Debug, Clone)]
+pub enum Expr
+{
+    Binary(Rc<Expr>, Rc<Expr>, TokenType),
+    Grouping(Rc<Expr>),
+    Literal(TokenType),
+    Unary(Rc<Expr>, TokenType),  
+}
+
+struct ExprVisitor;
+
+impl Visitor<Expr> for ExprVisitor
+{
+    fn visit(&mut self, expr: &Expr)
+    {
+        match expr
+        {
+            Expr::Binary(left, right, token) => (),
+            Expr::Grouping(group) => (),
+            Expr::Literal(token) => (),
+            Expr::Unary(token, value) => (),
+        }
+    }
+}
+
+/*
+pub trait Expr {
+}
+
+pub struct Binary<EX> {
     left: EX,
     right: EX,
     oper: TokenType,
@@ -18,7 +54,7 @@ impl<EX: Expr> Binary<EX> {
     }
 }
 
-struct Grouping<EX> {
+pub struct Grouping<EX> {
     expr: EX,
 }
 
@@ -30,7 +66,7 @@ impl<EX: Expr> Grouping<EX> {
     }
 }
 
-struct Literal {
+pub struct Literal {
     value: TokenType,
 }
 
@@ -55,4 +91,4 @@ impl<EX: Expr> Unary<EX> {
         }
     }
 }
-
+*/
