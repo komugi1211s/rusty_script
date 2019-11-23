@@ -1,5 +1,4 @@
 use std::fmt;
-use super::generate;
 
 #[derive(Clone, Debug)]
 pub enum TokenType {
@@ -46,9 +45,6 @@ pub enum TokenType {
     Asterisk, // *
     Percent, // %
     
-    // 計算
-    Expression(generate::Expr),
-
     // 概念
     Str(String),
     Iden(String),

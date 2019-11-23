@@ -1,14 +1,17 @@
 use super::token::Token;
-use super::scanner::{CodeScanner, SyntaxError};
+use super::tokenizer::{Tokenizer, SyntaxError};
+use super::parser::Parser;
 // use self::error::*;
 
 pub fn start(code: &str) -> Result<(), SyntaxError> {
-    let mut _scanner: CodeScanner = CodeScanner::new(code);
-    let _tokens: &Vec<Token> = _scanner.scan()?;
+    let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
 
-    for t in _tokens.iter() {
+    for t in &_tokens {
         println!("{}", t.to_string());
     }
+
+    let mut _parser: Parser = Parser::new(_tokens);
+
 
     Ok(())
 }

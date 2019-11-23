@@ -1,5 +1,8 @@
 
-pub mod token;
 pub mod core;
-pub mod scanner;
-pub mod generate;
+
+pub mod token;
+pub mod tokenizer;
+
+pub mod parse;
+pub mod parser;

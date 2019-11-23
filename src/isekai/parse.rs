@@ -1,8 +1,6 @@
  
 
-use std::rc::Rc;
-type TokenType = i32;
-
+use super::token::{ TokenType };
 pub trait Visitor<T>
 {
     fn visit(&mut self, t: &T);
@@ -12,10 +10,10 @@ pub trait Visitor<T>
 #[derive(Debug, Clone)]
 pub enum Expr
 {
-    Binary(Rc<Expr>, Rc<Expr>, TokenType),
-    Grouping(Rc<Expr>),
+    Binary(Box<Expr>, Box<Expr>, TokenType),
+    Grouping(Box<Expr>),
     Literal(TokenType),
-    Unary(Rc<Expr>, TokenType),  
+    Unary(Box<Expr>, TokenType),  
 }
 
 struct ExprVisitor;

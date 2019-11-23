@@ -1,6 +1,5 @@
 use std::fmt;
 // use std::mem;
-use super::generate;
 use super::token::{ TokenType, Token, match_identity };
 
 /*
@@ -41,7 +40,7 @@ impl fmt::Display for SyntaxError {
 }
 
 
-pub struct CodeScanner {
+pub struct Tokenizer {
     source: Vec<char>,
     tokens: Vec<Token>,
     start: usize,
@@ -50,9 +49,9 @@ pub struct CodeScanner {
     column: usize,
 }
 
-impl CodeScanner {
+impl Tokenizer {
     pub fn new(token: &str) -> Self {
-        CodeScanner {
+        Tokenizer {
             source: token.chars().collect::<Vec<char>>(),
             tokens: Vec::new(),
             start: 0,
@@ -62,7 +61,7 @@ impl CodeScanner {
         }
     }
 
-    pub fn scan(&mut self) -> Result<&Vec<Token>, SyntaxError> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
         println!("追跡を開始します。");
         println!("文字列の長さ: {}", self.source.len());
         while !self.is_at_end() {
@@ -71,7 +70,7 @@ impl CodeScanner {
         }
 
         self.tokens.push(Token::new(TokenType::EOF, self.line, &[]));
-        Ok(&self.tokens)
+        Ok(self.tokens.to_owned())
     }
 
     fn scan_next_token(&mut self) -> Result<(), SyntaxError> {
