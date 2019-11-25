@@ -10,7 +10,14 @@ pub enum TokenType {
     True,   // true
     False,  // false
     Print,  // print "message"
+
     Var,    // TYPE name = ...
+    TypeVoid,    // void: a = ...
+    TypeInt, // int: a = 
+    TypeFloat, // float: a = 
+    TypeStr, // str: a = 
+    TypeBool, // bool: a = 
+
 
     // データ型
     ForeShadow, // foreshadow ABC;
@@ -66,6 +73,11 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
         "false"  => Some(False),
         "print"  => Some(Print),
         "var"    => Some(Var),
+        "void"    => Some(TypeVoid),
+        "int"    => Some(TypeInt),
+        "float"    => Some(TypeFloat),
+        "str"    => Some(TypeStr),
+        "bool"    => Some(TypeBool),
         _ => None,
     }
 }

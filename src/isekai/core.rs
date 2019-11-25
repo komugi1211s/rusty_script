@@ -1,4 +1,4 @@
-use super::token::Token;
+use super::token::{ Token, TokenType };
 use super::tokenizer::{ Tokenizer, SyntaxError };
 use super::parse::{ Visitor, Expr, Statement };
 use super::parser::Parser;
@@ -17,15 +17,9 @@ pub fn start(code: &str) -> Result<(), SyntaxError>
     let result = _parser.parse();
     // println!("{}", &result);
     //
-    for i in &result {
-        match i {
-            Statement::Expression(e) => println!("{}", interpreter.interpret(&e)),
-            Statement::Decralation(_str, lit) => { 
-                let literal = interpreter.interpret(&lit);
-                interpreter.globals.insert(_str.to_string(), literal);
-            },
-            b => println!("Can't handle that right now: {:?}", b),
-        }
+    for i in &result 
+    {
+        interpreter.interpret(i);
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 
+use super::token::{ TokenType };
 use std::ops;
 use std::fmt;
 
@@ -9,6 +10,29 @@ pub enum Types
     Float(f64),
     Str(String),
     Boolean(bool),
+}
+
+impl Types
+{
+    pub fn match_token(&self, _type: &TokenType) -> bool
+    {
+        if _type == &TokenType::TypeVoid
+        {
+            true
+        }
+        else 
+        {
+            match self
+            {
+                Types::Int(_)     => _type == &TokenType::TypeInt,
+                Types::Float(_)   => _type == &TokenType::TypeFloat,
+                Types::Str(_)     => _type == &TokenType::TypeStr,
+                Types::Boolean(_) => _type == &TokenType::TypeBool,
+                _                 => _type == &TokenType::TypeVoid,
+            }
+        }
+    }
+    
 }
 
 impl fmt::Display for Types

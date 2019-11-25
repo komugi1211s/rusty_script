@@ -194,7 +194,8 @@ impl Tokenizer {
         }
 
         self.advance();
-        let given_string: &[char] = &self.source[self.start..self.current];
+        // start + 1 & current - 1 は "" ←これを削る
+        let given_string: &[char] = &self.source[(self.start+1)..(self.current-1)];
         let given_string: String = given_string.iter().collect();
 
         self.add_token(TokenType::Str(given_string))
@@ -217,8 +218,9 @@ impl Tokenizer {
 
     fn add_digit(&mut self) -> Result<(), SyntaxError> {
         // Advance while it's numeric
-        while let n = self.peek()
+        loop 
         {
+            let n = self.peek();
             if n.is_ascii_digit()
             {
                 self.advance(); 

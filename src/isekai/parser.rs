@@ -46,7 +46,8 @@ impl Parser
 
     fn statement(&mut self) -> Statement
     {
-        if self.is(TokenType::Var) 
+        // TODO: fix this long conditional
+        if self.is(TokenType::Var) || self.is(TokenType::TypeInt) || self.is(TokenType::TypeFloat) || self.is(TokenType::TypeBool) || self.is(TokenType::TypeStr) || self.is(TokenType::TypeVoid)
         {
             return self.decralation();
         }
@@ -56,21 +57,33 @@ impl Parser
     
     fn decralation(&mut self) -> Statement
     {
-        let t_next = self.tokens.get(self.current + 1).unwrap().clone();
-        if let TokenType::Iden(iden) = t_next.tokentype {
+        // Called at [type]: iden = value
+        //           ^ right here
+        //
+        // self.current     = typename ( or var )
+        // self.current + 1 = colon
+        // self.current + 2 = identity
+        // self.current + 3 = equal
+        // self.current + 4 = value
+        //
+        let _type = self.tokens.get(self.current).unwrap().clone();
+        let should_be_colon = self.tokens.get(self.current + 1).unwrap();
+        let possible_iden = self.tokens.get(self.current + 2).unwrap().clone();
+
+        if let TokenType::Iden(iden) = possible_iden.tokentype {
             let iden = iden.clone();
-            self.current += 2;
+            self.current += 3;
             if self.is(TokenType::Equal)
             {
                 self.current += 1;
                 let item = self.expression();
-                return Statement::Decralation(iden, item);
+                return Statement::Decralation(iden, _type.tokentype, item);
             }
 
-            unreachable!();
+            unreachable!("Expected Equal, got: {:?}", self.tokens.get(self.current));
         }
 
-        unreachable!();
+        unreachable!("Expected Identity, got: {:?}", possible_iden.tokentype);
     }
 
     fn expression(&mut self) -> Expr
@@ -190,7 +203,13 @@ impl Parser
             }
             Digit(i) => {
                 self.current += 1;
-                Expr::Literal(Types::Float(*i))
+                if i.trunc() == *i {
+                    Expr::Literal(Types::Int(*i as i64))
+                }
+                else
+                {
+                    Expr::Literal(Types::Float(*i))
+                }
             },
             Str(s) => {
                 self.current += 1;
@@ -213,8 +232,7 @@ impl Parser
             },
             s => 
             {
-                println!("Unreachable: {:?}", s);
-                unreachable!()
+                unreachable!(" while Handling Primary: Token {:?}", s)
             },
         };
 

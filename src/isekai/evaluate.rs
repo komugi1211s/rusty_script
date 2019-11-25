@@ -18,9 +18,19 @@ impl Interpreter
             globals: HashMap::new()
         }
     }
-    pub fn interpret(&mut self, expr: &Expr) -> Types
+    pub fn interpret(&mut self, expr: &Statement)
     {
-        self.visit(expr)
+        match expr
+        {
+            Statement::Expression(e) => println!("{}", self.visit(&e)),
+            Statement::Decralation(_str, _type, lit) => { 
+                let literal = self.visit(&lit);
+                if !literal.match_token(_type) { panic!("Should not work.: {:?} to {:?}", literal, _type); }
+                else { println!("{:?}: {}", _type, literal); }
+                self.globals.insert(_str.to_string(), literal);
+            },
+            b => println!("Can't handle that right now!: {:?}", b),
+        }
     }
 }
 
@@ -61,7 +71,7 @@ impl Visitor<Expr> for Interpreter
                     TokenType::MoreEqual => Types::Boolean(left >= right),
                     TokenType::Less      => Types::Boolean(left < right),
                     TokenType::More      => Types::Boolean(left > right),
-                    _ => unreachable!(),
+                    _ => unimplemented!("Binary"),
                 }
             },
             Expr::Unary(item, ref t) =>
@@ -71,7 +81,7 @@ impl Visitor<Expr> for Interpreter
                 {
                     TokenType::Bang  => !expr,
                     TokenType::Minus => -expr, 
-                    _ => unreachable!(),
+                    _ => unreachable!("Unary with unsupported Tokentype"),
                 }
             },
             Expr::Grouping(g) => self.visit(g),
