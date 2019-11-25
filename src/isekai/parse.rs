@@ -1,92 +1,43 @@
- 
+use std::fmt;
+use super::types::{ Types };
+use super::token::{ Token };
 
-use super::token::{ TokenType };
 pub trait Visitor<T>
 {
-    fn visit(&mut self, t: &T);
+    type Result;
+    fn visit(&mut self, t: &T) -> Self::Result;
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Expr
 {
-    Binary(Box<Expr>, Box<Expr>, TokenType),
+    Binary(Box<Expr>, Box<Expr>, Token),
     Grouping(Box<Expr>),
-    Literal(TokenType),
-    Unary(Box<Expr>, TokenType),  
+    Literal(Types),
+    Unary(Box<Expr>, Token),  
+    Variable(String),
 }
 
-struct ExprVisitor;
-
-impl Visitor<Expr> for ExprVisitor
+#[derive(Debug, Clone)]
+pub enum Statement
 {
-    fn visit(&mut self, expr: &Expr)
-    {
-        match expr
+    Expression(Expr),
+    Decralation(String, Expr),
+    If(Expr),
+    Else(Box<Statement>),
+    While(Expr),
+}
+
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self
         {
-            Expr::Binary(left, right, token) => (),
-            Expr::Grouping(group) => (),
-            Expr::Literal(token) => (),
-            Expr::Unary(token, value) => (),
+            Expr::Binary(ref left, ref right, ref token) => write!(f, "{} {} {}", left, right, token),
+            Expr::Grouping(ref inside) => write!(f, "({})", inside),
+            Expr::Literal(ref lit) => write!(f, "{}", lit),
+            Expr::Unary(ref item, ref t) => write!(f, "{}{}", t, item),
+            Expr::Variable(ref s) => write!(f, "{}", s),
         }
     }
 }
-
-/*
-pub trait Expr {
-}
-
-pub struct Binary<EX> {
-    left: EX,
-    right: EX,
-    oper: TokenType,
-}
-
-impl<EX: Expr> Binary<EX> {
-    pub fn new(left: EX, right: EX, oper: TokenType) -> Self {
-        Self {
-            left,
-            right,
-            oper,
-        }
-    }
-}
-
-pub struct Grouping<EX> {
-    expr: EX,
-}
-
-impl<EX: Expr> Grouping<EX> {
-    pub fn new(expr: EX) -> Self {
-        Self {
-            expr,
-        }
-    }
-}
-
-pub struct Literal {
-    value: TokenType,
-}
-
-impl Literal {
-    pub fn new(value: TokenType) -> Self {
-        Self {
-            value,
-        }
-    }
-}
-
-struct Unary<EX> {
-    oper: TokenType,
-    right: EX,
-}
-
-impl<EX: Expr> Unary<EX> {
-    pub fn new(oper: TokenType, right: EX) -> Self {
-        Self {
-            oper,
-            right,
-        }
-    }
-}
-*/

@@ -62,8 +62,6 @@ impl Tokenizer {
     }
 
     pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
-        println!("追跡を開始します。");
-        println!("文字列の長さ: {}", self.source.len());
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_next_token()?;
@@ -84,6 +82,7 @@ impl Tokenizer {
             ':' => self.add_token(TokenType::Colon),
             ';' => self.add_token(TokenType::SemiColon),
             '.' => self.add_token(TokenType::Dot),
+            ',' => self.add_token(TokenType::Comma),
             '+' => self.add_token(TokenType::Plus),
             '-' => self.add_token(TokenType::Minus),
             '*' => self.add_token(TokenType::Asterisk),
@@ -211,7 +210,7 @@ impl Tokenizer {
         if self.is_at_end()  {  '\0'  }
         else
         {
-            if self.source.len() < self.current + shift { '\0' }
+            if self.source.len() <= self.current + shift { '\0' }
             else { self.source[self.current + shift] }
         }
     }
@@ -238,7 +237,7 @@ impl Tokenizer {
             }
         }
 
-        let digits: f32 = {
+        let digits: f64 = {
             let stri: String = self.source[self.start..self.current].iter().collect();
             stri.parse().unwrap()
         };

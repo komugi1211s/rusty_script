@@ -1,16 +1,16 @@
 use std::fmt;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     // 予約語
     Define, // define {}
     Reveal, // reveal(foreshadow)
-    If,    // if expr {
-    Else, // else {
-    True, // true
-    False, // false
-    Print, // print "message"
-    Var, // var name = ...
+    If,     // if expr {
+    Else,   // else {
+    True,   // true
+    False,  // false
+    Print,  // print "message"
+    Var,    // TYPE name = ...
 
     // データ型
     ForeShadow, // foreshadow ABC;
@@ -29,6 +29,7 @@ pub enum TokenType {
     SemiColon,   // ;
     Equal,       // =
     Dot,         // .
+    Comma,       // ,
 
     // 比較
     Bang,        // !
@@ -40,15 +41,15 @@ pub enum TokenType {
     EqualEqual,  // == 
 
     // 計算用
-    Plus, // +
-    Minus, // -
+    Plus,     // +
+    Minus,    // -
     Asterisk, // *
-    Percent, // %
+    Percent,  // %
     
     // 概念
     Str(String),
     Iden(String),
-    Digit(f32),
+    Digit(f64),
     EOF,
 }
 
@@ -69,11 +70,11 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Token {
-    tokentype: TokenType,
-    line: usize,
-    lexeme: Vec<char>,
+    pub tokentype: TokenType,
+    pub line: usize,
+    pub lexeme: Vec<char>,
 }
 
 impl Token {
