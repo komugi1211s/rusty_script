@@ -86,11 +86,12 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
 pub struct Token {
     pub tokentype: TokenType,
     pub line: usize,
-    pub lexeme: Vec<char>,
+    pub lexeme: String,
 }
 
 impl Token {
-    pub fn new(tokentype: TokenType, line: usize, lexeme: &[char]) -> Self {
+    pub fn new(tokentype: TokenType, line: usize, lexeme: String) -> Self
+    {
         let lexeme = lexeme.to_owned();
         Token {
             tokentype,

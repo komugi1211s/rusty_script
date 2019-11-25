@@ -5,6 +5,7 @@ use super::{
     parse::{ Expr, Statement },
 };
 
+
 // TODO:
 // Why only one line comes back from parse?
 // All clone call to a lifetime management
@@ -29,7 +30,7 @@ impl Parser
         let mut statements: Vec<Statement> = Vec::new();
         while !self.is_at_end()
         {
-            statements.push(self.statement());
+            statements.push(self.decralation());
         }
         statements
     }
@@ -47,12 +48,16 @@ impl Parser
     fn statement(&mut self) -> Statement
     {
         // TODO: fix this long conditional
-        if self.is(TokenType::Var) || self.is(TokenType::TypeInt) || self.is(TokenType::TypeFloat) || self.is(TokenType::TypeBool) || self.is(TokenType::TypeStr) || self.is(TokenType::TypeVoid)
-        {
-            return self.decralation();
-        }
         
-        return Statement::Expression(self.expression());
+        if self.is(TokenType::Print) 
+        {
+            self.current += 1;
+            return Statement::Print(self.expression());
+        }
+        else
+        {
+            return Statement::Expression(self.expression());
+        }
     }
     
     fn decralation(&mut self) -> Statement
@@ -66,24 +71,41 @@ impl Parser
         // self.current + 3 = equal
         // self.current + 4 = value
         //
-        let _type = self.tokens.get(self.current).unwrap().clone();
-        let should_be_colon = self.tokens.get(self.current + 1).unwrap();
-        let possible_iden = self.tokens.get(self.current + 2).unwrap().clone();
+        if self.is(TokenType::Var) 
+            || self.is(TokenType::TypeInt) 
+            || self.is(TokenType::TypeFloat) 
+            || self.is(TokenType::TypeBool) 
+            || self.is(TokenType::TypeStr) 
+            || self.is(TokenType::TypeVoid)
+        {
+            let _type = self.tokens.get(self.current).unwrap().clone();
+            self.current += 1;
 
-        if let TokenType::Iden(iden) = possible_iden.tokentype {
-            let iden = iden.clone();
-            self.current += 3;
-            if self.is(TokenType::Equal)
-            {
-                self.current += 1;
-                let item = self.expression();
-                return Statement::Decralation(iden, _type.tokentype, item);
+            let should_be_colon = self.consume(TokenType::Colon);
+            if should_be_colon.is_err() 
+            { 
+                panic!("Expected Colon, got: {:?}", self.tokens.get(self.current)) 
             }
 
-            unreachable!("Expected Equal, got: {:?}", self.tokens.get(self.current));
+            let possible_iden = self.tokens.get(self.current).unwrap().clone();
+            if let TokenType::Iden(iden) = possible_iden.tokentype {
+                let iden = iden.clone();
+                self.current += 1;
+                if self.is(TokenType::Equal)
+                {
+                    self.current += 1;
+                    let item = self.expression();
+                    return Statement::Decralation(iden, _type.tokentype, item);
+                }
+
+                unreachable!("Expected Equal, got: {:?}", self.tokens.get(self.current));
+            }
+
+            unreachable!("Expected Identity, got: {:?}", possible_iden.tokentype);
         }
 
-        unreachable!("Expected Identity, got: {:?}", possible_iden.tokentype);
+        return self.statement();
+
     }
 
     fn expression(&mut self) -> Expr
@@ -203,6 +225,11 @@ impl Parser
             }
             Digit(i) => {
                 self.current += 1;
+
+                /*
+                    TODO:
+                    checking if the digit is int or not by using this method(trunc) is dangerous
+                */
                 if i.trunc() == *i {
                     Expr::Literal(Types::Int(*i as i64))
                 }

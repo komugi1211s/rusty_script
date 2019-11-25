@@ -18,6 +18,7 @@ impl Interpreter
             globals: HashMap::new()
         }
     }
+
     pub fn interpret(&mut self, expr: &Statement)
     {
         match expr
@@ -25,10 +26,16 @@ impl Interpreter
             Statement::Expression(e) => println!("{}", self.visit(&e)),
             Statement::Decralation(_str, _type, lit) => { 
                 let literal = self.visit(&lit);
-                if !literal.match_token(_type) { panic!("Should not work.: {:?} to {:?}", literal, _type); }
-                else { println!("{:?}: {}", _type, literal); }
+                if !literal.match_token(_type)
+                {
+                    panic!("Should not work.: {:?} to {:?}", literal, _type);
+                }
                 self.globals.insert(_str.to_string(), literal);
             },
+
+            Statement::Print(_expr) => {
+                println!("{}", self.visit(&_expr));
+            }
             b => println!("Can't handle that right now!: {:?}", b),
         }
     }

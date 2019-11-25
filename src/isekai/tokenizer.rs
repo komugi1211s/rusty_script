@@ -67,7 +67,7 @@ impl Tokenizer {
             self.scan_next_token()?;
         }
 
-        self.tokens.push(Token::new(TokenType::EOF, self.line, &[]));
+        self.tokens.push(Token::new(TokenType::EOF, self.line, String::new()));
         Ok(self.tokens.to_owned())
     }
 
@@ -266,7 +266,13 @@ impl Tokenizer {
     }
 
     fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> {
-        self.tokens.push(Token::new(tokentype, self.line, &self.source[self.start..self.current-1]));
+        self.tokens.push(
+            Token::new(
+                tokentype,
+                self.line,
+                self.source[self.start..self.current].iter().collect()
+            )
+        );
         Ok(())
     }
 

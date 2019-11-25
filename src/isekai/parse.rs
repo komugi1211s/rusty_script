@@ -21,6 +21,9 @@ pub enum Expr
 #[derive(Debug, Clone)]
 pub enum Statement
 {
+    // DebugPrint
+    Print(Expr),
+
     Expression(Expr),
     Decralation(String, TokenType, Expr),
     If(Expr),
