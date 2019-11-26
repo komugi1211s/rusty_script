@@ -26,6 +26,7 @@ impl Types
         {
             match self
             {
+                Types::Null       => true,
                 Types::Int(_)     => _type == &TokenType::TypeInt,
                 Types::Float(_)   => _type == &TokenType::TypeFloat,
                 Types::Str(_)     => _type == &TokenType::TypeStr,
@@ -37,7 +38,8 @@ impl Types
 
     pub fn is_same_type(&self, other: &Types) -> bool
     {
-        mem::discriminant(self) == mem::discriminant(other)
+        mem::discriminant(self) == mem::discriminant(&Types::Null)
+        || mem::discriminant(self) == mem::discriminant(other)
     }
 }
 

@@ -47,8 +47,6 @@ impl Parser
 
     fn statement(&mut self) -> Statement
     {
-        // TODO: fix this long conditional
-        
         if self.is(TokenType::Print) 
         {
             self.current += 1;
@@ -58,6 +56,7 @@ impl Parser
         }
         else if self.is(TokenType::OpenBrace)
         {
+            self.current += 1;
             return Statement::Block(self.block());
         }
         else
@@ -70,9 +69,9 @@ impl Parser
     {
         let mut vector = Vec::new();
         
-        while !self.is(TokenType::CloseBrace)
+        while !self.is_at_end() && !self.is(TokenType::CloseBrace) 
         {
-            vector.add(self.decralation());
+            vector.push(self.decralation());
         }
 
         self.consume(TokenType::CloseBrace).expect("ParserError: Expected Close Bracket");

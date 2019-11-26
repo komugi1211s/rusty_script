@@ -58,7 +58,12 @@ impl Environment
     {
         if self.values.contains_key(k)
         {
-            self.values.get(k).unwrap()
+            let x = self.values.get(k).unwrap();
+            if x.is_same_type(&Types::Null)
+            {
+                unreachable!("Use of Undefined Variable: {}", k);
+            }
+            x
         }
         else if let Some(ref enc) = self.enclose
         {
@@ -87,16 +92,15 @@ impl Interpreter
         }
     }
 
-    pub fn interpret(&mut self, expr: &Statement)
+    pub fn interpret(&mut self, stmt: &Statement)
     {
-        match expr
+        match stmt
         {
             Statement::Expression(e) => { self.visit(e); },
             Statement::Decralation(_str, _type, lit) => {
                 let lit = self.visit(lit);
                 self.environment.define(_str, _type, lit)
             },
-
             Statement::Block(ref v) => {
                 self.visit_block(v);
             },
@@ -108,12 +112,9 @@ impl Interpreter
     pub fn visit_block(&mut self, inside: &Vec<Statement>)
     {
 
-        let previous = mem::replace(&mut self.environment, None);
-        if let Some(e) = previous
-        {
-            self.environment = Environment::new();
-            self.connect(e);
-        }
+        let new_nev = Environment::new();
+        let previous = mem::replace(&mut self.environment, new_nev);
+        self.environment.connect(previous);
 
         for i in inside {
             self.interpret(i);
@@ -122,7 +123,7 @@ impl Interpreter
         let original = mem::replace(&mut self.environment.enclose, None);
         if let Some(e) = original
         {
-            self.environment = e;
+            self.environment = *e;
         }
     } 
 }

@@ -11,12 +11,9 @@ use std::collections::HashMap;
 pub fn start(code: &str) -> Result<(), SyntaxError>
 {
     let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
-
     let mut _parser: Parser = Parser::new(_tokens);
     let mut interpreter = Interpreter::new();
     let result = _parser.parse();
-    // println!("{}", &result);
-    //
     for i in &result 
     {
         interpreter.interpret(i);
