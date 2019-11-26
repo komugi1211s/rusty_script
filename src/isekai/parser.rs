@@ -69,7 +69,14 @@ impl Parser
     fn block(&mut self) -> Vec<Statement>
     {
         let mut vector = Vec::new();
+        
+        while !self.is(TokenType::CloseBrace)
+        {
+            vector.add(self.decralation());
+        }
 
+        self.consume(TokenType::CloseBrace).expect("ParserError: Expected Close Bracket");
+        vector
     }
     
     fn decralation(&mut self) -> Statement

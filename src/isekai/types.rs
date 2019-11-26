@@ -2,6 +2,7 @@
 use super::token::{ TokenType };
 use std::ops;
 use std::fmt;
+use std::mem;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Types
@@ -33,7 +34,11 @@ impl Types
             }
         }
     }
-    
+
+    pub fn is_same_type(&self, other: &Types) -> bool
+    {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
 
 impl fmt::Display for Types

@@ -2,6 +2,7 @@ use super::types::{ Types };
 use super::token::{ TokenType, Token };
 use super::parse::{ Expr, Visitor, Statement };
 use std::collections::HashMap;
+use std::mem;
 
 pub struct Environment 
 {
@@ -36,6 +37,11 @@ impl Environment
     {
         if self.values.contains_key(name)
         {
+            let current = self.values.get(name).unwrap();
+            if !current.is_same_type(&value)
+            {
+                unreachable!("Mismatched Types: {} to {}", value, current);
+            }
             self.values.insert(name.to_string(), value);
         }
         else if let Some(ref mut enc) = self.enclose
@@ -91,10 +97,34 @@ impl Interpreter
                 self.environment.define(_str, _type, lit)
             },
 
+            Statement::Block(ref v) => {
+                self.visit_block(v);
+            },
             Statement::Print(_expr) => println!("{}", self.visit(_expr)),
             b => println!("Can't handle that right now!: {:?}", b),
         }
     }
+
+    pub fn visit_block(&mut self, inside: &Vec<Statement>)
+    {
+
+        let previous = mem::replace(&mut self.environment, None);
+        if let Some(e) = previous
+        {
+            self.environment = Environment::new();
+            self.connect(e);
+        }
+
+        for i in inside {
+            self.interpret(i);
+        }
+
+        let original = mem::replace(&mut self.environment.enclose, None);
+        if let Some(e) = original
+        {
+            self.environment = e;
+        }
+    } 
 }
 
 impl Visitor<Expr> for Interpreter
