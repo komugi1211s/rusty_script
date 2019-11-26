@@ -52,12 +52,24 @@ impl Parser
         if self.is(TokenType::Print) 
         {
             self.current += 1;
-            return Statement::Print(self.expression());
+            let statement = Statement::Print(self.expression());
+            self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+            return statement;
+        }
+        else if self.is(TokenType::OpenBrace)
+        {
+            return Statement::Block(self.block());
         }
         else
         {
             return Statement::Expression(self.expression());
         }
+    }
+
+    fn block(&mut self) -> Vec<Statement>
+    {
+        let mut vector = Vec::new();
+
     }
     
     fn decralation(&mut self) -> Statement
@@ -78,40 +90,74 @@ impl Parser
             || self.is(TokenType::TypeStr) 
             || self.is(TokenType::TypeVoid)
         {
-            let _type = self.tokens.get(self.current).unwrap().clone();
-            self.current += 1;
-
-            let should_be_colon = self.consume(TokenType::Colon);
-            if should_be_colon.is_err() 
-            { 
-                panic!("Expected Colon, got: {:?}", self.tokens.get(self.current)) 
-            }
-
-            let possible_iden = self.tokens.get(self.current).unwrap().clone();
-            if let TokenType::Iden(iden) = possible_iden.tokentype {
-                let iden = iden.clone();
-                self.current += 1;
-                if self.is(TokenType::Equal)
-                {
-                    self.current += 1;
-                    let item = self.expression();
-                    return Statement::Decralation(iden, _type.tokentype, item);
-                }
-
-                unreachable!("Expected Equal, got: {:?}", self.tokens.get(self.current));
-            }
-
-            unreachable!("Expected Identity, got: {:?}", possible_iden.tokentype);
+            return self.declare_variable();
         }
 
         return self.statement();
 
     }
 
+    fn declare_variable(&mut self) -> Statement
+    {
+        let _type = self.tokens.get(self.current).unwrap().clone();
+        self.current += 1;
+
+        let should_be_colon = self.consume(TokenType::Colon);
+        if should_be_colon.is_err() 
+        { 
+            panic!("Expected Colon, got: {:?}", self.tokens.get(self.current)) 
+        }
+
+        let possible_iden = self.tokens.get(self.current).unwrap();
+        if let TokenType::Iden(iden) = &possible_iden.tokentype {
+            let iden = iden.clone();
+            self.current += 1;
+            if self.is(TokenType::Equal)
+            {
+                self.current += 1;
+                let item = self.expression();
+                self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+                return Statement::Decralation(iden, _type.tokentype, item);
+            }
+            else if self.is(TokenType::SemiColon)
+            {
+                self.current += 1;
+                return Statement::Decralation(iden, _type.tokentype, Expr::Literal(Types::Null));
+            }
+
+            unreachable!("ParserError: Expected Equal, got: {:?}", self.tokens.get(self.current));
+        }
+
+        unreachable!("ParserError: Expected Identity, got: {:?}", possible_iden.tokentype);
+    }
+
     fn expression(&mut self) -> Expr
     {
-        let x = self.equality();
+        let x = self.assignment();
         x
+    }
+
+    fn assignment(&mut self) -> Expr
+    {
+        let mut expr = self.equality();
+
+        if self.is(TokenType::Equal)
+        {
+            self.current += 1;
+            let variable_name = self.tokens.get(self.current - 1).unwrap();
+            let value = self.assignment();
+            
+            if let Expr::Variable(s) = expr {
+                self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+                return Expr::Assign(s, Box::new(value));
+            }
+            else
+            {
+                unreachable!("ParserError: Invalid Assignment Target: {:?}", expr);
+            }
+        }
+
+        return expr;
     }
 
     fn equality(&mut self) -> Expr 
@@ -136,12 +182,12 @@ impl Parser
         use TokenType::*;
         // 分かりづらッ！！
         while (!self.is_at_end() 
-            && match &self.tokens.get(self.current).unwrap().tokentype {
+            && match self.tokens.get(self.current).unwrap().tokentype {
                     LessEqual => true,
                     MoreEqual => true,
                     Less      => true,
                     More      => true,
-                    _other    => false,
+                    _         => false,
                 }
         )
         {
@@ -251,7 +297,7 @@ impl Parser
                 let inside_paren = self.expression();
                 let closed_paren = self.consume(CloseParen);
                 if closed_paren.is_err() {
-                    panic!("We could not find a closed Paren! current: {}, current_Token: {}", self.current, self.tokens.get(self.current).unwrap());
+                    panic!("ParserError: We could not find a closed Paren! current: {}, current_Token: {}", self.current, self.tokens.get(self.current).unwrap());
                 }
                 else {
                     Expr::Grouping(Box::new(inside_paren))
@@ -259,7 +305,7 @@ impl Parser
             },
             s => 
             {
-                unreachable!(" while Handling Primary: Token {:?}", s)
+                unreachable!("ParserError: while Handling Primary: Token {:?}", s)
             },
         };
 

@@ -8,7 +8,7 @@ pub trait Visitor<T>
     fn visit(&mut self, t: &T) -> Self::Result;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
@@ -16,19 +16,20 @@ pub enum Expr
     Literal(Types),
     Unary(Box<Expr>, Token),  
     Variable(String),
+    Assign(String, Box<Expr>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Statement
 {
     // DebugPrint
     Print(Expr),
-
     Expression(Expr),
     Decralation(String, TokenType, Expr),
     If(Expr),
     Else(Box<Statement>),
     While(Expr),
+    Block(Vec<Statement>),
 }
 
 
@@ -41,6 +42,7 @@ impl fmt::Display for Expr {
             Expr::Literal(ref lit) => write!(f, "{}", lit),
             Expr::Unary(ref item, ref t) => write!(f, "{}{}", t, item),
             Expr::Variable(ref s) => write!(f, "{}", s),
+            Expr::Assign(s, ex) => write!(f, "{} = {}", s, ex),
         }
     }
 }

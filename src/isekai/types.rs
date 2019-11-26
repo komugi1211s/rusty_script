@@ -3,13 +3,14 @@ use super::token::{ TokenType };
 use std::ops;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Types
 {
     Int(i64),
     Float(f64),
     Str(String),
     Boolean(bool),
+    Null
 }
 
 impl Types
@@ -43,8 +44,9 @@ impl fmt::Display for Types
         {
             Types::Int(i)     => write!(f, "{}", i),
             Types::Float(f_)  => write!(f, "{}", f_),
-            Types::Str(s)     => write!(f, "{}", &s),
+            Types::Str(ref s) => write!(f, "{}", s),
             Types::Boolean(b) => write!(f, "{}", b),
+            Types::Null       => write!(f, "null"),
         }
     }
 }
@@ -61,24 +63,28 @@ impl ops::Add<Types> for Types
             {
                 Types::Int(ir) => Types::Int(il + ir),
                 Types::Float(fr) => Types::Float(il as f64 + fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't add Int and {} together", x),
             },
             Types::Float(fl) => match right
             {
                 Types::Int(ir) => Types::Float(fl + ir as f64),
                 Types::Float(fr) => Types::Float(fl + fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't add Float and {} together", x),
             },
             Types::Str(ref sl) =>
             {
                 if let Types::Str(ref sr) = right
                 {
                     Types::Str(format!("{}{}", sl, sr))
-                } else { unreachable!() }
+                } 
+                else
+                {
+                    unreachable!("TypeError: Can't add String and {} together", right)
+                }
             },
 
             // Bool
-            _ => unreachable!(),
+            x@ _ => unreachable!("TypeError: {} does not support Addition", x),
         }
     }
 }
@@ -95,17 +101,16 @@ impl ops::Sub<Types> for Types
             {
                 Types::Int(ir) => Types::Int(il - ir),
                 Types::Float(fr) => Types::Float(il as f64 - fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't subtract {} from Int", x),
             },
             Types::Float(fl) => match right
             {
                 Types::Int(ir) => Types::Float(fl - ir as f64),
                 Types::Float(fr) => Types::Float(fl - fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't subtract {} from Float", x),
             },
 
-            // Bool & Str cannot be subtracted from others
-            _ => unreachable!(),
+            x@ _ => unreachable!("TypeError: {} does not support Subtraction", x),
         }
     }
 }
@@ -122,17 +127,18 @@ impl ops::Mul<Types> for Types
             {
                 Types::Int(ir) => Types::Int(il * ir),
                 Types::Float(fr) => Types::Float(il as f64 * fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't multiply Int and {}", x),
             },
             Types::Float(fl) => match right
             {
                 Types::Int(ir) => Types::Float(fl * ir as f64),
                 Types::Float(fr) => Types::Float(fl * fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Can't multiply Float and {}", x),
             },
 
+
             // Bool & Str cannot be subtracted from others
-            _ => unreachable!(),
+            x@ _ => unreachable!("TypeError: {} does not support Multiplification", x),
         }
     }
 }
@@ -149,17 +155,17 @@ impl ops::Div<Types> for Types
             {
                 Types::Int(ir) => Types::Float(il as f64 / ir as f64),
                 Types::Float(fr) => Types::Float(il as f64 / fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Cannot divide Int with {}", x),
             },
             Types::Float(fl) => match right
             {
                 Types::Int(ir) => Types::Float(fl / ir as f64),
                 Types::Float(fr) => Types::Float(fl / fr),
-                _ => unreachable!(),
+                x@ _ => unreachable!("TypeError: Cannot divide Float with {}", x),
             },
 
             // Bool & Str cannot be subtracted from others
-            _ => unreachable!(),
+            x@ _ => unreachable!("TypeError: {} does not support Division", x),
         }
     }
 }
@@ -176,6 +182,7 @@ impl ops::Not for Types
             Types::Int(i)     => Types::Boolean(i != 0),
             Types::Float(f)   => Types::Boolean(f != 0.0),
             Types::Str(s)     => Types::Boolean(s.len() != 0),
+            Types::Null       => Types::Boolean(false),
         }
     }
 }
@@ -190,8 +197,31 @@ impl ops::Neg for Types
         {
             Types::Int(i)     => Types::Int(-i),
             Types::Float(f)   => Types::Float(-f),
-            Types::Str(s)     => unreachable!(),
-            Types::Boolean(i) => unreachable!(),
+            x@ _                 => unreachable!("TypeError:{} does not support negation", x),
+        }
+    }
+}
+
+use std::cmp::Ordering;
+impl PartialOrd for Types
+{
+    fn partial_cmp(&self, other: &Types) -> Option<Ordering>
+    {
+        match self
+        {
+            Types::Int(i_left) => match other
+            {
+                Types::Int(i_right) => i_left.partial_cmp(i_right),
+                Types::Float(f_right) => (*i_left as f64).partial_cmp(f_right),
+                _ => unreachable!("Comparison with unsupported type"),
+            },
+            Types::Float(f_left) => match other
+            {
+                Types::Int(i_right) => f_left.partial_cmp(&(*i_right as f64)),
+                Types::Float(f_right) => f_left.partial_cmp(f_right),
+                _ => unreachable!("Comparison with unsupported type"),
+            },
+            _ => unreachable!("Comparison with unsupported type"),
         }
     }
 }

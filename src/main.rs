@@ -1,3 +1,6 @@
+// #![feature(test)]
+// extern crate test;
+
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -48,3 +51,31 @@ fn main() {
     }
     exit_process(run_file(arguments[1].clone()))
 }
+/*
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+    use test::Bencher;
+
+    #[bench]
+    fn benchmark(b: &mut Bencher)
+    {
+        let stri = "
+            str: first = \"newdec\";
+            str: second = \"newdec\";
+            
+            print first + second;
+        ";
+
+        b.iter(move ||
+        {
+            let n = test::black_box(100);
+
+            for _ in 0..n {
+                isekai::core::start(stri);
+            }
+        });
+    }
+}
+*/

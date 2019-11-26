@@ -3,10 +3,72 @@ use super::token::{ TokenType, Token };
 use super::parse::{ Expr, Visitor, Statement };
 use std::collections::HashMap;
 
+pub struct Environment 
+{
+    pub values: HashMap<String, Types>,
+    pub enclose: Option<Box<Environment>>
+}
+impl Environment 
+{
+    pub fn new() -> Self
+    {
+        Self {
+            values: HashMap::new(),
+            enclose: None,
+        }
+    }
+
+    pub fn connect(&mut self, env: Environment)
+    {
+        self.enclose = Some(Box::new(env));
+    }
+
+    pub fn define(&mut self, name: &str, _type: &TokenType, value: Types)
+    {
+        if !value.match_token(_type)
+        {
+            panic!("Should not work.: {:?} to {:?}", value, _type);
+        }
+        self.values.insert(name.to_string(), value);
+    }
+
+    pub fn assign(&mut self, name: &str, value: Types)
+    {
+        if self.values.contains_key(name)
+        {
+            self.values.insert(name.to_string(), value);
+        }
+        else if let Some(ref mut enc) = self.enclose
+        {
+            enc.assign(name, value);
+        }
+        else
+        {
+            unreachable!("Undefined Variable: {}", name);
+        }
+    }
+
+    pub fn get(&self, k: &str) -> &Types
+    {
+        if self.values.contains_key(k)
+        {
+            self.values.get(k).unwrap()
+        }
+        else if let Some(ref enc) = self.enclose
+        {
+            enc.get(k)
+        }
+        else
+        {
+            unreachable!("Undefined Variable: {}", k);
+        }
+    }
+}
+
 pub struct Interpreter
 {
     // pub states: Vec<Statement>,
-    pub globals: HashMap<String, Types>,
+    pub environment: Environment,
 }
 
 
@@ -15,7 +77,7 @@ impl Interpreter
     pub fn new() -> Self
     {
         Self {
-            globals: HashMap::new()
+            environment: Environment::new()
         }
     }
 
@@ -23,19 +85,13 @@ impl Interpreter
     {
         match expr
         {
-            Statement::Expression(e) => println!("{}", self.visit(&e)),
-            Statement::Decralation(_str, _type, lit) => { 
-                let literal = self.visit(&lit);
-                if !literal.match_token(_type)
-                {
-                    panic!("Should not work.: {:?} to {:?}", literal, _type);
-                }
-                self.globals.insert(_str.to_string(), literal);
+            Statement::Expression(e) => { self.visit(e); },
+            Statement::Decralation(_str, _type, lit) => {
+                let lit = self.visit(lit);
+                self.environment.define(_str, _type, lit)
             },
 
-            Statement::Print(_expr) => {
-                println!("{}", self.visit(&_expr));
-            }
+            Statement::Print(_expr) => println!("{}", self.visit(_expr)),
             b => println!("Can't handle that right now!: {:?}", b),
         }
     }
@@ -51,7 +107,7 @@ impl Visitor<Expr> for Interpreter
         {
             Expr::Variable(x) => 
             {
-                self.globals.get(x).unwrap().clone()
+                self.environment.get(x).clone()
             },
             Expr::Literal(l) =>
             {
@@ -92,8 +148,13 @@ impl Visitor<Expr> for Interpreter
                 }
             },
             Expr::Grouping(g) => self.visit(g),
+            Expr::Assign(s, exp) => 
+            {
+                let result = self.visit(exp);
+                self.environment.assign(s, result);
+                self.visit(exp)
+            }
         }
     }
-
 }
 

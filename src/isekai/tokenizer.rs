@@ -115,8 +115,7 @@ impl Tokenizer {
                         while !(self.peek() == '*' && self.peek_shifted_to(1) == '/')
                         {
                             if self.peek() == '\n' {
-                                self.line += 1;
-                                self.column = 1;
+                                self.add_newline();
                             }
                             if self.peek() == '\0' {
                                 break;
@@ -138,11 +137,7 @@ impl Tokenizer {
             ' ' | '\r' | '\t' => Ok(()),
 
             // 改行
-            '\n' => {
-                self.line += 1;
-                self.column = 1;
-                Ok(())
-            }
+            '\n' => self.add_newline(),
 
             // 文字列を追加
             '"' => self.add_string(),
@@ -172,11 +167,17 @@ impl Tokenizer {
         true
     }
 
+    fn add_newline(&mut self) -> Result<(), SyntaxError>
+    {
+        self.line += 1;
+        self.column = 1;
+        Ok(())
+    }
+
     fn add_string(&mut self) -> Result<(), SyntaxError> {
         while !self.is_at_end() && self.peek() != '"' {
             if self.source[self.current] == '\n' {
-                self.line += 1;
-                self.column = 1;
+                self.add_newline()?;
             }
             self.advance();
         }
