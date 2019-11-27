@@ -12,7 +12,8 @@ use super::{
 // Refactor
 
 // FIXME:
-// Primary + ; does not work ( 10; spits error )
+// Primary + ; does not work ( 10; spits error ) -> I think it fixed?
+
 
 pub struct Parser
 {
@@ -300,7 +301,7 @@ impl Parser
     {
         let mut start = self.unary();
         
-        while self.is(TokenType::Slash) || self.is(TokenType::Asterisk)
+        while self.is(TokenType::Slash) || self.is(TokenType::Asterisk) || self.is(TokenType::Percent)
         {
             self.current += 1;
             let multiply_oper = self.tokens.get(self.current - 1).unwrap().clone();
@@ -365,12 +366,9 @@ impl Parser
                     This is a bug.
                     checking if the digit is int or not by using this method(trunc) is dangerous
                 */
-                if i.trunc() == *i {
-                    Expr::Literal(Value::Int(*i as i64))
-                }
-                else
-                {
-                    Expr::Literal(Value::Float(*i))
+                match i.parse::<i64>() {
+                    Ok(n) => Expr::Literal(Value::Int(n)),
+                    Err(_) => Expr::Literal(Value::Float(i.parse::<f64>().unwrap()))
                 }
             },
             Str(s) => {

@@ -64,7 +64,7 @@ pub enum TokenType {
     // 概念
     Str(String),
     Iden(String),
-    Digit(f64),
+    Digit(String),
     EOF,
 }
 

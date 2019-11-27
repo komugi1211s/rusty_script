@@ -30,6 +30,7 @@ pub enum Statement
     Decralation(String, Type, Expr),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
+    For(Box<Statement>, Expr, Expr, Box<Statement>),
     Block(Vec<Statement>),
     Break,
     Continue,

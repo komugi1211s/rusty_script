@@ -86,6 +86,7 @@ impl Tokenizer {
             '+' => self.add_token(TokenType::Plus),
             '-' => self.add_token(TokenType::Minus),
             '*' => self.add_token(TokenType::Asterisk),
+            '%' => self.add_token(TokenType::Percent),
             '=' => match self.next_is('=') {
                 true => self.add_token(TokenType::EqualEqual),
                 false => self.add_token(TokenType::Equal),
@@ -240,11 +241,8 @@ impl Tokenizer {
             }
         }
 
-        let digits: f64 = {
-            let stri: String = self.source[self.start..self.current].iter().collect();
-            stri.parse().unwrap()
-        };
-        self.add_token(TokenType::Digit(digits))
+        let stri: String = self.source[self.start..self.current].iter().collect();
+        self.add_token(TokenType::Digit(stri))
     }
 
     fn add_possible_iden(&mut self) -> Result<(), SyntaxError> {

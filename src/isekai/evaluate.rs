@@ -64,7 +64,7 @@ impl Environment
             let (_, x) = self.values.get(k).unwrap();
             if x.is_same_type(&Value::Null)
             {
-                unreachable!("Use of possibly uninitialized variable: {}", k);
+                unreachable!("Use of an uninitialized variable: {}", k);
             }
             x
         }
@@ -106,22 +106,23 @@ impl Interpreter
                 0
             },
             Statement::Block(ref v) => {
-                self.visit_block(v);
+                self.visit_block(v)
             },
             Statement::Print(_expr) => { println!("{}", self.visit(_expr)); 0 },
             Statement::If(_expr, ref _if, ref _else) => {
                 if self.visit(_expr).is_truthy()
                 {
-                    self.interpret(&*_if);
+                    self.interpret(&*_if)
                 }
                 else
                 {
                     if let Some(_el) = _else
                     {
-                        self.interpret(&*_el);
+                        self.interpret(&*_el)
                     }
+                    else 
+                    { 0 }
                 }
-                0
             },
             Statement::While(l, ref v) => {
                 while self.visit(l).is_truthy()
@@ -142,26 +143,42 @@ impl Interpreter
             Statement::Continue => {
                 return 2;
             },
-            b => println!("Can't handle that right now!: {:?}", b),
+            _ => 0,
         }
     }
 
-    pub fn visit_block(&mut self, inside: &Vec<Statement>)
+    fn enter_block(&mut self)
     {
-
         let new_nev = Environment::new();
         let previous = mem::replace(&mut self.environment, new_nev);
         self.environment.connect(previous);
+    }
 
-        for i in inside {
-            match self.interpret(i);
-        }
-
+    fn leave_block(&mut self)
+    {
         let original = mem::replace(&mut self.environment.enclose, None);
         if let Some(e) = original
         {
             self.environment = *e;
         }
+    }
+
+    pub fn visit_block(&mut self, inside: &Vec<Statement>) -> i32
+    {
+        self.enter_block();
+
+        for i in inside {
+            match self.interpret(i)
+            {
+                0 => (),
+                1 => { self.leave_block(); return 1; },
+                2 => { self.leave_block(); return 2; },
+                _ => ()
+            };
+        }
+
+        self.leave_block();
+        0
     } 
 }
 
@@ -173,14 +190,8 @@ impl Visitor<Expr> for Interpreter
     {
         match expr
         {
-            Expr::Variable(x) => 
-            {
-                self.environment.get(x).clone()
-            },
-            Expr::Literal(l) =>
-            {
-                l.clone()
-            },
+            Expr::Variable(x) => self.environment.get(x).clone(),
+            Expr::Literal(l) => l.clone(),
             Expr::Binary(ref l, ref r, ref t) =>
             {
                 let left = self.visit(l);
@@ -192,6 +203,7 @@ impl Visitor<Expr> for Interpreter
                     TokenType::Minus     => left - right,
                     TokenType::Asterisk  => left * right,
                     TokenType::Slash     => left / right,
+                    TokenType::Percent   => left % right,
 
                     // PartialEq Series
                     TokenType::NotEqual  => Value::Boolean(left != right),

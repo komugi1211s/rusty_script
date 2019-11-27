@@ -231,6 +231,30 @@ impl ops::Div<Value> for Value
     }
 }
 
+impl ops::Rem<Value> for Value
+{
+    type Output = Value;
+    fn rem(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
+                Value::Int(ir) => Value::Float(il as f64 % ir as f64),
+                Value::Float(fr) => Value::Float(il as f64 % fr),
+                _ => panic!("Rem operation is not covered for Str / Bool")
+            },
+            Value::Float(fl) => match right
+            {
+                Value::Int(ir) => Value::Float(fl % ir as f64),
+                Value::Float(fr) => Value::Float(fl % fr),
+                _ => panic!("Rem operation is not covered for Str / Bool")
+            },
+            _ => panic!("Rem operation is not covered for Str / Bool")
+        }
+    }
+}
+
 impl ops::Not for Value
 {
     type Output = Value;
