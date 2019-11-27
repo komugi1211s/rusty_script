@@ -1,4 +1,4 @@
-use super::types::{ Value };
+use super::types::{ Type, Value };
 use super::token::{ TokenType, Token };
 use super::parse::{ Expr, Visitor, Statement };
 use std::collections::HashMap;
@@ -6,9 +6,10 @@ use std::mem;
 
 pub struct Environment 
 {
-    pub values: HashMap<String, Value>,
+    pub values: HashMap<String, (Type, Value)>,
     pub enclose: Option<Box<Environment>>
 }
+
 impl Environment 
 {
     pub fn new() -> Self
@@ -24,29 +25,31 @@ impl Environment
         self.enclose = Some(Box::new(env));
     }
 
-    pub fn define(&mut self, name: &str, _type: &TokenType, value: Value)
+    pub fn define(&mut self, name: &str, _type: Type, value: Value)
     {
-        if !value.match_token(_type)
+        if !_type.is_compatible(&value)
         {
             panic!("Should not work.: {:?} to {:?}", value, _type);
         }
-        self.values.insert(name.to_string(), value);
+        self.values.insert(name.to_string(), (_type, value));
     }
 
-    pub fn assign(&mut self, name: &str, value: Value)
+    pub fn assign(&mut self, name: &str, new_value: Value)
     {
         if self.values.contains_key(name)
         {
-            let current = self.values.get(name).unwrap();
-            if !current.is_same_type(&value)
+            let (c_type, _) = self.values.get(name).unwrap();
+            let c_type = c_type.clone();
+            if !c_type.is_compatible(&new_value)
             {
-                unreachable!("Mismatched Value: {} to {}", value, current);
+                unreachable!("Mismatched Value: {:?}: {} to {:?}", new_value.to_type(), name, c_type);
             }
-            self.values.insert(name.to_string(), value);
+            
+            self.values.insert(name.to_string(), (c_type, new_value));
         }
         else if let Some(ref mut enc) = self.enclose
         {
-            enc.assign(name, value);
+            enc.assign(name, new_value);
         }
         else
         {
@@ -58,10 +61,10 @@ impl Environment
     {
         if self.values.contains_key(k)
         {
-            let x = self.values.get(k).unwrap();
+            let (_, x) = self.values.get(k).unwrap();
             if x.is_same_type(&Value::Null)
             {
-                unreachable!("Use of Undefined Variable: {}", k);
+                unreachable!("Use of possibly uninitialized variable: {}", k);
             }
             x
         }
@@ -88,23 +91,24 @@ impl Interpreter
     pub fn new() -> Self
     {
         Self {
-            environment: Environment::new()
+            environment: Environment::new(),
         }
     }
 
-    pub fn interpret(&mut self, stmt: &Statement)
+    pub fn interpret(&mut self, stmt: &Statement) -> i32
     {
         match stmt
         {
-            Statement::Expression(e) => { self.visit(e); },
+            Statement::Expression(e) => { self.visit(e); 0 },
             Statement::Decralation(_str, _type, lit) => {
                 let lit = self.visit(lit);
-                self.environment.define(_str, _type, lit)
+                self.environment.define(_str, _type.clone(), lit);
+                0
             },
             Statement::Block(ref v) => {
                 self.visit_block(v);
             },
-            Statement::Print(_expr) => println!("{}", self.visit(_expr)),
+            Statement::Print(_expr) => { println!("{}", self.visit(_expr)); 0 },
             Statement::If(_expr, ref _if, ref _else) => {
                 if self.visit(_expr).is_truthy()
                 {
@@ -117,7 +121,27 @@ impl Interpreter
                         self.interpret(&*_el);
                     }
                 }
-            }
+                0
+            },
+            Statement::While(l, ref v) => {
+                while self.visit(l).is_truthy()
+                {
+                    let x = self.interpret(&*v);
+                    if x == 1 {
+                        break;
+                    }
+                    if x == 2 {
+                        continue;
+                    }
+                }
+                0
+            },
+            Statement::Break => {
+                return 1;
+            },
+            Statement::Continue => {
+                return 2;
+            },
             b => println!("Can't handle that right now!: {:?}", b),
         }
     }
@@ -130,7 +154,7 @@ impl Interpreter
         self.environment.connect(previous);
 
         for i in inside {
-            self.interpret(i);
+            match self.interpret(i);
         }
 
         let original = mem::replace(&mut self.environment.enclose, None);

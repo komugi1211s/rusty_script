@@ -14,10 +14,22 @@ pub enum Type
     Null,
     Any
 }
-static STR__PLACEHOLDER: String = String::new();
 
 impl Type
 {
+    pub fn from_tokentype(t: &TokenType) -> Self
+    {
+        match t
+        {
+            TokenType::TypeAny   => Self::Any,
+            TokenType::TypeBool  => Self::Boolean,
+            TokenType::TypeFloat => Self::Float,
+            TokenType::TypeInt   => Self::Int,
+            TokenType::TypeStr   => Self::Str,
+            // This SHould not work.
+            _                    => Self::Null,
+        }
+    }
     pub fn is_compatible(&self, v: &Value) -> bool
     {
         if v == &Value::Null

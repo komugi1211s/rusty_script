@@ -7,11 +7,16 @@ pub enum TokenType {
     Reveal, // reveal(foreshadow)
     If,     // if expr {
     Else,   // else {
+    While,  // while expr {
+    For,    // for int: i in 0..10 {
+    Break,  // break;
+    Continue, // continue;
+
     True,   // true
     False,  // false
     Print,  // print "message"
 
-    TypeAny,   // any: name = ...
+    TypeAny,   // any: a = ...
     TypeVoid,  // void: a = ...
     TypeInt,   // int: a =
     TypeFloat, // float: a =
@@ -26,7 +31,7 @@ pub enum TokenType {
 
     // 括弧とか文字とか
     DoubleQuote, // ""
-    Slash,       // /
+    Slash,       // / <- 計算でも使う
     OpenParen,   // (
     CloseParen,  // )
     OpenBrace,   // {
@@ -48,10 +53,12 @@ pub enum TokenType {
     LessEqual,  // <=
     MoreEqual,  // >=
     EqualEqual, // ==
+
     // 計算用
     Plus,     // +
     Minus,    // -
     Asterisk, // *
+    // Slash, <- 既に上の方で定義済み
     Percent,  // %
 
     // 概念
@@ -66,18 +73,26 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
     match keywords {
         "define" => Some(Define),
         "reveal" => Some(Reveal),
+
         "if" => Some(If),
         "else" => Some(Else),
+        "while" => Some(While),
+        "for" => Some(For),
+        "print" => Some(Print),
+        "break" => Some(Break),
+        "continue" => Some(Continue),
+
         "true" => Some(True),
         "false" => Some(False),
-        "print" => Some(Print),
+        "null" => Some(Null),
+
         "any" => Some(TypeAny),
         "int" => Some(TypeInt),
         "float" => Some(TypeFloat),
         "str" => Some(TypeStr),
         "bool" => Some(TypeBool),
+
         "and" => Some(And),
-        "null" => Some(Null),
         "or" => Some(Or),
         _ => None,
     }

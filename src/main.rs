@@ -1,5 +1,5 @@
-// #![feature(test)]
-// extern crate test;
+//#![feature(test)]
+//extern crate test;
 
 use std::env;
 use std::fs::File;
@@ -62,15 +62,15 @@ mod tests
     fn benchmark(b: &mut Bencher)
     {
         let stri = "
-            str: first = \"newdec\";
-            str: second = \"newdec\";
-            
-            print first + second;
+                int: loop_i = 0;
+                while loop_i <= 10000 {
+                  loop_i = loop_i + 1;
+                }
         ";
 
         b.iter(move ||
         {
-            let n = test::black_box(100);
+            let n = test::black_box(1);
 
             for _ in 0..n {
                 isekai::core::start(stri);

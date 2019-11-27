@@ -1,6 +1,6 @@
 
 use super::{
-    types::{ Value },
+    types::{ Value, Type },
     token::{ TokenType, Token },
     parse::{ Expr, Statement },
 };
@@ -49,26 +49,45 @@ impl Parser
 
     fn statement(&mut self) -> Statement
     {
-        if self.is(TokenType::Print) 
+        if self.consume(TokenType::Print).is_ok()
         {
-            self.current += 1;
             let statement = Statement::Print(self.expression());
             return statement;
         }
-        else if self.is(TokenType::OpenBrace)
+        else if self.consume(TokenType::OpenBrace).is_ok()
         {
-            self.current += 1;
             return Statement::Block(self.block());
         }
-        else if self.is(TokenType::If)
+        else if self.consume(TokenType::If).is_ok()
+        {
+            return self.if_statement();
+        }
+        else if self.consume(TokenType::While).is_ok()
+        {
+            return self.while_statement();
+        }
+        else if self.consume(TokenType::Break).is_ok()
         {
             self.current += 1;
-            return self.if_statement();
+            return Statement::Break;
+        }
+        else if self.consume(TokenType::Continue).is_ok()
+        {
+            self.current += 1;
+            return Statement::Continue;
         }
         else
         {
             return Statement::Expression(self.expression());
         }
+    }
+
+    fn while_statement(&mut self) -> Statement
+    {
+        let condition = self.expression();
+        let _loop = self.statement();
+
+        return Statement::While(condition, Box::new(_loop));
     }
 
     fn if_statement(&mut self) -> Statement
@@ -127,8 +146,8 @@ impl Parser
 
     fn declare_variable(&mut self) -> Statement
     {
-        let _type = self.tokens.get(self.current).unwrap().clone();
-        let _type = Type::from_token(_type);
+        let _type = self.tokens.get(self.current).unwrap();
+        let _type = Type::from_tokentype(&_type.tokentype);
 
         self.current += 1;
 
@@ -146,13 +165,13 @@ impl Parser
             {
                 self.current += 1;
                 let item = self.expression();
-                // self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
-                return Statement::Decralation(iden, _type.tokentype, item);
+                // self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
+                return Statement::Decralation(iden, _type, item);
             }
             else if self.is(TokenType::SemiColon)
             {
                 self.current += 1;
-                return Statement::Decralation(iden, _type.tokentype, Expr::Literal(Value::Null));
+                return Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
             }
 
             unreachable!("ParserError: Expected Equal, got: {:?}", self.tokens.get(self.current));
@@ -164,8 +183,8 @@ impl Parser
     fn expression(&mut self) -> Expr
     {
         let x = self.assignment();
-        println!("{:?}", &x);
-        self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon after Expression.");
+        // println!("{:?}", &x);
+        self.consume(TokenType::SemiColon);
         x
     }
 
@@ -180,7 +199,7 @@ impl Parser
             let value = self.assignment();
             
             if let Expr::Variable(s) = expr {
-                // self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+                self.consume(TokenType::SemiColon).expect("ParserError: Expected Semicolon after Assignment.");
                 return Expr::Assign(s, Box::new(value));
             }
             else

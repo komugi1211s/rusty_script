@@ -1,5 +1,5 @@
 use std::fmt;
-use super::types::{ Value };
+use super::types::{ Value, Type };
 use super::token::{ Token, TokenType };
 
 pub trait Visitor<T>
@@ -26,10 +26,13 @@ pub enum Statement
     // DebugPrint
     Print(Expr),
     Expression(Expr),
-    Decralation(String, TokenType, Expr),
+    Defer(Expr),
+    Decralation(String, Type, Expr),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
-    While(Expr),
+    While(Expr, Box<Statement>),
     Block(Vec<Statement>),
+    Break,
+    Continue,
 }
 
 
