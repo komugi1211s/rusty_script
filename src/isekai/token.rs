@@ -11,13 +11,13 @@ pub enum TokenType {
     False,  // false
     Print,  // print "message"
 
-    Var,    // TYPE name = ...
-    TypeVoid,    // void: a = ...
-    TypeInt, // int: a = 
-    TypeFloat, // float: a = 
-    TypeStr, // str: a = 
-    TypeBool, // bool: a = 
-
+    TypeAny,   // any: name = ...
+    TypeVoid,  // void: a = ...
+    TypeInt,   // int: a =
+    TypeFloat, // float: a =
+    TypeStr,   // str: a =
+    TypeBool,  // bool: a =
+    Null,  // null 
 
     // データ型
     ForeShadow, // foreshadow ABC;
@@ -38,21 +38,22 @@ pub enum TokenType {
     Dot,         // .
     Comma,       // ,
 
-    // 比較
-    Bang,        // !
-    Less,        // <
-    More,        // >
-    NotEqual,    // !=
-    LessEqual,   // <=
-    MoreEqual,   // >= 
-    EqualEqual,  // == 
-
+    // 比較, 論理
+    Or,         // or
+    And,        // and
+    Bang,       // !
+    Less,       // <
+    More,       // >
+    NotEqual,   // !=
+    LessEqual,  // <=
+    MoreEqual,  // >=
+    EqualEqual, // ==
     // 計算用
     Plus,     // +
     Minus,    // -
     Asterisk, // *
     Percent,  // %
-    
+
     // 概念
     Str(String),
     Iden(String),
@@ -60,24 +61,24 @@ pub enum TokenType {
     EOF,
 }
 
-pub fn match_identity(keywords: &str) -> Option<TokenType>
-{
+pub fn match_identity(keywords: &str) -> Option<TokenType> {
     use TokenType::*;
-    match keywords
-    {
+    match keywords {
         "define" => Some(Define),
         "reveal" => Some(Reveal),
-        "if"     => Some(If),
-        "else"   => Some(Else),
-        "true"   => Some(True),
-        "false"  => Some(False),
-        "print"  => Some(Print),
-        "var"    => Some(Var),
-        "void"    => Some(TypeVoid),
-        "int"    => Some(TypeInt),
-        "float"    => Some(TypeFloat),
-        "str"    => Some(TypeStr),
-        "bool"    => Some(TypeBool),
+        "if" => Some(If),
+        "else" => Some(Else),
+        "true" => Some(True),
+        "false" => Some(False),
+        "print" => Some(Print),
+        "any" => Some(TypeAny),
+        "int" => Some(TypeInt),
+        "float" => Some(TypeFloat),
+        "str" => Some(TypeStr),
+        "bool" => Some(TypeBool),
+        "and" => Some(And),
+        "null" => Some(Null),
+        "or" => Some(Or),
         _ => None,
     }
 }
@@ -90,8 +91,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(tokentype: TokenType, line: usize, lexeme: String) -> Self
-    {
+    pub fn new(tokentype: TokenType, line: usize, lexeme: String) -> Self {
         let lexeme = lexeme.to_owned();
         Token {
             tokentype,

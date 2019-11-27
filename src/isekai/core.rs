@@ -3,7 +3,7 @@ use super::tokenizer::{ Tokenizer, SyntaxError };
 use super::parse::{ Visitor, Expr, Statement };
 use super::parser::Parser;
 use super::evaluate::Interpreter;
-use super::types::Types;
+use super::types::Value;
 // use self::error::*;
 
 use std::collections::HashMap;

@@ -1,4 +1,4 @@
-use super::types::{ Types };
+use super::types::{ Value };
 use super::token::{ TokenType, Token };
 use super::parse::{ Expr, Visitor, Statement };
 use std::collections::HashMap;
@@ -6,7 +6,7 @@ use std::mem;
 
 pub struct Environment 
 {
-    pub values: HashMap<String, Types>,
+    pub values: HashMap<String, Value>,
     pub enclose: Option<Box<Environment>>
 }
 impl Environment 
@@ -24,7 +24,7 @@ impl Environment
         self.enclose = Some(Box::new(env));
     }
 
-    pub fn define(&mut self, name: &str, _type: &TokenType, value: Types)
+    pub fn define(&mut self, name: &str, _type: &TokenType, value: Value)
     {
         if !value.match_token(_type)
         {
@@ -33,14 +33,14 @@ impl Environment
         self.values.insert(name.to_string(), value);
     }
 
-    pub fn assign(&mut self, name: &str, value: Types)
+    pub fn assign(&mut self, name: &str, value: Value)
     {
         if self.values.contains_key(name)
         {
             let current = self.values.get(name).unwrap();
             if !current.is_same_type(&value)
             {
-                unreachable!("Mismatched Types: {} to {}", value, current);
+                unreachable!("Mismatched Value: {} to {}", value, current);
             }
             self.values.insert(name.to_string(), value);
         }
@@ -54,12 +54,12 @@ impl Environment
         }
     }
 
-    pub fn get(&self, k: &str) -> &Types
+    pub fn get(&self, k: &str) -> &Value
     {
         if self.values.contains_key(k)
         {
             let x = self.values.get(k).unwrap();
-            if x.is_same_type(&Types::Null)
+            if x.is_same_type(&Value::Null)
             {
                 unreachable!("Use of Undefined Variable: {}", k);
             }
@@ -105,6 +105,19 @@ impl Interpreter
                 self.visit_block(v);
             },
             Statement::Print(_expr) => println!("{}", self.visit(_expr)),
+            Statement::If(_expr, ref _if, ref _else) => {
+                if self.visit(_expr).is_truthy()
+                {
+                    self.interpret(&*_if);
+                }
+                else
+                {
+                    if let Some(_el) = _else
+                    {
+                        self.interpret(&*_el);
+                    }
+                }
+            }
             b => println!("Can't handle that right now!: {:?}", b),
         }
     }
@@ -130,9 +143,9 @@ impl Interpreter
 
 impl Visitor<Expr> for Interpreter
 {
-    type Result = Types;
+    type Result = Value;
 
-    fn visit(&mut self, expr: &Expr) -> Types
+    fn visit(&mut self, expr: &Expr) -> Value
     {
         match expr
         {
@@ -157,15 +170,27 @@ impl Visitor<Expr> for Interpreter
                     TokenType::Slash     => left / right,
 
                     // PartialEq Series
-                    TokenType::NotEqual  => Types::Boolean(left != right),
-                    TokenType::EqualEqual=> Types::Boolean(left == right),
+                    TokenType::NotEqual  => Value::Boolean(left != right),
+                    TokenType::EqualEqual=> Value::Boolean(left == right),
 
                     // PartialOrd Series
-                    TokenType::LessEqual => Types::Boolean(left <= right),
-                    TokenType::MoreEqual => Types::Boolean(left >= right),
-                    TokenType::Less      => Types::Boolean(left < right),
-                    TokenType::More      => Types::Boolean(left > right),
+                    TokenType::LessEqual => Value::Boolean(left <= right),
+                    TokenType::MoreEqual => Value::Boolean(left >= right),
+                    TokenType::Less      => Value::Boolean(left < right),
+                    TokenType::More      => Value::Boolean(left > right),
                     _ => unimplemented!("Binary"),
+                }
+            },
+            Expr::Logical(ref l, ref r, ref t) =>
+            {
+                let left = self.visit(l);
+                let is_left_true = left.is_truthy();
+
+                match t.tokentype
+                {
+                    TokenType::And => if is_left_true { self.visit(r) } else { left },
+                    TokenType::Or  => if is_left_true { left } else { self.visit(r) },
+                    _ => unimplemented!("Logical"),
                 }
             },
             Expr::Unary(item, ref t) =>

@@ -1,5 +1,5 @@
 use std::fmt;
-use super::types::{ Types };
+use super::types::{ Value };
 use super::token::{ Token, TokenType };
 
 pub trait Visitor<T>
@@ -12,8 +12,9 @@ pub trait Visitor<T>
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
+    Logical(Box<Expr>, Box<Expr>, Token),
     Grouping(Box<Expr>),
-    Literal(Types),
+    Literal(Value),
     Unary(Box<Expr>, Token),  
     Variable(String),
     Assign(String, Box<Expr>),
@@ -26,8 +27,7 @@ pub enum Statement
     Print(Expr),
     Expression(Expr),
     Decralation(String, TokenType, Expr),
-    If(Expr),
-    Else(Box<Statement>),
+    If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr),
     Block(Vec<Statement>),
 }
@@ -38,6 +38,7 @@ impl fmt::Display for Expr {
         match self
         {
             Expr::Binary(ref left, ref right, ref token) => write!(f, "{} {} {}", left, right, token),
+            Expr::Logical(ref left, ref right, ref token) => write!(f, "{} {} {}", left, right, token),
             Expr::Grouping(ref inside) => write!(f, "({})", inside),
             Expr::Literal(ref lit) => write!(f, "{}", lit),
             Expr::Unary(ref item, ref t) => write!(f, "{}{}", t, item),

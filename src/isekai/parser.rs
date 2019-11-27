@@ -1,16 +1,18 @@
 
 use super::{
-    types::{ Types },
+    types::{ Value },
     token::{ TokenType, Token },
     parse::{ Expr, Statement },
 };
 
 
 // TODO:
-// Why only one line comes back from parse?
 // All clone call to a lifetime management
 // More refined Match system™
 // Refactor
+
+// FIXME:
+// Primary + ; does not work ( 10; spits error )
 
 pub struct Parser
 {
@@ -51,7 +53,6 @@ impl Parser
         {
             self.current += 1;
             let statement = Statement::Print(self.expression());
-            self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
             return statement;
         }
         else if self.is(TokenType::OpenBrace)
@@ -59,10 +60,32 @@ impl Parser
             self.current += 1;
             return Statement::Block(self.block());
         }
+        else if self.is(TokenType::If)
+        {
+            self.current += 1;
+            return self.if_statement();
+        }
         else
         {
             return Statement::Expression(self.expression());
         }
+    }
+
+    fn if_statement(&mut self) -> Statement
+    {
+        let condition = self.expression();
+        let true_route = self.statement();
+        
+        return Statement::If(condition,
+            Box::new(true_route),
+            match self.is(TokenType::Else) {
+                true => 
+                {
+                    self.current += 1;
+                    Some(Box::new(self.statement()))
+                },
+                false => None,
+            });
     }
 
     fn block(&mut self) -> Vec<Statement>
@@ -89,23 +112,24 @@ impl Parser
         // self.current + 3 = equal
         // self.current + 4 = value
         //
-        if self.is(TokenType::Var) 
+        if self.is(TokenType::TypeAny) 
             || self.is(TokenType::TypeInt) 
             || self.is(TokenType::TypeFloat) 
             || self.is(TokenType::TypeBool) 
             || self.is(TokenType::TypeStr) 
-            || self.is(TokenType::TypeVoid)
+            // || self.is(TokenType::TypeVoid)
         {
             return self.declare_variable();
         }
 
         return self.statement();
-
     }
 
     fn declare_variable(&mut self) -> Statement
     {
         let _type = self.tokens.get(self.current).unwrap().clone();
+        let _type = Type::from_token(_type);
+
         self.current += 1;
 
         let should_be_colon = self.consume(TokenType::Colon);
@@ -122,13 +146,13 @@ impl Parser
             {
                 self.current += 1;
                 let item = self.expression();
-                self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+                // self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
                 return Statement::Decralation(iden, _type.tokentype, item);
             }
             else if self.is(TokenType::SemiColon)
             {
                 self.current += 1;
-                return Statement::Decralation(iden, _type.tokentype, Expr::Literal(Types::Null));
+                return Statement::Decralation(iden, _type.tokentype, Expr::Literal(Value::Null));
             }
 
             unreachable!("ParserError: Expected Equal, got: {:?}", self.tokens.get(self.current));
@@ -140,12 +164,14 @@ impl Parser
     fn expression(&mut self) -> Expr
     {
         let x = self.assignment();
+        println!("{:?}", &x);
+        self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon after Expression.");
         x
     }
 
     fn assignment(&mut self) -> Expr
     {
-        let mut expr = self.equality();
+        let mut expr = self.logical_or();
 
         if self.is(TokenType::Equal)
         {
@@ -154,7 +180,7 @@ impl Parser
             let value = self.assignment();
             
             if let Expr::Variable(s) = expr {
-                self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
+                // self.consume(TokenType::SemiColon).expect("ParserError: Expected SemiColon.");
                 return Expr::Assign(s, Box::new(value));
             }
             else
@@ -164,6 +190,35 @@ impl Parser
         }
 
         return expr;
+    }
+
+    pub fn logical_or(&mut self) -> Expr
+    {
+        let mut expr = self.logical_and();
+
+        while self.is(TokenType::Or)
+        {
+            let operator = self.tokens.get(self.current).unwrap().clone();
+            self.current += 1;
+            let right = self.logical_and();
+            expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
+        }
+        
+        expr
+    }
+    pub fn logical_and(&mut self) -> Expr
+    {
+        let mut expr = self.equality();
+
+        while self.is(TokenType::And)
+        {
+            let operator = self.tokens.get(self.current).unwrap().clone();
+            self.current += 1;
+            let right = self.equality();
+            expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
+        }
+        
+        expr
     }
 
     fn equality(&mut self) -> Expr 
@@ -178,7 +233,7 @@ impl Parser
             expr = Expr::Binary(Box::new(expr), Box::new(right), equal_oper);
         }
 
-        return expr;
+        expr
     }
 
     fn comparison(&mut self) -> Expr
@@ -268,31 +323,40 @@ impl Parser
         {
             False => {
                 self.current += 1;
-                Expr::Literal(Types::Boolean(false))
+                Expr::Literal(Value::Boolean(false))
             },
             True => 
             {
                 self.current += 1;
-                Expr::Literal(Types::Boolean(true))
-            }
+                Expr::Literal(Value::Boolean(true))
+            },
+            Null =>
+            {
+                // TODO:
+                // This is a bug.
+                // once something gets initialized with Null, that variable becomes "Any" type.
+                self.current += 1;
+                Expr::Literal(Value::Null)
+            },
             Digit(i) => {
                 self.current += 1;
 
                 /*
                     TODO:
+                    This is a bug.
                     checking if the digit is int or not by using this method(trunc) is dangerous
                 */
                 if i.trunc() == *i {
-                    Expr::Literal(Types::Int(*i as i64))
+                    Expr::Literal(Value::Int(*i as i64))
                 }
                 else
                 {
-                    Expr::Literal(Types::Float(*i))
+                    Expr::Literal(Value::Float(*i))
                 }
             },
             Str(s) => {
                 self.current += 1;
-                Expr::Literal(Types::Str(s.to_string()))
+                Expr::Literal(Value::Str(s.to_string()))
             },
             Iden(s) => {
                 self.current += 1;

@@ -4,8 +4,43 @@ use std::ops;
 use std::fmt;
 use std::mem;
 
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub enum Type
+{
+    Int,
+    Float,
+    Str,
+    Boolean,
+    Null,
+    Any
+}
+static STR__PLACEHOLDER: String = String::new();
+
+impl Type
+{
+    pub fn is_compatible(&self, v: &Value) -> bool
+    {
+        if v == &Value::Null
+        {
+            true
+        }
+        else
+        {
+            match self
+            {
+                Type::Int     => v.to_type() == Type::Int,
+                Type::Boolean => v.to_type() == Type::Boolean,
+                Type::Str     => v.to_type() == Type::Str,
+                Type::Float   => v.to_type() == Type::Float,
+                Type::Any     => true,
+                Type::Null    => false,
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Types
+pub enum Value
 {
     Int(i64),
     Float(f64),
@@ -14,75 +49,82 @@ pub enum Types
     Null
 }
 
-impl Types
+impl Value
 {
-    pub fn match_token(&self, _type: &TokenType) -> bool
+    pub fn to_type(&self) -> Type
     {
-        if _type == &TokenType::TypeVoid
+        // Todo: Type Alias support
+        match self
         {
-            true
-        }
-        else 
-        {
-            match self
-            {
-                Types::Null       => true,
-                Types::Int(_)     => _type == &TokenType::TypeInt,
-                Types::Float(_)   => _type == &TokenType::TypeFloat,
-                Types::Str(_)     => _type == &TokenType::TypeStr,
-                Types::Boolean(_) => _type == &TokenType::TypeBool,
-                _                 => _type == &TokenType::TypeVoid,
-            }
+            Value::Null       => Type::Null,
+            Value::Int(_)     => Type::Int,
+            Value::Float(_)   => Type::Float,
+            Value::Str(_)     => Type::Str,
+            Value::Boolean(_) => Type::Boolean,
+            _                 => Type::Any,
         }
     }
 
-    pub fn is_same_type(&self, other: &Types) -> bool
+    pub fn is_same_type(&self, other: &Value) -> bool
     {
-        mem::discriminant(self) == mem::discriminant(&Types::Null)
+        mem::discriminant(self) == mem::discriminant(&Value::Null)
         || mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    pub fn is_truthy(&self) -> bool
+    {
+        // NOTE: This should work since Value implement ops::Not
+        if let Value::Boolean(x) = !!self
+        {
+            x
+        }
+        else
+        {
+            panic!("Interpreter Internal Error");
+        }
     }
 }
 
-impl fmt::Display for Types
+impl fmt::Display for Value
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
         match &self
         {
-            Types::Int(i)     => write!(f, "{}", i),
-            Types::Float(f_)  => write!(f, "{}", f_),
-            Types::Str(ref s) => write!(f, "{}", s),
-            Types::Boolean(b) => write!(f, "{}", b),
-            Types::Null       => write!(f, "null"),
+            Value::Int(i)     => write!(f, "{}", i),
+            Value::Float(f_)  => write!(f, "{}", f_),
+            Value::Str(ref s) => write!(f, "{}", s),
+            Value::Boolean(b) => write!(f, "{}", b),
+            Value::Null       => write!(f, "null"),
         }
     }
 }
 
-impl ops::Add<Types> for Types
+impl ops::Add<Value> for Value
 {
-    type Output = Types;
+    type Output = Value;
 
-    fn add(self, right: Types) -> Types
+    fn add(self, right: Value) -> Value
     {
         match self
         {
-            Types::Int(il) => match right 
+            Value::Int(il) => match right 
             {
-                Types::Int(ir) => Types::Int(il + ir),
-                Types::Float(fr) => Types::Float(il as f64 + fr),
+                Value::Int(ir) => Value::Int(il + ir),
+                Value::Float(fr) => Value::Float(il as f64 + fr),
                 x@ _ => unreachable!("TypeError: Can't add Int and {} together", x),
             },
-            Types::Float(fl) => match right
+            Value::Float(fl) => match right
             {
-                Types::Int(ir) => Types::Float(fl + ir as f64),
-                Types::Float(fr) => Types::Float(fl + fr),
+                Value::Int(ir) => Value::Float(fl + ir as f64),
+                Value::Float(fr) => Value::Float(fl + fr),
                 x@ _ => unreachable!("TypeError: Can't add Float and {} together", x),
             },
-            Types::Str(ref sl) =>
+            Value::Str(ref sl) =>
             {
-                if let Types::Str(ref sr) = right
+                if let Value::Str(ref sr) = right
                 {
-                    Types::Str(format!("{}{}", sl, sr))
+                    Value::Str(format!("{}{}", sl, sr))
                 } 
                 else
                 {
@@ -96,24 +138,24 @@ impl ops::Add<Types> for Types
     }
 }
 
-impl ops::Sub<Types> for Types
+impl ops::Sub<Value> for Value
 {
-    type Output = Types;
+    type Output = Value;
 
-    fn sub(self, right: Types) -> Types
+    fn sub(self, right: Value) -> Value
     {
         match self
         {
-            Types::Int(il) => match right 
+            Value::Int(il) => match right 
             {
-                Types::Int(ir) => Types::Int(il - ir),
-                Types::Float(fr) => Types::Float(il as f64 - fr),
+                Value::Int(ir) => Value::Int(il - ir),
+                Value::Float(fr) => Value::Float(il as f64 - fr),
                 x@ _ => unreachable!("TypeError: Can't subtract {} from Int", x),
             },
-            Types::Float(fl) => match right
+            Value::Float(fl) => match right
             {
-                Types::Int(ir) => Types::Float(fl - ir as f64),
-                Types::Float(fr) => Types::Float(fl - fr),
+                Value::Int(ir) => Value::Float(fl - ir as f64),
+                Value::Float(fr) => Value::Float(fl - fr),
                 x@ _ => unreachable!("TypeError: Can't subtract {} from Float", x),
             },
 
@@ -122,24 +164,24 @@ impl ops::Sub<Types> for Types
     }
 }
 
-impl ops::Mul<Types> for Types
+impl ops::Mul<Value> for Value
 {
-    type Output = Types;
+    type Output = Value;
 
-    fn mul(self, right: Types) -> Types
+    fn mul(self, right: Value) -> Value
     {
         match self
         {
-            Types::Int(il) => match right 
+            Value::Int(il) => match right 
             {
-                Types::Int(ir) => Types::Int(il * ir),
-                Types::Float(fr) => Types::Float(il as f64 * fr),
+                Value::Int(ir) => Value::Int(il * ir),
+                Value::Float(fr) => Value::Float(il as f64 * fr),
                 x@ _ => unreachable!("TypeError: Can't multiply Int and {}", x),
             },
-            Types::Float(fl) => match right
+            Value::Float(fl) => match right
             {
-                Types::Int(ir) => Types::Float(fl * ir as f64),
-                Types::Float(fr) => Types::Float(fl * fr),
+                Value::Int(ir) => Value::Float(fl * ir as f64),
+                Value::Float(fr) => Value::Float(fl * fr),
                 x@ _ => unreachable!("TypeError: Can't multiply Float and {}", x),
             },
 
@@ -150,24 +192,24 @@ impl ops::Mul<Types> for Types
     }
 }
 
-impl ops::Div<Types> for Types
+impl ops::Div<Value> for Value
 {
-    type Output = Types;
+    type Output = Value;
 
-    fn div(self, right: Types) -> Types
+    fn div(self, right: Value) -> Value
     {
         match self
         {
-            Types::Int(il) => match right 
+            Value::Int(il) => match right 
             {
-                Types::Int(ir) => Types::Float(il as f64 / ir as f64),
-                Types::Float(fr) => Types::Float(il as f64 / fr),
+                Value::Int(ir) => Value::Float(il as f64 / ir as f64),
+                Value::Float(fr) => Value::Float(il as f64 / fr),
                 x@ _ => unreachable!("TypeError: Cannot divide Int with {}", x),
             },
-            Types::Float(fl) => match right
+            Value::Float(fl) => match right
             {
-                Types::Int(ir) => Types::Float(fl / ir as f64),
-                Types::Float(fr) => Types::Float(fl / fr),
+                Value::Int(ir) => Value::Float(fl / ir as f64),
+                Value::Float(fr) => Value::Float(fl / fr),
                 x@ _ => unreachable!("TypeError: Cannot divide Float with {}", x),
             },
 
@@ -177,55 +219,74 @@ impl ops::Div<Types> for Types
     }
 }
 
-impl ops::Not for Types
+impl ops::Not for Value
 {
-    type Output = Types;
+    type Output = Value;
     
-    fn not(self) -> Types
+    fn not(self) -> Value
     {
         match self 
         {
-            Types::Boolean(b) => Types::Boolean(!b),
-            Types::Int(i)     => Types::Boolean(i != 0),
-            Types::Float(f)   => Types::Boolean(f != 0.0),
-            Types::Str(s)     => Types::Boolean(s.len() != 0),
-            Types::Null       => Types::Boolean(false),
+            Value::Boolean(b) => Value::Boolean(!b),
+            Value::Int(i)     => Value::Boolean(i == 0),
+            Value::Float(f)   => Value::Boolean(f == 0.0),
+            Value::Str(s)     => Value::Boolean(s.len() == 0),
+            Value::Null       => Value::Boolean(true),
         }
     }
 }
 
-impl ops::Neg for Types
+// TODO:
+// Cleanup: This feels weird.
+impl ops::Not for &Value
 {
-    type Output = Types;
+    type Output = Value;
+    
+    fn not(self) -> Value
+    {
+        match self 
+        {
+            Value::Boolean(b) => Value::Boolean(!b),
+            Value::Int(i)     => Value::Boolean(*i == 0),
+            Value::Float(f)   => Value::Boolean(*f == 0.0),
+            Value::Str(s)     => Value::Boolean(s.len() == 0),
+            Value::Null       => Value::Boolean(true),
+        }
+    }
+}
 
-    fn neg(self) -> Types
+impl ops::Neg for Value
+{
+    type Output = Value;
+
+    fn neg(self) -> Value
     {
         match self
         {
-            Types::Int(i)     => Types::Int(-i),
-            Types::Float(f)   => Types::Float(-f),
+            Value::Int(i)     => Value::Int(-i),
+            Value::Float(f)   => Value::Float(-f),
             x@ _                 => unreachable!("TypeError:{} does not support negation", x),
         }
     }
 }
 
 use std::cmp::Ordering;
-impl PartialOrd for Types
+impl PartialOrd for Value
 {
-    fn partial_cmp(&self, other: &Types) -> Option<Ordering>
+    fn partial_cmp(&self, other: &Value) -> Option<Ordering>
     {
         match self
         {
-            Types::Int(i_left) => match other
+            Value::Int(i_left) => match other
             {
-                Types::Int(i_right) => i_left.partial_cmp(i_right),
-                Types::Float(f_right) => (*i_left as f64).partial_cmp(f_right),
+                Value::Int(i_right) => i_left.partial_cmp(i_right),
+                Value::Float(f_right) => (*i_left as f64).partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),
             },
-            Types::Float(f_left) => match other
+            Value::Float(f_left) => match other
             {
-                Types::Int(i_right) => f_left.partial_cmp(&(*i_right as f64)),
-                Types::Float(f_right) => f_left.partial_cmp(f_right),
+                Value::Int(i_right) => f_left.partial_cmp(&(*i_right as f64)),
+                Value::Float(f_right) => f_left.partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),
             },
             _ => unreachable!("Comparison with unsupported type"),
