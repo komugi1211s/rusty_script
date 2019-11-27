@@ -197,10 +197,15 @@ impl Tokenizer {
 
         self.advance();
         // start + 1 & current - 1 は "" ←これを削る
-        let given_string: &[char] = &self.source[(self.start+1)..(self.current-1)];
-        let given_string: String = given_string.iter().collect();
+        self.start += 1;
+        self.current -= 1;
+        let z = self.add_token(TokenType::Str);
+        // もとに戻す
+        self.start -= 1;
+        self.current += 1;
 
-        self.add_token(TokenType::Str(given_string))
+        // 結果をリターン
+        z
     }
 
     fn peek(&self) -> char
@@ -241,8 +246,7 @@ impl Tokenizer {
             }
         }
 
-        let stri: String = self.source[self.start..self.current].iter().collect();
-        self.add_token(TokenType::Digit(stri))
+        self.add_token(TokenType::Digit)
     }
 
     fn add_possible_iden(&mut self) -> Result<(), SyntaxError> {
@@ -251,7 +255,7 @@ impl Tokenizer {
 
         let possible_result = match_identity(&stri);
         if possible_result.is_none() {
-            self.add_token(TokenType::Iden(stri))
+            self.add_token(TokenType::Iden)
         }
         else {
             self.add_token(possible_result.unwrap())

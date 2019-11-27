@@ -16,8 +16,9 @@ pub enum TokenType {
     False,  // false
     Print,  // print "message"
 
-    TypeAny,   // any: a = ...
+    // TODO: Remove TypeVoid
     TypeVoid,  // void: a = ...
+    TypeAny,   // any: a = ...
     TypeInt,   // int: a =
     TypeFloat, // float: a =
     TypeStr,   // str: a =
@@ -62,10 +63,26 @@ pub enum TokenType {
     Percent,  // %
 
     // 概念
-    Str(String),
-    Iden(String),
-    Digit(String),
+    Str,
+    Iden,
+    Digit,
     EOF,
+}
+
+impl TokenType
+{
+    pub fn is_typekind(given: &TokenType) -> bool
+    {
+        match given
+        {
+            TokenType::TypeAny => true,
+            TokenType::TypeInt => true,
+            TokenType::TypeFloat => true,
+            TokenType::TypeBool => true,
+            TokenType::TypeStr => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn match_identity(keywords: &str) -> Option<TokenType> {

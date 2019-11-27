@@ -132,12 +132,8 @@ impl Parser
         // self.current + 3 = equal
         // self.current + 4 = value
         //
-        if self.is(TokenType::TypeAny) 
-            || self.is(TokenType::TypeInt) 
-            || self.is(TokenType::TypeFloat) 
-            || self.is(TokenType::TypeBool) 
-            || self.is(TokenType::TypeStr) 
-            // || self.is(TokenType::TypeVoid)
+        let x = self.tokens.get(self.current).unwrap();
+        if TokenType::is_typekind(&x.tokentype)
         {
             return self.declare_variable();
         }
@@ -159,8 +155,8 @@ impl Parser
         }
 
         let possible_iden = self.tokens.get(self.current).unwrap();
-        if let TokenType::Iden(iden) = &possible_iden.tokentype {
-            let iden = iden.clone();
+        if TokenType::Iden == possible_iden.tokentype {
+            let iden = possible_iden.lexeme.clone();
             self.current += 1;
             if self.is(TokenType::Equal)
             {
@@ -173,6 +169,23 @@ impl Parser
             {
                 self.current += 1;
                 return Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
+            }
+            else if self.is(TokenType::OpenParen)
+            {
+                // Declaration of Functions
+                self.consume(TokenType::OpenParen).expect("Why it failed?");
+                let mut argument_is_type = {
+                    let x = self.tokens.get(self.current);
+                    x.is_some() && TokenType::is_typekind(&x.unwrap().tokentype)
+                };
+
+                let mut arguments: Vec<(Type, Token)> = Vec::new();
+                while argument_is_type {
+                    self.current += 1;
+                    let colon_ = self.consume(TokenType::Colon).expect("Colon Expected for Argument.");
+                    let argument_iden = self.consume(TokenType::Iden).expect("Identity Expected for Argument");
+                    
+                }
             }
 
             unreachable!("ParserError: Expected Equal, got: {:?}", self.tokens.get(self.current));
@@ -326,7 +339,37 @@ impl Parser
             return unary;
         }
 
-        return self.primary();
+        return self.func_call();
+    }
+
+    fn func_call(&mut self) -> Expr
+    {
+        let mut expr = self.primary();
+
+        while true {
+            if self.is(TokenType::OpenParen) {
+                expr = self.finish_func_call(expr);
+            } else {
+                break;
+            }
+        }
+        expr
+    }
+
+    fn finish_func_call(&mut self, _expr: Expr) -> Expr
+    {
+        let v = Vec::new<Expr>();
+        self.current += 1;
+
+        if !self.is(TokenType::CloseParen) 
+        {
+            let mut z = true;
+            while z {
+                self.current += 1;
+                v.push(self.expression());
+                z = self.is(TokenType::Comma);
+            }
+        }
     }
 
     fn is(&self, _type: TokenType) -> bool
@@ -358,7 +401,7 @@ impl Parser
                 self.current += 1;
                 Expr::Literal(Value::Null)
             },
-            Digit(i) => {
+            Digit => {
                 self.current += 1;
 
                 /*
@@ -366,18 +409,18 @@ impl Parser
                     This is a bug.
                     checking if the digit is int or not by using this method(trunc) is dangerous
                 */
-                match i.parse::<i64>() {
+                match inside.lexeme.parse::<i64>() {
                     Ok(n) => Expr::Literal(Value::Int(n)),
-                    Err(_) => Expr::Literal(Value::Float(i.parse::<f64>().unwrap()))
+                    Err(_) => Expr::Literal(Value::Float(inside.lexeme.parse::<f64>().unwrap()))
                 }
             },
-            Str(s) => {
+            Str => {
                 self.current += 1;
-                Expr::Literal(Value::Str(s.to_string()))
+                Expr::Literal(Value::Str(inside.lexeme.to_string()))
             },
-            Iden(s) => {
+            Iden => {
                 self.current += 1;
-                Expr::Variable(s.to_string())
+                Expr::Variable(inside.lexeme.to_string())
             },
             OpenParen => {
                 self.current += 1;

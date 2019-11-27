@@ -13,6 +13,7 @@ pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
     Logical(Box<Expr>, Box<Expr>, Token),
+    FunctionCall(Box<Expr>, Token, Vec<Expr>),
     Grouping(Box<Expr>),
     Literal(Value),
     Unary(Box<Expr>, Token),  
@@ -26,8 +27,9 @@ pub enum Statement
     // DebugPrint
     Print(Expr),
     Expression(Expr),
-    Defer(Expr),
+    // Defer(Expr),
     Decralation(String, Type, Expr),
+    Function(String, Vec<Token>, Box<Statement>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(Box<Statement>, Expr, Expr, Box<Statement>),
