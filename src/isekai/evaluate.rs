@@ -12,6 +12,16 @@ pub struct Environment
     pub enclose: Option<Box<Environment>>
 }
 
+
+
+pub enum InterpError
+{
+    Return(Value),
+    Break,
+    Continue,
+    NoOp
+}
+
 impl Environment 
 {
     pub fn new() -> Self
@@ -127,34 +137,28 @@ impl Interpreter
         unreachable!();
     }
 
-    pub fn visit_block(&mut self, inside: &Vec<Statement>) -> i32
+    pub fn visit_block(&mut self, inside: &Vec<Statement>) -> Result<(), InterpError>
     {
         for i in inside {
-            match self.visit(i)
-            {
-                0 => (),
-                1 => { return 1; },
-                2 => { return 2; },
-                _ => ()
-            };
+            self.visit(i)?;
         }
-        0
+        Ok(())
     } 
 }
 
 impl Visitor<Statement> for Interpreter
 {
-    type Result = i32;
+    type Result = Result<(), InterpError>;
     
-    fn visit(&mut self, stmt: &Statement) -> i32
+    fn visit(&mut self, stmt: &Statement) -> Self::Result
     {
         match stmt
         {
-            Statement::Expression(e) => { self.visit(e); 0 },
+            Statement::Expression(e) => { self.visit(e); Ok(()) },
             Statement::Decralation(_str, _type, lit) => {
                 let lit = self.visit(lit);
                 self.environment.define(_str, _type.clone(), lit);
-                0
+                Ok(())
             },
             Statement::Function(name, _type, args, inside) => 
             {
@@ -167,7 +171,7 @@ impl Visitor<Statement> for Interpreter
                             func_inside.clone()
                     ));
                 }
-                0
+                Ok(())
             },
             Statement::Block(ref v) => {
                 self.enter_block(Environment::new());
@@ -175,7 +179,7 @@ impl Visitor<Statement> for Interpreter
                 self.leave_block();
                 x
             },
-            Statement::Print(_expr) => { println!("{}", self.visit(_expr)); 0 },
+            Statement::Print(_expr) => { println!("{}", self.visit(_expr)); Ok(()) },
             Statement::If(_expr, _if, _else) => {
                 if self.visit(_expr).is_truthy()
                 {
@@ -188,29 +192,33 @@ impl Visitor<Statement> for Interpreter
                         self.visit(&**_el)
                     }
                     else 
-                    { 0 }
+                    { Ok(()) }
                 }
             },
             Statement::While(l, v) => {
                 while self.visit(l).is_truthy()
                 {
                     let x = self.visit(&**v);
-                    if x == 1 {
-                        break;
+                    match x {
+                        Ok(_) => (),
+                        Err(ref e) => match e {
+                            InterpError::Break => break,
+                            InterpError::Continue => continue,
+                            _ => ()
+                        }
                     }
-                    if x == 2 {
-                        continue;
-                    }
+                    x?;
                 }
-                0
+
+                Ok(())
             },
             Statement::Break => {
-                return 1;
+                Err(InterpError::Break)
             },
             Statement::Continue => {
-                return 2;
+                Err(InterpError::Continue)
             },
-            _ => 0,
+            _ => Err(InterpError::NoOp),
         }
     }
 }

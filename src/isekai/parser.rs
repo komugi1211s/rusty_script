@@ -142,6 +142,26 @@ impl Parser
 
         return self.statement();
     }
+    fn declare_argument(&mut self) -> Statement
+    {
+        let _type = self.tokens.get(self.current).unwrap();
+        let _type = Type::from_tokentype(&_type.tokentype);
+
+        self.current += 1;
+        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
+        let possible_iden = self.tokens.get(self.current).unwrap();
+
+        if TokenType::Iden != possible_iden.tokentype
+        {
+            panic!("Identity Expected, got {:?}", possible_iden);
+        }
+
+        let iden = possible_iden.lexeme.clone();
+        self.current += 1;
+
+        // TODO: Implement the Argument
+
+    }
 
     fn declare_variable(&mut self) -> Statement
     {
@@ -170,12 +190,14 @@ impl Parser
         }
 
         // Decralation, not initialized;
-        else if self.is(TokenType::SemiColon) || self.is(TokenType::Comma) || self.is(TokenType::CloseParen)
+        else if self.is(TokenType::SemiColon) || self.is(TokenType::Comma) 
         {
-            if !self.is(TokenType::CloseParen)
-            {
-                self.current += 1;
-            }
+            self.current += 1;
+            state = Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
+        }
+
+        else if self.is(TokenType::CloseParen)
+        {
             state = Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
         }
 
@@ -191,7 +213,7 @@ impl Parser
             let mut arguments: Vec<Statement> = Vec::new();
             while argument_is_type
             {
-                let declaration = self.declare_variable();
+                let declaration = self.declare_argument();
                 arguments.push(declaration);
                 self.current += 1;
 
