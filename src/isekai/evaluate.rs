@@ -1,8 +1,10 @@
 use super::types::{ Type, Value };
 use super::token::{ TokenType, Token };
+use super::nativefunc::{ define_native_functions };
 use super::parse::{ Expr, Visitor, Statement };
 use std::collections::HashMap;
 use std::mem;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Environment 
 {
@@ -25,8 +27,17 @@ impl Environment
         self.enclose = Some(Box::new(env));
     }
 
+    // pub fn define_function(&mut self, func: Value)
+    // {
+    //     if Value::Callable(x) = &func
+    //     {
+    //         if !x.retType.is_compatible(
+    //     }
+    // }
+    //
     pub fn define(&mut self, name: &str, _type: Type, value: Value)
     {
+        println!("define {}", name);
         if !_type.is_compatible(&value)
         {
             panic!("Should not work.: {:?} to {:?}", value, _type);
@@ -36,9 +47,10 @@ impl Environment
 
     pub fn assign(&mut self, name: &str, new_value: Value)
     {
+        println!("assign {}", name);
         if self.values.contains_key(name)
         {
-            let (c_type, _) = self.values.get(name).unwrap();
+            let (c_type, v) = self.values.get(name).unwrap();
             let c_type = c_type.clone();
             if !c_type.is_compatible(&new_value)
             {
@@ -85,17 +97,56 @@ pub struct Interpreter
     pub environment: Environment,
 }
 
-
 impl Interpreter
 {
     pub fn new() -> Self
     {
-        Self {
+        let mut z = Self {
             environment: Environment::new(),
-        }
+        };
+
+        define_native_functions(&mut z.environment);
+        z.enter_block(Environment::new());
+        // z.environment.define_function(nativefunc);
+        z
     }
 
-    pub fn interpret(&mut self, stmt: &Statement) -> i32
+    fn enter_block(&mut self, new_env: Environment)
+    {
+        let previous = mem::replace(&mut self.environment, new_env);
+        self.environment.connect(previous);
+    }
+
+    fn leave_block(&mut self) -> Environment
+    {
+        let original = mem::replace(&mut self.environment.enclose, None);
+        if let Some(e) = original
+        {
+            return mem::replace(&mut self.environment, *e);
+        }
+        unreachable!();
+    }
+
+    pub fn visit_block(&mut self, inside: &Vec<Statement>) -> i32
+    {
+        for i in inside {
+            match self.visit(i)
+            {
+                0 => (),
+                1 => { return 1; },
+                2 => { return 2; },
+                _ => ()
+            };
+        }
+        0
+    } 
+}
+
+impl Visitor<Statement> for Interpreter
+{
+    type Result = i32;
+    
+    fn visit(&mut self, stmt: &Statement) -> i32
     {
         match stmt
         {
@@ -105,29 +156,45 @@ impl Interpreter
                 self.environment.define(_str, _type.clone(), lit);
                 0
             },
+            Statement::Function(name, _type, args, inside) => 
+            {
+                let func_block = &**inside;
+                if let Statement::Block(func_inside) = func_block
+                {
+                    self.environment.define(name, _type.clone(), Value::Callable(
+                            _type.clone(),
+                            args.clone(),
+                            func_inside.clone()
+                    ));
+                }
+                0
+            },
             Statement::Block(ref v) => {
-                self.visit_block(v)
+                self.enter_block(Environment::new());
+                let x = self.visit_block(v);
+                self.leave_block();
+                x
             },
             Statement::Print(_expr) => { println!("{}", self.visit(_expr)); 0 },
-            Statement::If(_expr, ref _if, ref _else) => {
+            Statement::If(_expr, _if, _else) => {
                 if self.visit(_expr).is_truthy()
                 {
-                    self.interpret(&*_if)
+                    self.visit(&**_if)
                 }
                 else
                 {
                     if let Some(_el) = _else
                     {
-                        self.interpret(&*_el)
+                        self.visit(&**_el)
                     }
                     else 
                     { 0 }
                 }
             },
-            Statement::While(l, ref v) => {
+            Statement::While(l, v) => {
                 while self.visit(l).is_truthy()
                 {
-                    let x = self.interpret(&*v);
+                    let x = self.visit(&**v);
                     if x == 1 {
                         break;
                     }
@@ -146,40 +213,6 @@ impl Interpreter
             _ => 0,
         }
     }
-
-    fn enter_block(&mut self)
-    {
-        let new_nev = Environment::new();
-        let previous = mem::replace(&mut self.environment, new_nev);
-        self.environment.connect(previous);
-    }
-
-    fn leave_block(&mut self)
-    {
-        let original = mem::replace(&mut self.environment.enclose, None);
-        if let Some(e) = original
-        {
-            self.environment = *e;
-        }
-    }
-
-    pub fn visit_block(&mut self, inside: &Vec<Statement>) -> i32
-    {
-        self.enter_block();
-
-        for i in inside {
-            match self.interpret(i)
-            {
-                0 => (),
-                1 => { self.leave_block(); return 1; },
-                2 => { self.leave_block(); return 2; },
-                _ => ()
-            };
-        }
-
-        self.leave_block();
-        0
-    } 
 }
 
 impl Visitor<Expr> for Interpreter
@@ -188,14 +221,67 @@ impl Visitor<Expr> for Interpreter
 
     fn visit(&mut self, expr: &Expr) -> Value
     {
+        // Expr系は全部参照->Box->中身 の流れで渡される為、
+        // 必ずDerefを2回挟んでからDeref後を参照する事 (&**expr)
         match expr
         {
             Expr::Variable(x) => self.environment.get(x).clone(),
             Expr::Literal(l) => l.clone(),
-            Expr::Binary(ref l, ref r, ref t) =>
+            Expr::FunctionCall(expr, _, args) => 
             {
-                let left = self.visit(l);
-                let right = self.visit(r);
+                match self.visit(&**expr)
+                {
+                    Value::Callable(ref _type, ref require_arg, ref statement) => {
+                        if require_arg.len() < args.len() {
+                            panic!("Too much Argument");
+                        }
+                        let mut env = Environment::new();
+                        self.enter_block(env);
+                        for require in require_arg
+                        {
+                            if let Statement::Decralation(n, t, h) = require {
+                                self.visit(require);
+                            }
+                            else {
+                                panic!("how?");
+                            }
+                        }
+                        for (arg, x) in args.iter().zip(require_arg.iter())
+                        {
+                            if let Statement::Decralation(ref n, _, _) = x {
+                                let x = self.visit(arg);
+                                if Value::Null != x {
+                                    self.environment.assign(n, x);
+                                }
+                            }
+                            else {
+                                panic!("how?");
+                            }
+                        }
+                        self.visit_block(statement);
+                        self.leave_block();
+                        Value::Null
+                    },
+                    Value::NativeCallable(_type, size, func) => {
+                        if size != args.len()
+                        {
+                            panic!("Different Argument Size provided: needed {}, provided {}", size, args.len());
+                        }
+                        let mut vector: Vec<Value> = Vec::with_capacity(size);
+                        for i in args
+                        {
+                            vector.push(self.visit(i));
+                        }
+
+                        (func)(vector)
+                    }
+                    _ => unreachable!("{:?}", self.visit(&**expr)),
+                }
+            },
+            Expr::Binary(l, r, ref t) =>
+            {
+                let left = self.visit(&**l);
+                let right = self.visit(&**r);
 
                 match t.tokentype
                 {
@@ -217,21 +303,21 @@ impl Visitor<Expr> for Interpreter
                     _ => unimplemented!("Binary"),
                 }
             },
-            Expr::Logical(ref l, ref r, ref t) =>
+            Expr::Logical(l, r, ref t) =>
             {
-                let left = self.visit(l);
+                let left = self.visit(&**l);
                 let is_left_true = left.is_truthy();
 
                 match t.tokentype
                 {
-                    TokenType::And => if is_left_true { self.visit(r) } else { left },
-                    TokenType::Or  => if is_left_true { left } else { self.visit(r) },
+                    TokenType::And => if is_left_true { self.visit(&**r) } else { left },
+                    TokenType::Or  => if is_left_true { left } else { self.visit(&**r) },
                     _ => unimplemented!("Logical"),
                 }
             },
             Expr::Unary(item, ref t) =>
             {
-                let expr = self.visit(item);
+                let expr = self.visit(&**item);
                 match t.tokentype 
                 {
                     TokenType::Bang  => !expr,
@@ -239,13 +325,14 @@ impl Visitor<Expr> for Interpreter
                     _ => unreachable!("Unary with unsupported Tokentype"),
                 }
             },
-            Expr::Grouping(g) => self.visit(g),
+            Expr::Grouping(g) => self.visit(&**g),
             Expr::Assign(s, exp) => 
             {
-                let result = self.visit(exp);
+                let result = self.visit(&**exp);
                 self.environment.assign(s, result);
-                self.visit(exp)
-            }
+                self.visit(&**exp)
+            },
+            x => panic!("Could not handle the expression: {:?}", x),
         }
     }
 }

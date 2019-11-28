@@ -33,7 +33,9 @@ impl Parser
         let mut statements: Vec<Statement> = Vec::new();
         while !self.is_at_end()
         {
-            statements.push(self.decralation());
+            let x = self.decralation();
+            println!("{:?}", x);
+            statements.push(x);
         }
         statements
     }
@@ -147,51 +149,72 @@ impl Parser
         let _type = Type::from_tokentype(&_type.tokentype);
 
         self.current += 1;
+        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
+        let possible_iden = self.tokens.get(self.current).unwrap();
 
-        let should_be_colon = self.consume(TokenType::Colon);
-        if should_be_colon.is_err() 
-        { 
-            panic!("Expected Colon, got: {:?}", self.tokens.get(self.current)) 
+        if TokenType::Iden != possible_iden.tokentype
+        {
+            panic!("Identity Expected, got {:?}", possible_iden);
         }
 
-        let possible_iden = self.tokens.get(self.current).unwrap();
-        if TokenType::Iden == possible_iden.tokentype {
-            let iden = possible_iden.lexeme.clone();
+        let iden = possible_iden.lexeme.clone();
+        self.current += 1;
+        let mut state = Statement::Empty;
+        // Initialization
+        if self.is(TokenType::Equal)
+        {
             self.current += 1;
-            if self.is(TokenType::Equal)
+            let item = self.expression();
+            // self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
+            state = Statement::Decralation(iden, _type, item);
+        }
+
+        // Decralation, not initialized;
+        else if self.is(TokenType::SemiColon) || self.is(TokenType::Comma) || self.is(TokenType::CloseParen)
+        {
+            if !self.is(TokenType::CloseParen)
             {
                 self.current += 1;
-                let item = self.expression();
-                // self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
-                return Statement::Decralation(iden, _type, item);
             }
-            else if self.is(TokenType::SemiColon)
+            state = Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
+        }
+
+        else if self.is(TokenType::OpenParen)
+        {
+            // Declaration of Functions
+            self.consume(TokenType::OpenParen).expect("Why it failed?");
+            let mut argument_is_type = {
+                let x = self.tokens.get(self.current);
+                x.is_some() && TokenType::is_typekind(&x.unwrap().tokentype)
+            };
+
+            let mut arguments: Vec<Statement> = Vec::new();
+            while argument_is_type
             {
+                let declaration = self.declare_variable();
+                arguments.push(declaration);
                 self.current += 1;
-                return Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
-            }
-            else if self.is(TokenType::OpenParen)
-            {
-                // Declaration of Functions
-                self.consume(TokenType::OpenParen).expect("Why it failed?");
-                let mut argument_is_type = {
+
+                argument_is_type = {
                     let x = self.tokens.get(self.current);
                     x.is_some() && TokenType::is_typekind(&x.unwrap().tokentype)
                 };
-
-                let mut arguments: Vec<(Type, Token)> = Vec::new();
-                while argument_is_type {
-                    self.current += 1;
-                    let colon_ = self.consume(TokenType::Colon).expect("Colon Expected for Argument.");
-                    let argument_iden = self.consume(TokenType::Iden).expect("Identity Expected for Argument");
-                    
-                }
+            }
+            let x = self.tokens.get(self.current - 1).unwrap();
+            if x.tokentype != TokenType::CloseParen 
+            {
+                panic!("CloseParen Expected, got {:?}", x);
             }
 
-            unreachable!("ParserError: Expected Equal, got: {:?}", self.tokens.get(self.current));
+            let inside_func = self.statement();
+            state = Statement::Function(iden, _type, arguments, Box::new(inside_func));
         }
 
-        unreachable!("ParserError: Expected Identity, got: {:?}", possible_iden.tokentype);
+        match state
+        {
+            Statement::Empty => panic!("Failed to parse the declaration process."),
+            _ => state,
+        }
     }
 
     fn expression(&mut self) -> Expr
@@ -358,18 +381,19 @@ impl Parser
 
     fn finish_func_call(&mut self, _expr: Expr) -> Expr
     {
-        let v = Vec::new<Expr>();
+        let mut v = Vec::<Expr>::new();
         self.current += 1;
 
         if !self.is(TokenType::CloseParen) 
         {
             let mut z = true;
             while z {
-                self.current += 1;
                 v.push(self.expression());
-                z = self.is(TokenType::Comma);
+                z = self.consume(TokenType::Comma).is_ok();
             }
         }
+        let paren = self.consume(TokenType::CloseParen).expect("Close Parentheses Expected.");
+        return Expr::FunctionCall(Box::new(_expr), paren.clone(), v);
     }
 
     fn is(&self, _type: TokenType) -> bool
@@ -435,20 +459,20 @@ impl Parser
             },
             s => 
             {
-                unreachable!("ParserError: while Handling Primary: Token {:?}", s)
+                unreachable!("ParserError: while Handling Primary: Token {:?}", inside)
             },
         };
 
         result
     }
 
-    fn consume(&mut self, until: TokenType) -> Result<&Token, ()>
+    fn consume(&mut self, until: TokenType) -> Result<&Token, &Token>
     {
         if self.is(until) {
             self.current += 1;
-            return Ok(self.tokens.get(self.current).unwrap());
+            return Ok(self.tokens.get(self.current-1).unwrap());
         }
 
-        return Err(())
+        return Err(self.tokens.get(self.current).unwrap());
     }
 }

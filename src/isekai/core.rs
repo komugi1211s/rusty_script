@@ -16,7 +16,7 @@ pub fn start(code: &str) -> Result<(), SyntaxError>
     let result = _parser.parse();
     for i in &result 
     {
-        interpreter.interpret(i);
+        interpreter.visit(i);
     }
 
     Ok(())

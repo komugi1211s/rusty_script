@@ -1,6 +1,7 @@
 
 pub mod core;
 pub mod types;
+pub mod nativefunc;
 
 pub mod token;
 pub mod tokenizer;

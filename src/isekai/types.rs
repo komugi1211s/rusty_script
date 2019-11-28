@@ -1,5 +1,7 @@
 
 use super::token::{ TokenType };
+use super::parse::{ Statement };
+use super::evaluate::{ Environment, Interpreter };
 use std::ops;
 use std::fmt;
 use std::mem;
@@ -51,6 +53,7 @@ impl Type
     }
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value
 {
@@ -58,7 +61,55 @@ pub enum Value
     Float(f64),
     Str(String),
     Boolean(bool),
+    Callable(Type, Vec<Statement>, Vec<Statement>),
+    NativeCallable(Type, usize, fn(Vec<Value>) -> Value),
     Null
+}
+
+impl From<i64> for Type 
+{
+    fn from(_: i64) -> Self
+    { Type::Int }
+}
+impl From<f64> for Type
+{
+    fn from(_: f64) -> Self
+    { Type::Float }
+}
+
+impl From<String> for Type
+{
+    fn from(_: String) -> Self
+    { Type::Str }
+}
+
+impl From<bool> for Type
+{
+    fn from(_: bool) -> Self
+    { Type::Boolean }
+}
+
+impl From<i64> for Value 
+{
+    fn from(i: i64) -> Self
+    { Value::Int(i) }
+}
+impl From<f64> for Value
+{
+    fn from(f: f64) -> Self
+    { Value::Float(f) }
+}
+
+impl From<String> for Value
+{
+    fn from(s: String) -> Self
+    { Value::Str(s) }
+}
+
+impl From<bool> for Value
+{
+    fn from(b: bool) -> Self
+    { Value::Boolean(b) }
 }
 
 impl Value
@@ -68,12 +119,14 @@ impl Value
         // Todo: Type Alias support
         match self
         {
-            Value::Null       => Type::Null,
-            Value::Int(_)     => Type::Int,
-            Value::Float(_)   => Type::Float,
-            Value::Str(_)     => Type::Str,
-            Value::Boolean(_) => Type::Boolean,
-            _                 => Type::Any,
+            Value::Null        => Type::Null,
+            Value::Int(_)      => Type::Int,
+            Value::Float(_)    => Type::Float,
+            Value::Str(_)      => Type::Str,
+            Value::Boolean(_)  => Type::Boolean,
+            Value::Callable(t, _, _) => t.clone(),
+            Value::NativeCallable(t, _, _) => t.clone(),
+            _                  => Type::Any,
         }
     }
 
@@ -103,11 +156,13 @@ impl fmt::Display for Value
     {
         match &self
         {
-            Value::Int(i)     => write!(f, "{}", i),
-            Value::Float(f_)  => write!(f, "{}", f_),
-            Value::Str(ref s) => write!(f, "{}", s),
-            Value::Boolean(b) => write!(f, "{}", b),
-            Value::Null       => write!(f, "null"),
+            Value::Int(i)      => write!(f, "{}", i),
+            Value::Float(f_)   => write!(f, "{}", f_),
+            Value::Str(ref s)  => write!(f, "{}", s),
+            Value::Boolean(b)  => write!(f, "{}", b),
+            Value::Callable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
+            Value::NativeCallable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
+            Value::Null        => write!(f, "null"),
         }
     }
 }
@@ -268,6 +323,7 @@ impl ops::Not for Value
             Value::Float(f)   => Value::Boolean(f == 0.0),
             Value::Str(s)     => Value::Boolean(s.len() == 0),
             Value::Null       => Value::Boolean(true),
+            _                 => panic!("Unimplemented Not operation"),
         }
     }
 }
@@ -287,6 +343,7 @@ impl ops::Not for &Value
             Value::Float(f)   => Value::Boolean(*f == 0.0),
             Value::Str(s)     => Value::Boolean(s.len() == 0),
             Value::Null       => Value::Boolean(true),
+            _                 => panic!("Unimplemented Not operation"),
         }
     }
 }

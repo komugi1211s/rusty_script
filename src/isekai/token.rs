@@ -15,6 +15,7 @@ pub enum TokenType {
     True,   // true
     False,  // false
     Print,  // print "message"
+    Return,  // return "";
 
     // TODO: Remove TypeVoid
     TypeVoid,  // void: a = ...
@@ -98,6 +99,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "print" => Some(Print),
         "break" => Some(Break),
         "continue" => Some(Continue),
+        "return" => Some(Return),
 
         "true" => Some(True),
         "false" => Some(False),
@@ -115,7 +117,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub tokentype: TokenType,
     pub line: usize,
