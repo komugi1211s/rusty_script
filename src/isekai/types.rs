@@ -13,6 +13,8 @@ pub enum Type
     Float,
     Str,
     Boolean,
+    Struct,
+    Type,
     Null,
     Any
 }
@@ -46,6 +48,7 @@ impl Type
                 Type::Boolean => v.to_type() == Type::Boolean,
                 Type::Str     => v.to_type() == Type::Str,
                 Type::Float   => v.to_type() == Type::Float,
+                Type::Type    => if let Value::Type(_) = v { true } else { false },
                 Type::Any     => true,
                 Type::Null    => false,
             }
@@ -61,8 +64,10 @@ pub enum Value
     Float(f64),
     Str(String),
     Boolean(bool),
+    Type(Type),
+    Struct(String, Vec<(Type, usize, Value)>),
     Callable(Type, Vec<Statement>, Vec<Statement>),
-    NativeCallable(Type, usize, fn(Vec<Value>) -> Value),
+    NativeCallable(Type, Vec<(Type, Value)>, fn(Vec<Value>) -> Value),
     Null
 }
 
@@ -71,6 +76,7 @@ impl From<i64> for Type
     fn from(_: i64) -> Self
     { Type::Int }
 }
+
 impl From<f64> for Type
 {
     fn from(_: f64) -> Self
@@ -121,6 +127,7 @@ impl Value
         {
             Value::Null        => Type::Null,
             Value::Int(_)      => Type::Int,
+            Value::Type(x)      => x.clone(),
             Value::Float(_)    => Type::Float,
             Value::Str(_)      => Type::Str,
             Value::Boolean(_)  => Type::Boolean,
@@ -163,6 +170,7 @@ impl fmt::Display for Value
             Value::Callable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
             Value::NativeCallable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
             Value::Null        => write!(f, "null"),
+            Value::Type(x)      => write!(f, "{:?}", x),
         }
     }
 }

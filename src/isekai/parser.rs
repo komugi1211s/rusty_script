@@ -34,7 +34,6 @@ impl Parser
         while !self.is_at_end()
         {
             let x = self.decralation();
-            println!("{:?}", x);
             statements.push(x);
         }
         statements
@@ -52,45 +51,29 @@ impl Parser
 
     fn statement(&mut self) -> Statement
     {
-        if self.consume(TokenType::Print).is_ok()
+        let possible_stmt = self.get_current();
+        let result = match possible_stmt.tokentype
         {
-            let statement = Statement::Print(self.expression());
-            return statement;
-        }
-        else if self.consume(TokenType::OpenBrace).is_ok()
-        {
-            return Statement::Block(self.block());
-        }
-        else if self.consume(TokenType::If).is_ok()
-        {
-            return self.if_statement();
-        }
-        else if self.consume(TokenType::While).is_ok()
-        {
-            return self.while_statement();
-        }
-        else if self.consume(TokenType::Break).is_ok()
-        {
-            self.current += 1;
-            return Statement::Break;
-        }
-        else if self.consume(TokenType::Continue).is_ok()
-        {
-            self.current += 1;
-            return Statement::Continue;
-        }
-        else
-        {
-            return Statement::Expression(self.expression());
-        }
-    }
 
-    fn while_statement(&mut self) -> Statement
-    {
-        let condition = self.expression();
-        let _loop = self.statement();
+            // Close Bracket Expected, They'll handle the close bracket themselves
+            // so no need for check
+            TokenType::If => { self.advance(); return self.if_statement(); },
+            TokenType::While => { self.advance(); return self.while_statement(); },
+            TokenType::OpenBrace => { self.advance(); return Statement::Block(self.block()); },
 
-        return Statement::While(condition, Box::new(_loop));
+            // Semicolon Expected, I have to handle it here
+            TokenType::Print => { self.advance(); Statement::Print(self.expression()) },
+            TokenType::Return => { self.advance(); self.return_statement() },
+            TokenType::Break => { self.advance(); Statement::Break },
+            TokenType::Continue => { self.advance(); Statement::Continue },
+            _  => Statement::Expression(self.expression()),
+        };
+
+        match self.consume(TokenType::SemiColon)
+        {
+            Ok(_) => result,
+            Err(e) => unreachable!("SemiColon Expected, got {:?}", e),
+        }
     }
 
     fn if_statement(&mut self) -> Statement
@@ -110,10 +93,17 @@ impl Parser
             });
     }
 
+    fn while_statement(&mut self) -> Statement
+    {
+        let condition = self.expression();
+        let _loop = self.statement();
+
+        return Statement::While(condition, Box::new(_loop));
+    }
+
     fn block(&mut self) -> Vec<Statement>
     {
         let mut vector = Vec::new();
-        
         while !self.is_at_end() && !self.is(TokenType::CloseBrace) 
         {
             vector.push(self.decralation());
@@ -121,6 +111,17 @@ impl Parser
 
         self.consume(TokenType::CloseBrace).expect("ParserError: Expected Close Bracket");
         vector
+    }
+
+    fn return_statement(&mut self) -> Statement
+    {
+        let mut result = Expr::Literal(Value::Null);
+        if !self.is(TokenType::SemiColon)
+        {
+            result = self.expression();
+        }
+
+        return Statement::Return(result);
     }
     
     fn decralation(&mut self) -> Statement
@@ -134,7 +135,7 @@ impl Parser
         // self.current + 3 = equal
         // self.current + 4 = value
         //
-        let x = self.tokens.get(self.current).unwrap();
+        let x = self.get_current();
         if TokenType::is_typekind(&x.tokentype)
         {
             return self.declare_variable();
@@ -142,14 +143,13 @@ impl Parser
 
         return self.statement();
     }
-    fn declare_argument(&mut self) -> Statement
-    {
-        let _type = self.tokens.get(self.current).unwrap();
-        let _type = Type::from_tokentype(&_type.tokentype);
 
-        self.current += 1;
+    fn get_variable_type_and_identifier(&mut self) -> (Type, String)
+    {
+        let _type = self.advance();
+        let _type = Type::from_tokentype(&_type.tokentype);
         let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
-        let possible_iden = self.tokens.get(self.current).unwrap();
+        let possible_iden = self.advance();
 
         if TokenType::Iden != possible_iden.tokentype
         {
@@ -157,79 +157,94 @@ impl Parser
         }
 
         let iden = possible_iden.lexeme.clone();
-        self.current += 1;
 
-        // TODO: Implement the Argument
+        (_type, iden)
+    }
 
+    fn declare_argument(&mut self) -> Vec<Statement>
+    {
+        self.consume(TokenType::OpenParen).expect("Why it failed?");
+        let mut arguments: Vec<Statement> = Vec::new();
+
+        while TokenType::is_typekind(&self.get_current().tokentype)
+        {
+            let (_type, iden) = self.get_variable_type_and_identifier();
+            let bridge_token = self.advance();
+            match bridge_token.tokentype
+            {
+                TokenType::Equal => {
+                    let item = self.expression();
+                    arguments.push(Statement::Decralation(iden, _type, item));
+                    match self.advance().tokentype
+                    {
+                        TokenType::Comma => continue,
+                        TokenType::CloseParen => return arguments,
+                        _ => unreachable!("Function definition must end with Close Paren"),
+                    }
+                },
+                TokenType::Comma =>
+                {
+                    arguments.push(Statement::Decralation(iden, _type, Expr::Literal(Value::Null)));
+                    continue;
+                },
+                TokenType::CloseParen =>
+                { 
+                    arguments.push(Statement::Decralation(iden, _type, Expr::Literal(Value::Null)));
+                    return arguments;
+                },
+                _ => unreachable!("About to declare argument, found {:?}", bridge_token)
+            }
+        }
+        if self.is(TokenType::CloseParen)
+        {
+            self.consume(TokenType::CloseParen);
+        }
+        arguments
     }
 
     fn declare_variable(&mut self) -> Statement
     {
-        let _type = self.tokens.get(self.current).unwrap();
-        let _type = Type::from_tokentype(&_type.tokentype);
+        /*
+         * NOTE: The difference between "Variable" "Function" "Argument" are really tough to
+         * understand, so I'll leave a note here.
+         *
+         * Declaration starts - 
+         *  TYPE: IDENTIFIER
+         *     Variable - TYPE: IDENTIFIER;
+         *     Function - TYPE: IDENTIFIER(
+         *         Argument - TYPE: IDENTIFIER,
+         *         Argument - TYPE: IDENTIFIER = X,
+         *     Variable - TYPE: IDENTIFIER = X;
+         *
+         * */
+        let (_type, iden) = self.get_variable_type_and_identifier();
+        // self.current += 1;
 
-        self.current += 1;
-        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
-        let possible_iden = self.tokens.get(self.current).unwrap();
-
-        if TokenType::Iden != possible_iden.tokentype
-        {
-            panic!("Identity Expected, got {:?}", possible_iden);
-        }
-
-        let iden = possible_iden.lexeme.clone();
-        self.current += 1;
         let mut state = Statement::Empty;
-        // Initialization
+
+        // Initialization, Outside
         if self.is(TokenType::Equal)
         {
             self.current += 1;
             let item = self.expression();
-            // self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
+            self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
             state = Statement::Decralation(iden, _type, item);
         }
-
-        // Decralation, not initialized;
-        else if self.is(TokenType::SemiColon) || self.is(TokenType::Comma) 
+        // Declaration, Outside
+        else if self.is(TokenType::SemiColon)
         {
             self.current += 1;
-            state = Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
+            return Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
         }
 
-        else if self.is(TokenType::CloseParen)
-        {
-            state = Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
-        }
-
+        // This is a function.
         else if self.is(TokenType::OpenParen)
         {
             // Declaration of Functions
-            self.consume(TokenType::OpenParen).expect("Why it failed?");
-            let mut argument_is_type = {
-                let x = self.tokens.get(self.current);
-                x.is_some() && TokenType::is_typekind(&x.unwrap().tokentype)
-            };
-
-            let mut arguments: Vec<Statement> = Vec::new();
-            while argument_is_type
-            {
-                let declaration = self.declare_argument();
-                arguments.push(declaration);
-                self.current += 1;
-
-                argument_is_type = {
-                    let x = self.tokens.get(self.current);
-                    x.is_some() && TokenType::is_typekind(&x.unwrap().tokentype)
-                };
-            }
-            let x = self.tokens.get(self.current - 1).unwrap();
-            if x.tokentype != TokenType::CloseParen 
-            {
-                panic!("CloseParen Expected, got {:?}", x);
-            }
+            let arguments = self.declare_argument();
 
             let inside_func = self.statement();
-            state = Statement::Function(iden, _type, arguments, Box::new(inside_func));
+            return Statement::Function(iden, _type, arguments, Box::new(inside_func));
         }
 
         match state
@@ -242,23 +257,18 @@ impl Parser
     fn expression(&mut self) -> Expr
     {
         let x = self.assignment();
-        // println!("{:?}", &x);
-        self.consume(TokenType::SemiColon);
         x
     }
 
     fn assignment(&mut self) -> Expr
     {
         let mut expr = self.logical_or();
-
         if self.is(TokenType::Equal)
         {
-            self.current += 1;
-            let variable_name = self.tokens.get(self.current - 1).unwrap();
+            self.advance();
             let value = self.assignment();
             
             if let Expr::Variable(s) = expr {
-                self.consume(TokenType::SemiColon).expect("ParserError: Expected Semicolon after Assignment.");
                 return Expr::Assign(s, Box::new(value));
             }
             else
@@ -276,8 +286,7 @@ impl Parser
 
         while self.is(TokenType::Or)
         {
-            let operator = self.tokens.get(self.current).unwrap().clone();
-            self.current += 1;
+            let operator = self.advance().clone();
             let right = self.logical_and();
             expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
         }
@@ -290,7 +299,7 @@ impl Parser
 
         while self.is(TokenType::And)
         {
-            let operator = self.tokens.get(self.current).unwrap().clone();
+            let operator = self.get_current().clone();
             self.current += 1;
             let right = self.equality();
             expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
@@ -321,7 +330,7 @@ impl Parser
         use TokenType::*;
         // 分かりづらッ！！
         while (!self.is_at_end() 
-            && match self.tokens.get(self.current).unwrap().tokentype {
+            && match self.get_current().tokentype {
                     LessEqual => true,
                     MoreEqual => true,
                     Less      => true,
@@ -421,22 +430,31 @@ impl Parser
     fn is(&self, _type: TokenType) -> bool
     {
         (!self.is_at_end() &&
-            self.tokens.get(self.current).unwrap().tokentype == _type)
+            self.get_current().tokentype == _type)
+    }
+
+    fn get_current(&self) -> &Token
+    {
+        self.tokens.get(self.current).unwrap()
+    }
+
+    fn advance(&mut self) -> &Token
+    {
+        self.current += 1;
+        self.tokens.get(self.current-1).unwrap()
     }
 
     fn primary(&mut self) -> Expr
     {
-        let inside = self.tokens.get(self.current).unwrap();
+        let inside = self.advance();
         use TokenType::*;
         let result = match &inside.tokentype
         {
             False => {
-                self.current += 1;
                 Expr::Literal(Value::Boolean(false))
             },
             True => 
             {
-                self.current += 1;
                 Expr::Literal(Value::Boolean(true))
             },
             Null =>
@@ -444,11 +462,9 @@ impl Parser
                 // TODO:
                 // This is a bug.
                 // once something gets initialized with Null, that variable becomes "Any" type.
-                self.current += 1;
                 Expr::Literal(Value::Null)
             },
             Digit => {
-                self.current += 1;
 
                 /*
                     TODO:
@@ -461,19 +477,16 @@ impl Parser
                 }
             },
             Str => {
-                self.current += 1;
                 Expr::Literal(Value::Str(inside.lexeme.to_string()))
             },
             Iden => {
-                self.current += 1;
                 Expr::Variable(inside.lexeme.to_string())
             },
             OpenParen => {
-                self.current += 1;
                 let inside_paren = self.expression();
                 let closed_paren = self.consume(CloseParen);
                 if closed_paren.is_err() {
-                    panic!("ParserError: We could not find a closed Paren! current: {}, current_Token: {}", self.current, self.tokens.get(self.current).unwrap());
+                    panic!("ParserError: We could not find a closed Paren! current: {}, current_Token: {}", self.current, self.get_current());
                 }
                 else {
                     Expr::Grouping(Box::new(inside_paren))
@@ -481,7 +494,14 @@ impl Parser
             },
             s => 
             {
-                unreachable!("ParserError: while Handling Primary: Token {:?}", inside)
+                if TokenType::is_typekind(s)
+                {
+                    Expr::Literal(Value::Type(Type::from_tokentype(s)))
+                }
+                else
+                {
+                    unreachable!("ParserError: while Handling Primary: Token {:?}", inside);
+                }
             },
         };
 
@@ -491,10 +511,9 @@ impl Parser
     fn consume(&mut self, until: TokenType) -> Result<&Token, &Token>
     {
         if self.is(until) {
-            self.current += 1;
-            return Ok(self.tokens.get(self.current-1).unwrap());
+            return Ok(self.advance());
         }
 
-        return Err(self.tokens.get(self.current).unwrap());
+        return Err(self.get_current());
     }
 }

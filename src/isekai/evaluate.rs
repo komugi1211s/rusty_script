@@ -6,13 +6,12 @@ use std::collections::HashMap;
 use std::mem;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+type EnvHashMap = HashMap<String, (Type, Value)>;
 pub struct Environment 
 {
-    pub values: HashMap<String, (Type, Value)>,
-    pub enclose: Option<Box<Environment>>
+    pub values: Vec<EnvHashMap>,
+    pub current: usize,
 }
-
-
 
 pub enum InterpError
 {
@@ -27,14 +26,19 @@ impl Environment
     pub fn new() -> Self
     {
         Self {
-            values: HashMap::new(),
-            enclose: None,
+            values: vec![HashMap::new()],
+            current: 0,
         }
     }
 
-    pub fn connect(&mut self, env: Environment)
+    pub fn connect(&mut self, env: Environment) -> usize
     {
-        self.enclose = Some(Box::new(env));
+        for i in env.values
+        {
+            self.values.push(i);
+            self.current += 1;
+        }
+        self.current
     }
 
     // pub fn define_function(&mut self, func: Value)
@@ -45,59 +49,94 @@ impl Environment
     //     }
     // }
     //
+    pub fn enter_block(&mut self) -> usize
+    {
+        self.values.push(HashMap::new());
+        self.current += 1;
+        self.current
+    }
+
+    pub fn leave_block(&mut self) -> (usize, EnvHashMap)
+    {
+        self.current -= 1;
+        (self.current, self.values.pop().unwrap())
+    }
+    pub fn is_toplevel(&self) -> bool
+    {
+        self.current == 0
+    }
+
     pub fn define(&mut self, name: &str, _type: Type, value: Value)
     {
-        println!("define {}", name);
         if !_type.is_compatible(&value)
         {
-            panic!("Should not work.: {:?} to {:?}", value, _type);
+            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", _type, name, value.to_type());
         }
-        self.values.insert(name.to_string(), (_type, value));
+        let mut insert_key = self.current;
+        let exist_key = self.exist(name);
+        if let Some(key) = exist_key 
+        {
+            if key == self.current
+            {
+                let declared = self.values[key].get(name).unwrap();
+                if !declared.0.is_compatible(&value)
+                {
+                    insert_key = key;
+                }
+                else
+                {
+                    unreachable!("Variable Declared Twice - Use an assignment instead.");
+                }
+            }
+        }
+        self.values[insert_key].insert(name.to_string(), (_type, value));
     }
 
     pub fn assign(&mut self, name: &str, new_value: Value)
     {
-        println!("assign {}", name);
-        if self.values.contains_key(name)
+        let exist_key = self.exist(name);
+        if exist_key.is_none() {
+            panic!("Undefined Variable {}", name);
+        }
+        let exist_key = exist_key.unwrap();
+
+        let (c_type, v) = self.values[exist_key].get(name).unwrap();
+        let c_type = c_type.clone();
+        if !c_type.is_compatible(&new_value)
         {
-            let (c_type, v) = self.values.get(name).unwrap();
-            let c_type = c_type.clone();
-            if !c_type.is_compatible(&new_value)
-            {
-                unreachable!("Mismatched Value: {:?}: {} to {:?}", new_value.to_type(), name, c_type);
-            }
+            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", c_type, name, new_value.to_type());
+        }
             
-            self.values.insert(name.to_string(), (c_type, new_value));
-        }
-        else if let Some(ref mut enc) = self.enclose
-        {
-            enc.assign(name, new_value);
-        }
-        else
-        {
-            unreachable!("Undefined Variable: {}", name);
-        }
+        self.values[exist_key].insert(name.to_string(), (c_type, new_value));
     }
 
-    pub fn get(&self, k: &str) -> &Value
+    pub fn exist(&self, name: &str) -> Option<usize>
     {
-        if self.values.contains_key(k)
+        let mut counter = self.current;
+        while !self.values[counter].contains_key(name)
         {
-            let (_, x) = self.values.get(k).unwrap();
-            if x.is_same_type(&Value::Null)
+            if counter <= 0
             {
-                unreachable!("Use of an uninitialized variable: {}", k);
+                return None;
             }
-            x
+            counter -= 1;
         }
-        else if let Some(ref enc) = self.enclose
+        Some(counter)
+    }
+
+    pub fn get(&self, name: &str) -> &Value
+    {
+        let exist_key = self.exist(name);
+        if exist_key.is_none() {
+            panic!("Undefined Variable {}", name);
+        }
+
+        let (_, x) = self.values[exist_key.unwrap()].get(name).unwrap();
+        if x.is_same_type(&Value::Null)
         {
-            enc.get(k)
+            unreachable!("Use of an uninitialized variable: {}", name);
         }
-        else
-        {
-            unreachable!("Undefined Variable: {}", k);
-        }
+        x
     }
 }
 
@@ -116,25 +155,19 @@ impl Interpreter
         };
 
         define_native_functions(&mut z.environment);
-        z.enter_block(Environment::new());
+        z.enter_block();
         // z.environment.define_function(nativefunc);
         z
     }
 
-    fn enter_block(&mut self, new_env: Environment)
+    fn enter_block(&mut self) -> usize
     {
-        let previous = mem::replace(&mut self.environment, new_env);
-        self.environment.connect(previous);
+        self.environment.enter_block()
     }
 
-    fn leave_block(&mut self) -> Environment
+    fn leave_block(&mut self) -> (usize, EnvHashMap)
     {
-        let original = mem::replace(&mut self.environment.enclose, None);
-        if let Some(e) = original
-        {
-            return mem::replace(&mut self.environment, *e);
-        }
-        unreachable!();
+        self.environment.leave_block()
     }
 
     pub fn visit_block(&mut self, inside: &Vec<Statement>) -> Result<(), InterpError>
@@ -165,7 +198,8 @@ impl Visitor<Statement> for Interpreter
                 let func_block = &**inside;
                 if let Statement::Block(func_inside) = func_block
                 {
-                    self.environment.define(name, _type.clone(), Value::Callable(
+                    self.environment.define(name, _type.clone(), 
+                        Value::Callable(
                             _type.clone(),
                             args.clone(),
                             func_inside.clone()
@@ -174,7 +208,7 @@ impl Visitor<Statement> for Interpreter
                 Ok(())
             },
             Statement::Block(ref v) => {
-                self.enter_block(Environment::new());
+                self.enter_block();
                 let x = self.visit_block(v);
                 self.leave_block();
                 x
@@ -195,6 +229,14 @@ impl Visitor<Statement> for Interpreter
                     { Ok(()) }
                 }
             },
+            Statement::Return(_expr) => { 
+                if self.environment.is_toplevel()
+                {
+                    panic!("Cannot use Return statement from top-level code");
+                }
+
+                Err(InterpError::Return(self.visit(_expr)))
+            },
             Statement::While(l, v) => {
                 while self.visit(l).is_truthy()
                 {
@@ -212,12 +254,8 @@ impl Visitor<Statement> for Interpreter
 
                 Ok(())
             },
-            Statement::Break => {
-                Err(InterpError::Break)
-            },
-            Statement::Continue => {
-                Err(InterpError::Continue)
-            },
+            Statement::Break => Err(InterpError::Break),
+            Statement::Continue => Err(InterpError::Continue),
             _ => Err(InterpError::NoOp),
         }
     }
@@ -235,50 +273,100 @@ impl Visitor<Expr> for Interpreter
         {
             Expr::Variable(x) => self.environment.get(x).clone(),
             Expr::Literal(l) => l.clone(),
-            Expr::FunctionCall(expr, _, args) => 
+            Expr::FunctionCall(expr, _, provided_args) => 
             {
                 match self.visit(&**expr)
                 {
-                    Value::Callable(ref _type, ref require_arg, ref statement) => {
-                        if require_arg.len() < args.len() {
+                    Value::Callable(ref func_return_type, ref require_args, ref statement) =>
+                    {
+                        if require_args.len() < provided_args.len()
+                        {
                             panic!("Too much Argument");
                         }
-                        let mut env = Environment::new();
-                        self.enter_block(env);
-                        for require in require_arg
+
+                        self.enter_block();
+                        for (arg_count, function) in require_args.iter().enumerate()
                         {
-                            if let Statement::Decralation(n, t, h) = require {
-                                self.visit(require);
-                            }
-                            else {
-                                panic!("how?");
-                            }
-                        }
-                        for (arg, x) in args.iter().zip(require_arg.iter())
-                        {
-                            if let Statement::Decralation(ref n, _, _) = x {
-                                let x = self.visit(arg);
-                                if Value::Null != x {
-                                    self.environment.assign(n, x);
+                            if let Statement::Decralation(fa_name, fa_type, ref fa_value_expr) = function
+                            {
+                                let pa_value = match provided_args.get(arg_count)
+                                {
+                                    Some(pa_value_expr) => self.visit(pa_value_expr),
+                                    None => Value::Null,
+                                };
+                                {
+                                    // Different Type Provided.
+                                    if !fa_type.is_compatible(&pa_value)
+                                    {
+                                        panic!("Mismatched Argument Type at argument {} named {}: required {:?}, provided {:?}", arg_count, fa_name, fa_type, pa_value.to_type());
+                                    }
+
+                                    // Positional Argument did not provided
+                                    if pa_value == Value::Null
+                                    {
+                                        let fa_value = self.visit(fa_value_expr);
+                                        // it was the required Argument. raise an error
+                                        if fa_value == Value::Null
+                                        {
+                                            panic!("Required Argument {} named {} did not provided: require {:?}", arg_count, fa_name, fa_type);
+                                        }
+                                        else
+                                        {
+                                            self.environment.define(fa_name, fa_type.clone(), fa_value);
+                                        }
+                                    }
+                                    // Argument Provided.
+                                    else
+                                    {
+                                        self.environment.define(fa_name, fa_type.clone(), pa_value);
+                                    }
                                 }
                             }
-                            else {
-                                panic!("how?");
+                        }
+                        let z = self.visit_block(statement);
+                        self.leave_block();
+                        match z {
+                            Ok(()) => Value::Null,
+                            Err(e) => match e
+                            {
+                                InterpError::Return(val) => 
+                                { 
+                                    if func_return_type.is_compatible(&val) { val } else { panic!("Different Return type.") }
+                                },
+                                _ => unreachable!(),
                             }
                         }
-                        self.visit_block(statement);
-                        self.leave_block();
-                        Value::Null
                     },
-                    Value::NativeCallable(_type, size, func) => {
-                        if size != args.len()
+                    Value::NativeCallable(_type, args, func) => {
+                        if args.len() != provided_args.len()
                         {
-                            panic!("Different Argument Size provided: needed {}, provided {}", size, args.len());
+                            panic!("Different Argument Size provided: needed {}, provided {}", args.len(), provided_args.len());
                         }
-                        let mut vector: Vec<Value> = Vec::with_capacity(size);
-                        for i in args
+
+                        let mut vector: Vec<Value> = Vec::with_capacity(args.len());
+                        for (arg_count, (default_arg, provided_arg)) in args.iter().zip(provided_args.iter()).enumerate()
                         {
-                            vector.push(self.visit(i));
+                            // default_arg = (Type, Value)
+                            // default_arg.1 == Value::Null means it's a required argument.
+                            let provided_value = self.visit(provided_arg);
+                            if !default_arg.0.is_compatible(&provided_value)
+                            {
+                                panic!("Mismatched Argument Type at argument {}: required {:?}, provided {:?}", arg_count, default_arg.0, provided_value.to_type());
+                            }
+
+                            // Different Type Provided.
+                            if provided_value == Value::Null
+                            {
+                                if default_arg.1 == Value::Null
+                                {
+                                    panic!("Required Argument {} did not provided: require {:?}", arg_count, default_arg.0);
+                                }
+                                vector.push(default_arg.1.clone());
+                            }
+                            else
+                            {
+                                vector.push(provided_value);
+                            }
                         }
 
                         (func)(vector)
