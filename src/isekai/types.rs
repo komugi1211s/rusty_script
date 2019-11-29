@@ -13,7 +13,7 @@ pub enum Type
     Float,
     Str,
     Boolean,
-    Struct,
+//     Struct,
     Type,
     Null,
     Any
@@ -65,7 +65,7 @@ pub enum Value
     Str(String),
     Boolean(bool),
     Type(Type),
-    Struct(String, Vec<(Type, usize, Value)>),
+  //  Struct(String, Vec<(Type, usize, Value)>),
     Callable(Type, Vec<Statement>, Vec<Statement>),
     NativeCallable(Type, Vec<(Type, Value)>, fn(Vec<Value>) -> Value),
     Null

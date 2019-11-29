@@ -9,6 +9,27 @@ pub trait Visitor<T>
     fn visit(&mut self, t: &T) -> Self::Result;
 }
 
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ByteOper
+{
+    Add,
+    Sub,
+    Mul,
+    Div,
+
+    Constant,
+    Null,
+    True,
+    False,
+
+    Push,
+    Pop,
+    Pushad,
+    Popad,
+    Call,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr
 {
