@@ -24,7 +24,7 @@ pub fn start(code: &str) -> Result<(), SyntaxError>
 
     let bytecode_vm = VirtualMachine::new();
     let mut bytecode_vm = bytecode_vm.traverse_ast(result).unwrap();
-    bytecode_vm.code.disassemble();
+    bytecode_vm.code.disassemble_all();
     bytecode_vm.run();
 
 

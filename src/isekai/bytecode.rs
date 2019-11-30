@@ -108,29 +108,45 @@ impl ByteCode
         data
     }
 
-    pub fn disassemble(&self) {
-        println!(" ========== DISASSEMBLED ========== ");
-        let mut current: usize = 0;
-        let max = self.text_section.len();
+    pub fn disassemble_all(&self) 
+    {
+        self.disassemble(0, self.text_section.len());
+    }
+    pub fn disassemble(&self, start: usize, max_len: usize)
+    {
+        println!(" ============ DISASSEMBLED ============ ");
+        let mut current = start;
+        let max = max_len;
         while current < max
         {
-            let opcode = self.text_section[current];
-            let padding = self.disassemble_pad(OpCode::from(opcode));
+            let opbyte = self.text_section[current];
+            let mut opcode = format!("{:?}", OpCode::from(opbyte));
+            opcode.make_ascii_uppercase();
+            let padding = self.disassemble_pad(OpCode::from(opbyte));
             if 1 < padding {
                 current += 1;
 
                 let operand = self.get_operand(current, padding);
                 let operand: usize = usize::from_ne_bytes(operand);
-                println!(" | 0x{:x} 0x{:08x} - {:?} {}", opcode, operand, OpCode::from(opcode), operand);
-                println!(" |    0x{:08x}  - {}", operand, self.data_section[operand]);
+                println!(" | {:04X} {:04X} - {} {}", opbyte, operand, opcode, operand);
 
                 current += padding;
             } else {
 
-                println!(" | {:x} - {:?}", opcode, OpCode::from(opcode));
+                println!(" | {:04X} - {}", opbyte, opcode);
                 current += 1;
             }
         }
+
+        println!(" ========== DISASSEMBLE DONE ========== ");
+        println!();
+        println!(" ============= BYTE CODES ============= ");
+        println!();
+        let bytecode_hex: Vec<String> = (&self.text_section[start .. max-1]).iter()
+                                        .map(|x| format!("{:02x}", x)).collect();
+        println!("{}", bytecode_hex.join(" "));
+        println!();
+        println!(" =========== BYTE CODES DONE ========== ");
     }
 
     fn get_operand(&self, current: usize, padding: usize) -> [u8; 8]
@@ -347,6 +363,19 @@ impl VirtualMachine
                     let a = self.stack.pop().unwrap();
                     println!("{}", a);
                     current += 1;
+                }
+                OpCode::Interrupt => {
+                    println!("OpCode Interrupt Detected at index {}", current);
+                    println!("Current Stack Data: {:?}", self.stack);
+                    println!("Current Disassemble here");
+                    let max_len = if self.code.text_section.len() < current + 5 {
+                        self.code.text_section.len()
+                    }
+                    else {
+                        current + 5
+                    };
+                    self.code.disassemble(current - 5, max_len);
+                    panic!();
                 }
                 _ => current += 1,
             }
