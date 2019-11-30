@@ -10,4 +10,4 @@ pub mod parse;
 pub mod parser;
 
 pub mod evaluate;
-pub mod _byte_test;
+pub mod bytecode;

@@ -6,6 +6,177 @@ use std::ops;
 use std::fmt;
 use std::mem;
 
+
+#[derive(Debug, PartialEq)]
+#[repr(u8)]
+pub enum OpCode
+{
+    Return     = 0x00,
+    Const8     = 0x01,
+    Const16    = 0x02,
+    Const32    = 0x03,
+    Const64    = 0x04,
+    ConstPtr   = 0x05,
+    Push       = 0x06,
+    Pop        = 0x07,
+
+    Add        = 0x10,
+    Sub        = 0x11,
+    Mul        = 0x12,
+    Div        = 0x13,
+    Mod        = 0x14,
+    Not        = 0x15,
+    Neg        = 0x16,
+
+    EqEq       = 0x20,
+    NotEq      = 0x21,
+    LessEq     = 0x22,
+    MoreEq     = 0x23,
+    Less       = 0x24,
+    More       = 0x25,
+    And        = 0x26,
+    Or         = 0x27,
+
+    Interrupt  = 0xCC,
+    DebugPrint = 0xCF,
+}
+
+impl From<u8> for OpCode
+{
+    /*
+        NOTE:
+        CライクなEnumを使って u8 <-> OpCode ができるかと思ったけど
+        u8 -> OpCode はともかく、その逆が不可能らしい
+
+        一応 mem::transmute (unsafe) を使えばできるらしいが、Enumの範囲外にあるu8を与えた場合に
+        何が起こるか全くわからない
+        しかもその状況が起こらないという保証がないので危険
+
+        なので現状このまま全マッチングアームを作る感じで行く
+        必ずCoreかどこかで毎回テスト用の関数を実行すること
+    */
+    fn from(item: u8) -> Self
+    {
+        match item
+        {
+            0x00 => Self::Return,
+            0x01 => Self::Const8,
+            0x02 => Self::Const16,
+            0x03 => Self::Const32,
+            0x04 => Self::Const64,
+            0x05 => Self::ConstPtr,
+            0x06 => Self::Push,
+            0x07 => Self::Pop,
+
+            0x10 => Self::Add,
+            0x11 => Self::Sub,
+            0x12 => Self::Mul,
+            0x13 => Self::Div,
+            0x14 => Self::Mod,
+
+            0x20 => Self::EqEq,
+            0x21 => Self::NotEq,
+            0x22 => Self::LessEq,
+            0x23 => Self::MoreEq,
+            0x24 => Self::Less,
+            0x25 => Self::More,
+            0x26 => Self::And,
+            0x27 => Self::Or,
+
+            0xCF => Self::DebugPrint,
+            _    => Self::Interrupt,
+        }
+    }
+}
+
+pub fn test_opcode_u8()
+{
+    /* u8 <-> opcode の相互マップが正しいことを確認する */
+    for i in 0..255u8
+    {
+        let opcode = OpCode::from(i);
+        if opcode == OpCode::Interrupt { continue; }
+        let bytevalue: u8 = opcode.into();
+        assert_eq!(i, bytevalue);
+    }
+}
+
+impl From<OpCode> for u8
+{
+    fn from(item: OpCode) -> u8
+    {
+        item as u8
+    }
+}
+
+pub trait toVmByte
+{
+    fn to_vm_byte(&self) -> Vec<u8>;
+    fn sufficient_opcode(&self) -> OpCode;
+}
+
+impl toVmByte for i64 
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        self.to_ne_bytes().iter().cloned().collect()
+    }
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::Const64
+    }
+}
+
+impl toVmByte for f64
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        self.to_bits().to_ne_bytes().iter().cloned().collect()
+    }
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::Const64
+    }
+}
+
+impl toVmByte for String
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        self.clone().into_bytes()
+    }
+    
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::ConstPtr
+    }
+}
+
+impl toVmByte for bool
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        vec![*self as u8]
+    }
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::Const8
+    }
+}
+
+impl toVmByte for usize
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        self.to_ne_bytes().iter().cloned().collect()
+    }
+
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::Interrupt
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type
 {
@@ -346,7 +517,7 @@ impl ops::Not for &Value
     {
         match self 
         {
-            Value::Boolean(b) => Value::Boolean(!b),
+            Value::Boolean(b) => Value::Boolean(!*b),
             Value::Int(i)     => Value::Boolean(*i == 0),
             Value::Float(f)   => Value::Boolean(*f == 0.0),
             Value::Str(s)     => Value::Boolean(s.len() == 0),

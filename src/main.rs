@@ -42,20 +42,22 @@ fn run_file(path: String) -> bool {
     }
 }
 
-// fn main() {
-//     let arguments: Vec<String> = env::args().collect();
-// 
-//     if arguments.len() <= 1 { // もし引数が無かったら
-//         println!("usage: isekai [filename].kai");
-//         exit_process(true);
-//     }
-//     exit_process(run_file(arguments[1].clone()))
-// }
+fn main() {
+    let arguments: Vec<String> = env::args().collect();
 
+    if arguments.len() <= 1 { // もし引数が無かったら
+        println!("usage: isekai [filename].kai");
+        exit_process(true);
+    }
+    exit_process(run_file(arguments[1].clone()))
+}
+
+/*
 fn main() {
     use isekai::_byte_test::fntest;
     fntest();
 }
+*/
 
 
 /*
