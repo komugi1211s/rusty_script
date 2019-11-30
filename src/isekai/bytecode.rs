@@ -307,36 +307,24 @@ impl VirtualMachine
         let max: usize = self.code.text_idx;
         while current < max 
         {
-            match OpCode::from(self.code.text_section[current])
+            let current_operation = OpCode::from(self.code.text_section[current]);
+
+            match current_operation 
             {
-                OpCode::Add => {
+                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div  => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
 
-                    self.stack.push(a + b);
+                    self.stack.push(match current_operation {
+                        OpCode::Add => a + b,
+                        OpCode::Sub => a - b,
+                        OpCode::Mul => a * b,
+                        OpCode::Div => a / b,
+                        _ => unreachable!(),
+                    });
                     current += 1;
                 },
-                OpCode::Sub => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
 
-                    self.stack.push(a - b);
-                    current += 1;
-                },
-                OpCode::Mul => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(a * b);
-                    current += 1;
-                },
-                OpCode::Div => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(a / b);
-                    current += 1;
-                },
                 OpCode::EqEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
