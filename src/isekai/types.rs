@@ -73,6 +73,8 @@ impl From<u8> for OpCode
             0x12 => Self::Mul,
             0x13 => Self::Div,
             0x14 => Self::Mod,
+            0x15 => Self::Not,
+            0x16 => Self::Neg,
 
             0x20 => Self::EqEq,
             0x21 => Self::NotEq,
@@ -97,7 +99,13 @@ pub fn test_opcode_u8()
         let opcode = OpCode::from(i);
         if opcode == OpCode::Interrupt { continue; }
         let bytevalue: u8 = opcode.into();
-        assert_eq!(i, bytevalue);
+        assert_eq!(i, bytevalue, "Expected {} == {}, found {} == {}({:?})", 
+                i,
+                i,
+                i,
+                bytevalue,
+                OpCode::from(i)
+            );
     }
 }
 

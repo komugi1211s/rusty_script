@@ -128,12 +128,12 @@ impl ByteCode
 
                 let operand = self.get_operand(current, padding);
                 let operand: usize = usize::from_ne_bytes(operand);
-                println!(" | {:04X} {:04X} - {} {}", opbyte, operand, opcode, operand);
+                println!(" | {} | {:04X} {:04X} - {} {}", current, opbyte, operand, opcode, operand);
 
                 current += padding;
             } else {
 
-                println!(" | {:04X} - {}", opbyte, opcode);
+                println!(" | {} | {:04X} - {}", current, opbyte, opcode);
                 current += 1;
             }
         }
@@ -259,6 +259,9 @@ impl VirtualMachine
                     Value::Str(string) => {
                         unimplemented!();
                     },
+                    Value::Null => {
+                        unimplemented!();
+                    },
                     _=> unreachable!(),
                 };
             },
@@ -363,8 +366,9 @@ impl VirtualMachine
                     let a = self.stack.pop().unwrap();
                     println!("{}", a);
                     current += 1;
-                }
+                },
                 OpCode::Interrupt => {
+                    println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");
                     println!("OpCode Interrupt Detected at index {}", current);
                     println!("Current Stack Data: {:?}", self.stack);
                     println!("Current Disassemble here");
@@ -376,7 +380,7 @@ impl VirtualMachine
                     };
                     self.code.disassemble(current - 5, max_len);
                     panic!();
-                }
+                },
                 _ => current += 1,
             }
         }
