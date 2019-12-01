@@ -11,26 +11,6 @@ pub trait Visitor<T>
 
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ByteOper
-{
-    Add,
-    Sub,
-    Mul,
-    Div,
-
-    Constant,
-    Null,
-    True,
-    False,
-
-    Push,
-    Pop,
-    Pushad,
-    Popad,
-    Call,
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),

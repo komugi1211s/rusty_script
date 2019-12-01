@@ -1,13 +1,21 @@
 
-use super::types::{ Value, OpCode, toVmByte };
+use super::types::{ Type, Value, OpCode, toVmByte };
 use super::parse::{ Statement, Expr };
 use super::token::{ Token, TokenType };
 use std::collections::HashMap;
+
+#[cfg(target_pointer_width="32")]
+const USIZE_LENGTH: usize = 4;
+
+#[cfg(target_pointer_width="64")]
+const USIZE_LENGTH: usize = 8;
 
 #[derive(Default, Debug)]
 pub struct ByteCode
 {
     pub data_section: Vec<u8>,
+    // TODO: There should be more smart way to handle this
+    pub _data_type: HashMap<usize, Type>,
     pub data_idx: usize,
     pub text_section: Vec<u8>,
     pub text_idx: usize,
@@ -44,12 +52,22 @@ impl ByteCode
     {
         let opcode = value.sufficient_opcode();
         let value = value.to_vm_byte();
+        let length = value.len();
 
-        let start_index = self.push_data(value);
+        let mut start_index = if opcode == OpCode::ConstDyn
+        {
+            let x = self.push_data(length.to_vm_byte());
+            self.push_data(value);
+            x
+        } else {
+            self.push_data(value)
+        };
 
         self.push_opcode(opcode);
-        return self.push_operands(start_index.to_vm_byte());
+        self.push_operands(start_index.to_vm_byte());
+        start_index
     }
+
 
     fn push_data<T>(&mut self, data: T) -> usize
     where
@@ -108,6 +126,25 @@ impl ByteCode
         data
     }
 
+    fn read_data_dyn(&self, index: usize) -> Vec<u8>
+    {
+        self.assert_datarange(index);
+        let mut data: Vec<u8> = Vec::new();
+        let length: usize = {
+            let mut size: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
+            for i in 0 .. USIZE_LENGTH
+            {
+                size[i] = self.data_section[index + i];
+            }
+            usize::from_ne_bytes(size)
+        };
+        for i in 0..length
+        {
+            data.push(self.data_section[index + USIZE_LENGTH + i]);
+        }
+        data
+    }
+
     pub fn disassemble_all(&self) 
     {
         self.disassemble(0, self.text_section.len());
@@ -142,11 +179,19 @@ impl ByteCode
         println!();
         println!(" ============= BYTE CODES ============= ");
         println!();
-        let bytecode_hex: Vec<String> = (&self.text_section[start .. max-1]).iter()
+        let bytecode_hex: Vec<String> = (&self.text_section[start .. max]).iter()
                                         .map(|x| format!("{:02x}", x)).collect();
         println!("{}", bytecode_hex.join(" "));
         println!();
         println!(" =========== BYTE CODES DONE ========== ");
+        println!();
+        println!(" =============  BYTE DATA ============= ");
+        println!();
+        let bytedata_hex: Vec<String> = self.data_section.iter()
+                                        .map(|x| format!("{:02x}", x)).collect();
+        println!("{}", bytedata_hex.join(" "));
+        println!();
+        println!(" ============ BYTE DATA DONE ========== ");
     }
 
     fn get_operand(&self, current: usize, padding: usize) -> [u8; 8]
@@ -165,10 +210,11 @@ impl ByteCode
     {
         match opcode
         {
-            OpCode::Const8 => 8,
-            OpCode::Const16 => 8,
-            OpCode::Const32 => 8,
-            OpCode::Const64 => 8,
+            OpCode::Const8  | 
+            OpCode::Const16 | 
+            OpCode::Const32 | 
+            OpCode::Const64 |
+            OpCode::ConstDyn => USIZE_LENGTH,
             _ => 0
         }
     }
@@ -208,7 +254,11 @@ impl VirtualMachine
             Statement::Expression(expr) => self.handle_expr(expr),
             Statement::Decralation(name, var_type, value_expr) =>
             {
-                unimplemented!();
+                self.handle_expr(value_expr);
+                let index = self.code.write_const(name);
+                self.code._data_type.insert(index, Type::Str);
+
+                self.code.push_opcode(OpCode::Define);
             },
             Statement::Print(expr) => {
                 self.handle_expr(expr);
@@ -248,16 +298,20 @@ impl VirtualMachine
                 match literal
                 {
                     Value::Boolean(boolean) => {
-                        self.code.write_const(boolean);
+                        let index = self.code.write_const(boolean);
+                        self.code._data_type.insert(index, Type::Boolean);
                     },
                     Value::Int(int) => {
-                        self.code.write_const(int);
+                        let index = self.code.write_const(int);
+                        self.code._data_type.insert(index, Type::Int);
                     },
                     Value::Float(float) => {
-                        self.code.write_const(float);
+                        let index = self.code.write_const(float);
+                        self.code._data_type.insert(index, Type::Float);
                     },
                     Value::Str(string) => {
-                        unimplemented!();
+                        let index = self.code.write_const(string);
+                        self.code._data_type.insert(index, Type::Str);
                     },
                     Value::Null => {
                         unimplemented!();
@@ -271,21 +325,21 @@ impl VirtualMachine
 
                 match operator.tokentype
                 {
-                    TokenType::Plus      => self.code.push_opcode(OpCode::Add),
-                    TokenType::Minus     => self.code.push_opcode(OpCode::Sub),
-                    TokenType::Asterisk  => self.code.push_opcode(OpCode::Mul),
-                    TokenType::Slash     => self.code.push_opcode(OpCode::Div),
-                    TokenType::Percent   => self.code.push_opcode(OpCode::Mod),
+                    TokenType::Plus       => self.code.push_opcode(OpCode::Add),
+                    TokenType::Minus      => self.code.push_opcode(OpCode::Sub),
+                    TokenType::Asterisk   => self.code.push_opcode(OpCode::Mul),
+                    TokenType::Slash      => self.code.push_opcode(OpCode::Div),
+                    TokenType::Percent    => self.code.push_opcode(OpCode::Mod),
 
                     // PartialEq Series
-                    TokenType::NotEqual  => self.code.push_opcode(OpCode::NotEq),
-                    TokenType::EqualEqual=> self.code.push_opcode(OpCode::EqEq),
+                    TokenType::NotEqual   => self.code.push_opcode(OpCode::NotEq),
+                    TokenType::EqualEqual => self.code.push_opcode(OpCode::EqEq),
 
                     // PartialOrd Series
-                    TokenType::LessEqual => self.code.push_opcode(OpCode::LessEq),
-                    TokenType::MoreEqual => self.code.push_opcode(OpCode::MoreEq),
-                    TokenType::Less      => self.code.push_opcode(OpCode::Less),
-                    TokenType::More      => self.code.push_opcode(OpCode::More),
+                    TokenType::LessEqual  => self.code.push_opcode(OpCode::LessEq),
+                    TokenType::MoreEqual  => self.code.push_opcode(OpCode::MoreEq),
+                    TokenType::Less       => self.code.push_opcode(OpCode::Less),
+                    TokenType::More       => self.code.push_opcode(OpCode::More),
                     _ => unreachable!(),
                 };
             },
@@ -359,8 +413,33 @@ impl VirtualMachine
                 OpCode::Const64 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     let value = self.code.read_data_64(index);
-                    self.stack.push(Value::Int(i64::from_ne_bytes(value)));
+                    // GET_TYPE
+                    self.stack.push(match self.code._data_type.get(&index).unwrap()
+                    {
+                        Type::Int => Value::Int(i64::from_ne_bytes(value)),
+                        Type::Float => Value::Float(f64::from_bits(u64::from_ne_bytes(value))),
+                        _ => unreachable!(),
+                    });
                     current = new_end;
+                },
+                OpCode::ConstDyn => {
+                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
+                    let value = self.code.read_data_dyn(index);
+
+                    self.stack.push(match self.code._data_type.get(&index).unwrap() {
+                        Type::Str => Value::Str(String::from_utf8(value).unwrap()),
+                        _ => unreachable!(),
+                    });
+                    current = new_end;
+                },
+                OpCode::Define => {
+                    println!("Current: {:?}", self.stack);
+                    let name = self.stack.pop().unwrap();
+                    let value = self.stack.pop().unwrap();
+                    if let Value::Str(name_string) = name {
+                        self.variable.insert(name_string, value);
+                    }
+                    current += 1;
                 },
                 OpCode::DebugPrint => {
                     let a = self.stack.pop().unwrap();
@@ -390,8 +469,8 @@ impl VirtualMachine
     {
         let start = start + 1;
         let mut new_end = start;
-        let mut result: [u8; 8] = [0; 8];
-        for i in 0..8 
+        let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
+        for i in 0..USIZE_LENGTH
         {
             result[i] = self.code.text_section[start + i];
             new_end += 1;

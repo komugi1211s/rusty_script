@@ -16,9 +16,10 @@ pub enum OpCode
     Const16    = 0x02,
     Const32    = 0x03,
     Const64    = 0x04,
-    ConstPtr   = 0x05,
-    Push       = 0x06,
-    Pop        = 0x07,
+    ConstDyn   = 0x05,
+    Define     = 0x06,
+    Push       = 0x07,
+    Pop        = 0x08,
 
     Add        = 0x10,
     Sub        = 0x11,
@@ -64,9 +65,10 @@ impl From<u8> for OpCode
             0x02 => Self::Const16,
             0x03 => Self::Const32,
             0x04 => Self::Const64,
-            0x05 => Self::ConstPtr,
-            0x06 => Self::Push,
-            0x07 => Self::Pop,
+            0x05 => Self::ConstDyn,
+            0x06 => Self::Define,
+            0x07 => Self::Push,
+            0x08 => Self::Pop,
 
             0x10 => Self::Add,
             0x11 => Self::Sub,
@@ -156,7 +158,7 @@ impl toVmByte for String
     
     fn sufficient_opcode(&self) -> OpCode
     {
-        OpCode::ConstPtr
+        OpCode::ConstDyn
     }
 }
 
