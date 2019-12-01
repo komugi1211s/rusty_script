@@ -149,6 +149,7 @@ impl ByteCode
     {
         self.disassemble(0, self.text_section.len());
     }
+
     pub fn disassemble(&self, start: usize, max_len: usize)
     {
         println!(" ============ DISASSEMBLED ============ ");
@@ -267,6 +268,7 @@ impl VirtualMachine
 
                 self.code.push_opcode(OpCode::Define)
             },
+
             Statement::Print(expr) => {
                 self.handle_expr(expr);
                 self.code.push_opcode(OpCode::DebugPrint)
@@ -426,6 +428,7 @@ impl VirtualMachine
                     });
                     current += 1;
                 },
+
                 OpCode::EqEq | OpCode::NotEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
@@ -437,6 +440,7 @@ impl VirtualMachine
                     });
                     current += 1;
                 },
+
                 OpCode::LessEq | OpCode::MoreEq | OpCode::Less | OpCode::More => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
