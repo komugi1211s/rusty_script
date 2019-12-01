@@ -20,6 +20,7 @@ pub enum OpCode
     Define     = 0x06,
     Push       = 0x07,
     Pop        = 0x08,
+    Read       = 0x09,
 
     Add        = 0x10,
     Sub        = 0x11,
@@ -69,6 +70,7 @@ impl From<u8> for OpCode
             0x06 => Self::Define,
             0x07 => Self::Push,
             0x08 => Self::Pop,
+            0x09 => Self::Read,
 
             0x10 => Self::Add,
             0x11 => Self::Sub,
@@ -125,6 +127,18 @@ pub trait toVmByte
     fn sufficient_opcode(&self) -> OpCode;
 }
 
+impl toVmByte for u16 
+{
+    fn to_vm_byte(&self) -> Vec<u8>
+    {
+        self.to_ne_bytes().iter().cloned().collect()
+    }
+    fn sufficient_opcode(&self) -> OpCode
+    {
+        OpCode::Const16
+    }
+}
+
 impl toVmByte for i64 
 {
     fn to_vm_byte(&self) -> Vec<u8>
@@ -143,6 +157,7 @@ impl toVmByte for f64
     {
         self.to_bits().to_ne_bytes().iter().cloned().collect()
     }
+
     fn sufficient_opcode(&self) -> OpCode
     {
         OpCode::Const64

@@ -14,6 +14,20 @@ use super::{
 // FIXME:
 // Primary + ; does not work ( 10; spits error ) -> I think it fixed?
 
+/*
+    NOTE:
+    Identifierとして使える最高の文字列の長さ
+    そもそもIdentifierとして使える文字(a~Z, _)のうち、u8にした時最も大きい文字(z, 122)を
+    u16の範囲内で繰り返せるのが537文字 ( 122 * 537 = 65514 ) なので、
+    それより少し小さい530文字を許容できる最大値として使う
+
+    理由としては単にVMがバイトコードを生成する際に
+    いちいちu64の大きさでIdentifierを保存してほしくないから
+    u16範囲内で抑えられる文字列の長さを指定しておけば変数名を保存する際u16で足りる
+
+*/
+const MAX_IDENTIFIER_LENGTH: usize = 530;
+
 
 pub struct Parser
 {
@@ -480,6 +494,9 @@ impl Parser
                 Expr::Literal(Value::Str(inside.lexeme.to_string()))
             },
             Iden => {
+                if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
+                    panic!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);
+                }
                 Expr::Variable(inside.lexeme.to_string())
             },
             OpenParen => {

@@ -226,7 +226,7 @@ pub struct VirtualMachine
 {
     pub stack: Vec<Value>,
     pub code: ByteCode,
-    pub variable: HashMap<String, Value>,
+    pub variable: HashMap<u16, Value>,
 }
 
 impl VirtualMachine
@@ -248,41 +248,52 @@ impl VirtualMachine
         Ok(self)
     }
 
-    fn handle_stmt(&mut self, stmt: Statement)
+    fn handle_stmt(&mut self, stmt: Statement) -> usize
     {
         match stmt {
             Statement::Expression(expr) => self.handle_expr(expr),
-            Statement::Decralation(name, var_type, value_expr) =>
+            Statement::Decralation(name, declared_type, value_expr) =>
             {
-                self.handle_expr(value_expr);
-                let index = self.code.write_const(name);
-                self.code._data_type.insert(index, Type::Str);
+                let value_index = self.handle_expr(value_expr);
+                // let assigned_type = self.code._data_type.get(&self.code.data_idx).unwrap();
+                // if &declared_type != assigned_type
+                // {
+                //     panic!("Type Mismatch: {:?} to {:?}", declared_type, assigned_type);
+                // }
+                let name_in_u16: u16 = name.to_vm_byte().iter().cloned().map(|x| x as u16).sum();
 
-                self.code.push_opcode(OpCode::Define);
+                let index = self.code.write_const(name_in_u16);
+                self.code._data_type.insert(index, Type::Int);
+
+                self.code.push_opcode(OpCode::Define)
             },
             Statement::Print(expr) => {
                 self.handle_expr(expr);
-                self.code.push_opcode(OpCode::DebugPrint);
+                self.code.push_opcode(OpCode::DebugPrint)
             },
             Statement::If(expr, if_block, else_block) => {
                 unimplemented!();
+                0
             },
 
             Statement::While(expr, while_block) => {
                 unimplemented!();
+                0
             },
 
             Statement::Break => {
                 unimplemented!();
+                0
             },
             Statement::Continue => {
                 unimplemented!();
+                0
             },
             _ => unreachable!(),
-        };
+        }
     }
 
-    fn handle_expr(&mut self, expr: Expr)
+    fn handle_expr(&mut self, expr: Expr) -> usize
     {
         match expr
         {
@@ -290,7 +301,9 @@ impl VirtualMachine
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
                 // self.stack.push(data);
-                unimplemented!();
+                let name_in_u16: u16 = name.to_vm_byte().iter().cloned().map(|x| x as u16).sum();
+                self.code.write_const(name_in_u16);
+                self.code.push_opcode(OpCode::Read)
             },
             Expr::Literal(literal) => {
                 // TODO: handle it without making a clone.
@@ -300,24 +313,29 @@ impl VirtualMachine
                     Value::Boolean(boolean) => {
                         let index = self.code.write_const(boolean);
                         self.code._data_type.insert(index, Type::Boolean);
+                        index
                     },
                     Value::Int(int) => {
                         let index = self.code.write_const(int);
                         self.code._data_type.insert(index, Type::Int);
+                        index
                     },
                     Value::Float(float) => {
                         let index = self.code.write_const(float);
                         self.code._data_type.insert(index, Type::Float);
+                        index
                     },
                     Value::Str(string) => {
                         let index = self.code.write_const(string);
                         self.code._data_type.insert(index, Type::Str);
+                        index
                     },
                     Value::Null => {
                         unimplemented!();
+                        0
                     },
                     _=> unreachable!(),
-                };
+                }
             },
             Expr::Binary(left, right, operator) => {
                 let left = self.handle_expr(*left);
@@ -341,7 +359,7 @@ impl VirtualMachine
                     TokenType::Less       => self.code.push_opcode(OpCode::Less),
                     TokenType::More       => self.code.push_opcode(OpCode::More),
                     _ => unreachable!(),
-                };
+                }
             },
             Expr::Logical(left, right, operator) =>
             {
@@ -353,7 +371,7 @@ impl VirtualMachine
                     TokenType::And => self.code.push_opcode(OpCode::And),
                     TokenType::Or => self.code.push_opcode(OpCode::Or),
                     _ => unreachable!(),
-                };
+                }
             },
             Expr::Unary(expr, operator) =>
             {
@@ -363,15 +381,16 @@ impl VirtualMachine
                     TokenType::Bang => self.code.push_opcode(OpCode::Not),
                     TokenType::Minus => self.code.push_opcode(OpCode::Neg),
                     _ => unreachable!(),
-                };
+                }
             },
             Expr::Grouping(group) => self.handle_expr(*group),
             Expr::Assign(name, expr) =>
             {
-                self.handle_expr(*expr);
+                unimplemented!();
+                0
             },
             _ => unreachable!(),
-        };
+        }
     }
 
     pub fn run(&mut self)
@@ -444,8 +463,14 @@ impl VirtualMachine
                 },
                 OpCode::Const8 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    let value = self.code.data_section[index];
+                    let value = self.code.read_data_8(index);
                     self.stack.push(Value::Boolean(value != 0));
+                    current = new_end;
+                },
+                OpCode::Const16 => {
+                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
+                    let value = self.code.read_data_16(index);
+                    self.stack.push(Value::Int(u16::from_ne_bytes(value) as i64));
                     current = new_end;
                 },
                 OpCode::Const64 => {
@@ -471,11 +496,23 @@ impl VirtualMachine
                     current = new_end;
                 },
                 OpCode::Define => {
-                    println!("Current: {:?}", self.stack);
+                    // println!("Current: {:?}", self.stack);
                     let name = self.stack.pop().unwrap();
                     let value = self.stack.pop().unwrap();
-                    if let Value::Str(name_string) = name {
-                        self.variable.insert(name_string, value);
+                    if let Value::Int(name_int) = name {
+                        self.variable.insert(name_int as u16, value);
+                    }
+                    current += 1;
+                },
+                OpCode::Read => {
+                    let name = self.stack.pop().unwrap();
+                    if let Value::Int(name_int) = name 
+                    {
+                        let name_u16: u16 = name_int as u16;
+                        if self.variable.contains_key(&name_u16)
+                        {
+                            self.stack.push(self.variable.get(&name_u16).unwrap().clone());
+                        }
                     }
                     current += 1;
                 },
