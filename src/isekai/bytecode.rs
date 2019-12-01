@@ -165,12 +165,12 @@ impl ByteCode
 
                 let operand = self.get_operand(current, padding);
                 let operand: usize = usize::from_ne_bytes(operand);
-                println!(" | {} | {:04X} {:04X} - {} {}", current, opbyte, operand, opcode, operand);
+                println!(" | {:04} | {:04X} {:04X} - {} {}", current, opbyte, operand, opcode, operand);
 
                 current += padding;
             } else {
 
-                println!(" | {} | {:04X} - {}", current, opbyte, opcode);
+                println!(" | {:04} | {:04X} - {}", current, opbyte, opcode);
                 current += 1;
             }
         }
@@ -397,11 +397,49 @@ impl VirtualMachine
                     });
                     current += 1;
                 },
+                OpCode::Not | OpCode::Neg => {
+                    let a = self.stack.pop().unwrap();
 
-                OpCode::EqEq => {
+                    self.stack.push(match current_operation {
+                        OpCode::Not => (!a).is_truthy().into(),
+                        OpCode::Neg => -a,
+                        _ => unreachable!(),
+                    });
+                    current += 1;
+                },
+                OpCode::EqEq | OpCode::NotEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
-                    self.stack.push((a == b).into());
+
+                    self.stack.push(match current_operation {
+                        OpCode::EqEq => (a == b).into(),
+                        OpCode::NotEq => (a != b).into(),
+                        _ => unreachable!(),
+                    });
+                    current += 1;
+                },
+                OpCode::LessEq | OpCode::MoreEq | OpCode::Less | OpCode::More => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+
+                    self.stack.push(match current_operation {
+                        OpCode::LessEq => (a <= b).into(),
+                        OpCode::MoreEq => (a >= b).into(),
+                        OpCode::Less   => (a < b).into(),
+                        OpCode::More   => (a > b).into(),
+                        _ => unreachable!(),
+                    });
+                    current += 1;
+                },
+                OpCode::EqEq | OpCode::NotEq => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+
+                    self.stack.push(match current_operation {
+                        OpCode::EqEq => (a >= b).into(),
+                        OpCode::NotEq => (a <= b).into(),
+                        _ => unreachable!(),
+                    });
                     current += 1;
                 },
                 OpCode::Const8 => {
