@@ -87,6 +87,7 @@ impl Tokenizer {
             '-' => self.add_token(TokenType::Minus),
             '*' => self.add_token(TokenType::Asterisk),
             '%' => self.add_token(TokenType::Percent),
+            '?' => self.add_token(TokenType::Question),
             '=' => match self.next_is('=') {
                 true => self.add_token(TokenType::EqualEqual),
                 false => self.add_token(TokenType::Equal),

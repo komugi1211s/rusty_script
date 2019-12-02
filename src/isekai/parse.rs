@@ -11,6 +11,13 @@ pub trait Visitor<T>
 
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct ParsedData
+{
+    pub line: usize,
+    pub value: Statement,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
@@ -19,8 +26,8 @@ pub enum Expr
     Grouping(Box<Expr>),
     Literal(Value),
     Unary(Box<Expr>, Token),  
-    Variable(String),
-    Assign(String, Box<Expr>),
+    Variable(u16),
+    Assign(u16, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -31,8 +38,8 @@ pub enum Statement
     Return(Expr),
     Expression(Expr),
     // Defer(Expr),
-    Decralation(String, Type, Expr),
-    Function(String, Type, Vec<Statement>, Box<Statement>),
+    Decralation(u16, Type, Expr),
+    Function(u16, Type, Vec<Statement>, Box<Statement>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(Box<Statement>, Expr, Expr, Box<Statement>),
@@ -42,6 +49,17 @@ pub enum Statement
     Empty,
 }
 
+impl ParsedData
+{
+    pub fn new(stmt: Statement, line: usize) -> Self
+    {
+        Self
+        {
+            line,
+            value: stmt,
+        }
+    }
+}
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

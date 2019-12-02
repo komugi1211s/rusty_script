@@ -1,25 +1,23 @@
 use super::token::{ Token };
 use super::tokenizer::{ Tokenizer, SyntaxError };
 use super::parser::Parser;
-use super::evaluate::Interpreter;
+// use super::evaluate::Interpreter;
 use super::bytecode::{ VirtualMachine };
-use super::types::{ test_opcode_u8 };
 // use self::error::*;
 use std::time::{ Instant };
 
 pub fn start(code: &str) -> Result<(), SyntaxError>
 {
-    test_opcode_u8();
     let start = Instant::now();
     let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
-    println!("Tokenizer took: {} ns", start.elapsed().as_nanos());
+    println!("Tokenizer took: \x1b[32m{} ns\x1b[39m", start.elapsed().as_nanos());
 
     let mut _parser: Parser = Parser::new(_tokens);
 
     let parser_time = Instant::now();
     let result = _parser.parse();
-    println!("Parser took: {} ns", parser_time.elapsed().as_nanos());
-    println!("parsed_result: {:#?}", result);
+    println!("Parser took: \x1b[32m{} ns\x1b[39m", parser_time.elapsed().as_nanos());
+    // println!("parsed_result: \x1B{:#?}", result);
 
 
     let bytecode_vm = VirtualMachine::new();

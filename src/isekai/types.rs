@@ -1,124 +1,62 @@
+#[macro_use]
+use bitflags;
 
 use super::token::{ TokenType };
 use super::parse::{ Statement };
-use super::evaluate::{ Environment, Interpreter };
+// use super::evaluate::{ Environment, Interpreter };
 use std::ops;
 use std::fmt;
 use std::mem;
 
 
-#[derive(Debug, PartialEq)]
+#[cfg(target_pointer_width="32")]
+const USIZE_LENGTH: usize = 4;
+
+#[cfg(target_pointer_width="64")]
+const USIZE_LENGTH: usize = 8;
+
+#[derive(Debug, Clone, Hash, PartialEq, FromPrimitive)]
 #[repr(u8)]
 pub enum OpCode
 {
-    Return     = 0x00,
-    Const8     = 0x01,
-    Const16    = 0x02,
-    Const32    = 0x03,
-    Const64    = 0x04,
-    ConstDyn   = 0x05,
-    Define     = 0x06,
-    Push       = 0x07,
-    Pop        = 0x08,
-    Read       = 0x09,
+    // Const       = 0b01000000,
+    Const8      = 0b01000001, // usize分の大きさのオペランドを取る
+    Const16     = 0b01000010, // usize分の大きさのオペランドを取る
+    Const32     = 0b01000011, // usize分の大きさのオペランドを取る
+    Const64     = 0b01000100, // usize分の大きさのオペランドを取る
+    ConstDyn    = 0b01000111, // usize分の大きさのオペランドを取る
+    ConstPtr    = 0b01001000, // usize分の大きさのオペランドを取る
 
-    Add        = 0x10,
-    Sub        = 0x11,
-    Mul        = 0x12,
-    Div        = 0x13,
-    Mod        = 0x14,
-    Not        = 0x15,
-    Neg        = 0x16,
+    // Operational = 0b00010000,
+    Return      = 0b00010000,
+    Define      = 0b00010001, // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
+    Push        = 0b00010010,
+    Pop         = 0b00010011,
+    Read        = 0b00010100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    Write       = 0b00010101, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
 
-    EqEq       = 0x20,
-    NotEq      = 0x21,
-    LessEq     = 0x22,
-    MoreEq     = 0x23,
-    Less       = 0x24,
-    More       = 0x25,
-    And        = 0x26,
-    Or         = 0x27,
+    // Arithmitic = 0b00100000,
+    Add        = 0b00100001,
+    Sub        = 0b00100010,
+    Mul        = 0b00100011,
+    Div        = 0b00100100,
+    Mod        = 0b00100101,
+    Not        = 0b00100111,
+    Neg        = 0b00101000,
 
-    Interrupt  = 0xCC,
-    DebugPrint = 0xCF,
-}
+    // Logical    = 0b00110000,
+    EqEq       = 0b00110001,
+    NotEq      = 0b00110010,
+    LessEq     = 0b00110011,
+    MoreEq     = 0b00110100,
+    Less       = 0b00110101,
+    More       = 0b00110111,
+    And        = 0b00111000,
+    Or         = 0b00111001,
 
-impl From<u8> for OpCode
-{
-    /*
-        NOTE:
-        CライクなEnumを使って u8 <-> OpCode ができるかと思ったけど
-        u8 -> OpCode はともかく、その逆が不可能らしい
-
-        一応 mem::transmute (unsafe) を使えばできるらしいが、Enumの範囲外にあるu8を与えた場合に
-        何が起こるか全くわからない
-        しかもその状況が起こらないという保証がないので危険
-
-        なので現状このまま全マッチングアームを作る感じで行く
-        必ずCoreかどこかで毎回テスト用の関数を実行すること
-    */
-    fn from(item: u8) -> Self
-    {
-        match item
-        {
-            0x00 => Self::Return,
-            0x01 => Self::Const8,
-            0x02 => Self::Const16,
-            0x03 => Self::Const32,
-            0x04 => Self::Const64,
-            0x05 => Self::ConstDyn,
-            0x06 => Self::Define,
-            0x07 => Self::Push,
-            0x08 => Self::Pop,
-            0x09 => Self::Read,
-
-            0x10 => Self::Add,
-            0x11 => Self::Sub,
-            0x12 => Self::Mul,
-            0x13 => Self::Div,
-            0x14 => Self::Mod,
-            0x15 => Self::Not,
-            0x16 => Self::Neg,
-
-            0x20 => Self::EqEq,
-            0x21 => Self::NotEq,
-            0x22 => Self::LessEq,
-            0x23 => Self::MoreEq,
-            0x24 => Self::Less,
-            0x25 => Self::More,
-            0x26 => Self::And,
-            0x27 => Self::Or,
-
-            0xCF => Self::DebugPrint,
-            _    => Self::Interrupt,
-        }
-    }
-}
-
-pub fn test_opcode_u8()
-{
-    /* u8 <-> opcode の相互マップが正しいことを確認する */
-    for i in 0..255u8
-    {
-        let opcode = OpCode::from(i);
-        if opcode == OpCode::Interrupt { continue; }
-        let bytevalue: u8 = opcode.into();
-        assert_eq!(i, bytevalue, "Expected {} == {}, found {} == {}({:?})", 
-                i,
-                i,
-                i,
-                bytevalue,
-                OpCode::from(i)
-            );
-    }
-}
-
-impl From<OpCode> for u8
-{
-    fn from(item: OpCode) -> u8
-    {
-        item as u8
-    }
+    // System     = 0b11110000,
+    Interrupt  = 0b11111111,
+    DebugPrint = 0b11110001,
 }
 
 pub trait toVmByte
@@ -202,21 +140,31 @@ impl toVmByte for usize
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
-pub enum Type
-{
-    Int,
-    Float,
-    Str,
-    Boolean,
-//     Struct,
-    Type,
-    Null,
-    Any
+
+bitflags! {
+    pub struct Type: u8 {
+        const Null    = 0b10000000;
+        const Int     = 0b00000001;
+        const Float   = 0b00000010;
+        const Str     = 0b00000100;
+        const Boolean = 0b00001000;
+        const Type    = 0b00010000;
+        const Any     = 0b00100000;
+    }
 }
 
 impl Type
 {
+    pub fn set_nullable(&mut self)
+    {
+        self.insert(Type::Null);
+    }
+
+    pub fn is_nullable(&self) -> bool
+    {
+        self.contains(Type::Null)
+    }
+
     pub fn from_tokentype(t: &TokenType) -> Self
     {
         match t
@@ -230,7 +178,7 @@ impl Type
             _                    => Self::Null,
         }
     }
-    pub fn is_compatible(&self, v: &Value) -> bool
+    pub fn is_compatible(self, v: &Value) -> bool
     {
         if v == &Value::Null
         {
@@ -238,20 +186,47 @@ impl Type
         }
         else
         {
-            match self
-            {
-                Type::Int     => v.to_type() == Type::Int,
-                Type::Boolean => v.to_type() == Type::Boolean,
-                Type::Str     => v.to_type() == Type::Str,
-                Type::Float   => v.to_type() == Type::Float,
-                Type::Type    => if let Value::Type(_) = v { true } else { false },
-                Type::Any     => true,
-                Type::Null    => false,
+            if self.contains(Self::Any) {
+                true
             }
+            else {
+                self.contains(v.to_type())
+            }
+            // match self
+            // {
+            //     Type::Int     => v.to_type().contains(Type::Int),
+            //     Type::Boolean => v.to_type().contains(Type::Boolean),
+            //     Type::Str     => v.to_type().contains(Type::Str),
+            //     Type::Float   => v.to_type().contains(Type::Float),
+            //     Type::Type    => if let Value::Type(_) = v { true } else { false },
+            //     Type::Any     => true,
+            //     Type::Null    => {
+            //         self.remove(Type::Null);
+            //         self.is_compatible(v)
+            //     },
+            //     _ => false,
+            // }
         }
     }
 }
 
+pub struct TestValue<T>
+{
+    datatype: Type,
+    value: T,
+}
+
+impl TestValue<String>
+{
+    fn new(data: &str) -> Self
+    {
+        Self
+        {
+            datatype: Type::Str,
+            value: data.to_string()
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value

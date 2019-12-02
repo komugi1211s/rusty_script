@@ -1,6 +1,6 @@
 
 use super::types::{ Type, Value };
-use super::evaluate::{ Interpreter, Environment };
+// use super::evaluate::{ Interpreter, Environment };
 use std::time::{ SystemTime, UNIX_EPOCH };
 
 fn clock(_: Vec<Value>) -> Value

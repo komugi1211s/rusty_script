@@ -2,7 +2,7 @@
 use super::{
     types::{ Value, Type },
     token::{ TokenType, Token },
-    parse::{ Expr, Statement },
+    parse::{ ParsedData, Expr, Statement },
 };
 
 
@@ -35,6 +35,12 @@ pub struct Parser
     current: usize
 }
 
+
+fn util_string_to_u16(string: &str) -> u16
+{
+    string.as_bytes().iter().map(|x| *x as u16).sum()
+}
+
 impl Parser
 {
     pub fn new(_tok: Vec<Token>) -> Self
@@ -42,13 +48,14 @@ impl Parser
         Self { tokens: _tok, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Vec<Statement>
+    pub fn parse(&mut self) -> Vec<ParsedData>
     {
-        let mut statements: Vec<Statement> = Vec::new();
+        let mut statements: Vec<ParsedData> = Vec::new();
         while !self.is_at_end()
         {
+            let current_line = self.tokens[self.current].line;
             let x = self.decralation();
-            statements.push(x);
+            statements.push(ParsedData::new(x, current_line));
         }
         statements
     }
@@ -161,7 +168,13 @@ impl Parser
     fn get_variable_type_and_identifier(&mut self) -> (Type, String)
     {
         let _type = self.advance();
-        let _type = Type::from_tokentype(&_type.tokentype);
+        let mut _type = Type::from_tokentype(&_type.tokentype);
+        if self.is(TokenType::Question)
+        {
+            self.advance();
+            _type.insert(Type::Null);
+        }
+
         let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
         let possible_iden = self.advance();
 
@@ -170,9 +183,8 @@ impl Parser
             panic!("Identity Expected, got {:?}", possible_iden);
         }
 
-        let iden = possible_iden.lexeme.clone();
 
-        (_type, iden)
+        (_type, possible_iden.lexeme.clone())
     }
 
     fn declare_argument(&mut self) -> Vec<Statement>
@@ -183,12 +195,14 @@ impl Parser
         while TokenType::is_typekind(&self.get_current().tokentype)
         {
             let (_type, iden) = self.get_variable_type_and_identifier();
+            let iden_id = util_string_to_u16(&iden);
             let bridge_token = self.advance();
             match bridge_token.tokentype
             {
                 TokenType::Equal => {
                     let item = self.expression();
-                    arguments.push(Statement::Decralation(iden, _type, item));
+                    println!("{}", item);
+                    arguments.push(Statement::Decralation(iden_id, _type, item));
                     match self.advance().tokentype
                     {
                         TokenType::Comma => continue,
@@ -198,12 +212,12 @@ impl Parser
                 },
                 TokenType::Comma =>
                 {
-                    arguments.push(Statement::Decralation(iden, _type, Expr::Literal(Value::Null)));
+                    arguments.push(Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null)));
                     continue;
                 },
                 TokenType::CloseParen =>
                 { 
-                    arguments.push(Statement::Decralation(iden, _type, Expr::Literal(Value::Null)));
+                    arguments.push(Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null)));
                     return arguments;
                 },
                 _ => unreachable!("About to declare argument, found {:?}", bridge_token)
@@ -232,6 +246,7 @@ impl Parser
          *
          * */
         let (_type, iden) = self.get_variable_type_and_identifier();
+        let iden_id = util_string_to_u16(&iden);
         // self.current += 1;
 
         let mut state = Statement::Empty;
@@ -242,13 +257,16 @@ impl Parser
             self.current += 1;
             let item = self.expression();
             self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
-            state = Statement::Decralation(iden, _type, item);
+            state = Statement::Decralation(iden_id, _type, item);
         }
         // Declaration, Outside
         else if self.is(TokenType::SemiColon)
         {
             self.current += 1;
-            return Statement::Decralation(iden, _type, Expr::Literal(Value::Null));
+            if !_type.is_nullable() {
+                panic!("Uninitialized non-nullable variable: {}", iden);
+            }
+            return Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null));
         }
 
         // This is a function.
@@ -258,7 +276,7 @@ impl Parser
             let arguments = self.declare_argument();
 
             let inside_func = self.statement();
-            return Statement::Function(iden, _type, arguments, Box::new(inside_func));
+            return Statement::Function(iden_id, _type, arguments, Box::new(inside_func));
         }
 
         match state
@@ -497,7 +515,7 @@ impl Parser
                 if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
                     panic!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);
                 }
-                Expr::Variable(inside.lexeme.to_string())
+                Expr::Variable(util_string_to_u16(&inside.lexeme))
             },
             OpenParen => {
                 let inside_paren = self.expression();

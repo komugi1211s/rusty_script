@@ -44,6 +44,7 @@ pub enum TokenType {
     Equal,       // =
     Dot,         // .
     Comma,       // ,
+    Question,    // ?
 
     // 比較, 論理
     Or,         // or
