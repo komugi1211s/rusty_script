@@ -10,13 +10,13 @@ pub fn start(code: &str) -> Result<(), SyntaxError>
 {
     let start = Instant::now();
     let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
-    println!("Tokenizer took: \x1b[32m{} ns\x1b[39m", start.elapsed().as_nanos());
+    println!("Tokenizer took: \x1b[32m{} ms\x1b[39m", start.elapsed().as_millis());
 
     let mut _parser: Parser = Parser::new(_tokens);
 
     let parser_time = Instant::now();
     let result = _parser.parse();
-    println!("Parser took: \x1b[32m{} ns\x1b[39m", parser_time.elapsed().as_nanos());
+    println!("Parser took: \x1b[32m{} ms\x1b[39m", parser_time.elapsed().as_millis());
     // println!("parsed_result: \x1B{:#?}", result);
 
 

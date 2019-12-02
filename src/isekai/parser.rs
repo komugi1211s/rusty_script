@@ -256,7 +256,7 @@ impl Parser
         {
             self.current += 1;
             let item = self.expression();
-            self.consume(TokenType::SemiColon).expect("ParserError: Expected After Decralation.");
+            self.consume(TokenType::SemiColon).expect("ParserError: Expected Semicolon After Decralation.");
             state = Statement::Decralation(iden_id, _type, item);
         }
         // Declaration, Outside
@@ -294,7 +294,7 @@ impl Parser
 
     fn assignment(&mut self) -> Expr
     {
-        let mut expr = self.logical_or();
+        let expr = self.logical_or();
         if self.is(TokenType::Equal)
         {
             self.advance();

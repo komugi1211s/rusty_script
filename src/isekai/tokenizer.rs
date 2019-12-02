@@ -236,7 +236,7 @@ impl Tokenizer {
             else
             {
                 let next_char = self.peek_shifted_to(1);
-                if n == '.' && (next_char == '\n' || next_char.is_ascii_digit())
+                if n == '.' && (next_char == ';' || next_char.is_ascii_digit())
                 {
                     self.advance();
                 }

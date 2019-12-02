@@ -144,12 +144,11 @@ impl toVmByte for usize
 bitflags! {
     pub struct Type: u8 {
         const Null    = 0b10000000;
+        const Any     = 0b01000000;
         const Int     = 0b00000001;
         const Float   = 0b00000010;
         const Str     = 0b00000100;
         const Boolean = 0b00001000;
-        const Type    = 0b00010000;
-        const Any     = 0b00100000;
     }
 }
 
@@ -210,23 +209,6 @@ impl Type
     }
 }
 
-pub struct TestValue<T>
-{
-    datatype: Type,
-    value: T,
-}
-
-impl TestValue<String>
-{
-    fn new(data: &str) -> Self
-    {
-        Self
-        {
-            datatype: Type::Str,
-            value: data.to_string()
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value
