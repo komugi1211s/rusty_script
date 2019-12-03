@@ -2,9 +2,15 @@ use super::token::{ Token };
 use super::tokenizer::{ Tokenizer, SyntaxError };
 use super::parser::Parser;
 // use super::evaluate::Interpreter;
-use super::bytecode::{ VirtualMachine };
+use super::bytecode::{ VirtualMachine, BytecodeGenerator };
 // use self::error::*;
 use std::time::{ Instant };
+
+use std::fs::File;
+use std::io::{
+    prelude::*,
+    BufReader,
+};
 
 pub fn start(code: &str) -> Result<(), SyntaxError>
 {
@@ -19,11 +25,21 @@ pub fn start(code: &str) -> Result<(), SyntaxError>
     println!("Parser took: \x1b[32m{} ms\x1b[39m", parser_time.elapsed().as_millis());
     // println!("parsed_result: \x1B{:#?}", result);
 
+    let codegen = BytecodeGenerator::new();
+    let bytecode = codegen.traverse_ast(result).unwrap();
+    let disassembled = bytecode.disassemble_all();
 
-    let bytecode_vm = VirtualMachine::new();
-    let mut bytecode_vm = bytecode_vm.traverse_ast(result).unwrap();
-    bytecode_vm.code.disassemble_all();
-    bytecode_vm.run();
+    {
+        let mut file = File::create("dump").expect("Dump File failed to create.");
+        for i in disassembled
+        {
+            writeln!(file, "{}", i).expect("Hey?");
+        }
+        file.flush().expect("File Flushing Failed.");
+    }
+
+    let mut vm = VirtualMachine::new(bytecode);
+    vm.run();
 
 
     /*

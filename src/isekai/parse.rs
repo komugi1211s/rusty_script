@@ -43,7 +43,7 @@ pub enum Statement
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(Box<Statement>, Expr, Expr, Box<Statement>),
-    Block(Vec<Statement>),
+    Block(Vec<Statement>, usize),
     Break,
     Continue,
     Empty,

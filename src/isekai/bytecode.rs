@@ -11,7 +11,6 @@ const USIZE_LENGTH: usize = 4;
 #[cfg(target_pointer_width="64")]
 const USIZE_LENGTH: usize = 8;
 
-
 #[derive(Default, Debug)]
 pub struct ByteChunk
 {
@@ -27,20 +26,43 @@ pub struct ByteChunk
 
 impl ByteChunk
 {
-    fn push_opcode(&mut self, code: OpCode, line: usize) -> usize
-    {
-        self.code_chunk.push(code as u8);
-        self.code_line.push(line);
-        self.code_idx += 1;
-        self.code_idx
-    }
-    
+
     fn push_operand(&mut self, operand: u8, line: usize) -> usize
     {
         self.code_chunk.push(operand);
         self.code_line.push(line);
         self.code_idx += 1;
         self.code_idx
+    }
+
+    fn push_opcode(&mut self, code: OpCode, line: usize) -> usize
+    {
+        self.push_operand(code as u8, line)
+    }
+
+    fn rewrite_operand(&mut self, byte: u8, index: usize) -> usize
+    {
+        if self.code_idx < index
+        {
+            panic!("Rewrite opcode out of range");
+        }
+
+        self.code_chunk[index] = byte;
+        self.code_idx
+    }
+
+    fn rewrite_operands(&mut self, bytes: Vec<u8>, index: usize) -> usize
+    {
+        for i in 0..bytes.len()
+        {
+            self.rewrite_operand(bytes[i], index + i);
+        }
+        self.code_idx
+    }
+
+    fn rewrite_opcode(&mut self, code: OpCode, index: usize) -> usize
+    {
+        self.rewrite_operand(code as u8, index)
     }
 
     fn push_operands(&mut self, operands: Vec<u8>, line: usize) -> usize
@@ -158,14 +180,15 @@ impl ByteChunk
         data
     }
 
-    pub fn disassemble_all(&self) 
+    pub fn disassemble_all(&self) -> Vec<String>
     {
-        self.disassemble(0, self.code_chunk.len());
+        self.disassemble(0, self.code_chunk.len())
     }
 
-    pub fn disassemble(&self, start: usize, max_len: usize)
+    pub fn disassemble(&self, start: usize, max_len: usize) -> Vec<String>
     {
-        println!(" ============ DISASSEMBLED ============ ");
+        let mut vector: Vec<String> = Vec::new();
+        vector.push(" ============ DISASSEMBLED ============ \n".to_string());
         let mut current = start;
         let max = max_len;
         while current < max
@@ -178,35 +201,30 @@ impl ByteChunk
                 current += 1;
 
                 let operand = self.get_disassemble_operand(current, padding);
-                let formatted = format!(" - \x1b[1m{:<12}\x1b[0m {}", opcode, operand);
-                let in_byte = format!("\x1b[1m{:02X}\x1b[0m {}", opbyte, operand);
-                println!(" | {:04} | {:<36} {}", current, in_byte, formatted); 
+                let formatted = format!("{:<12} {}", opcode, operand);
+                let in_byte = format!("{:02X} {}", opbyte, operand);
+                vector.push(format!(" | {:04X} | {:<48} | {}", current, formatted, in_byte)); 
                 current += padding;
             } else {
-                let in_byte = format!("\x1b[1m{:02X}\x1b[0m", opbyte);
-                let formatted = format!(" - \x1b[1m{:<12}\x1b[0m", opcode);
-                println!(" | {:04} | {:<36} {}", current, in_byte, formatted);
+                let in_byte = format!("{:02X}", opbyte);
+                let formatted = format!("{:<12}", opcode);
+                vector.push(format!(" | {:04X} | {:<48} | {}", current, formatted, in_byte));
                 current += 1;
             }
         }
 
-        println!(" ========== DISASSEMBLE DONE ========== ");
-        println!();
-        println!(" ============= BYTE CODES ============= ");
-        println!();
+        vector.push("\n ========== DISASSEMBLE DONE ========== \n".to_string());
+        vector.push(" ============= BYTE CODES ============= \n".to_string());
         let bytecode_hex: Vec<String> = (&self.code_chunk[start .. max]).iter()
                                         .map(|x| format!("{:02x}", x)).collect();
-        println!("{}", bytecode_hex.join(" "));
-        println!();
-        println!(" =========== BYTE CODES DONE ========== ");
-        println!();
-        println!(" =============  BYTE DATA ============= ");
-        println!();
+        vector.push(format!("{}", bytecode_hex.join(" ")));
+        vector.push("\n =========== BYTE CODES DONE ========== \n".to_string());
+        vector.push(" =============  BYTE DATA ============= \n".to_string());
         let bytedata_hex: Vec<String> = self.data_chunk.iter()
                                         .map(|x| format!("{:02x}", x)).collect();
-        println!("{}", bytedata_hex.join(" "));
-        println!();
-        println!(" ============ BYTE DATA DONE ========== ");
+        vector.push(format!("{}", bytedata_hex.join(" ")));
+        vector.push("\n ============ BYTE DATA DONE ========== \n".to_string());
+        vector
     }
 
     fn get_disassemble_operand(&self, current: usize, padding: usize) -> String
@@ -226,81 +244,180 @@ impl ByteChunk
             OpCode::Const64 |
             OpCode::ConstPtr |
             OpCode::ConstDyn => USIZE_LENGTH,
+
+            OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
             OpCode::Define => 3,
-            OpCode::Read => 2,
-            OpCode::Write => 2,
+            OpCode::LoadGlobal => 2,
+            OpCode::StoreGlobal => 2,
+            OpCode::LoadLocal => 2,
+            OpCode::StoreLocal => 2,
             _ => 0
         }
     }
 }
 
 
+
 #[derive(Debug)]
-pub struct VirtualMachine
+pub struct BytecodeGenerator
 {
-    pub stack: Vec<Value>,
-    pub code: ByteChunk,
-    pub variable: HashMap<u16, (Type, Value)>,
-    pub last_op: OpCode,
+    pub chunk: ByteChunk,
+    pub current_define: usize,
+    pub last_loop_start: usize,
+    pub current_block: usize,
+    pub break_call: Vec<usize>,
 }
 
-impl VirtualMachine
+impl BytecodeGenerator
 {
     pub fn new() -> Self
     {
         Self {
-            stack: Vec::new(),
-            code: ByteChunk::default(),
-            variable: HashMap::new(),
-            last_op: OpCode::Interrupt,
+            chunk: ByteChunk::default(),
+            current_define: 0,
+            last_loop_start: usize::max_value(),
+            current_block: 0,
+            break_call: Vec::new(),
         }
     }
 
-    pub fn traverse_ast(mut self, ast: Vec<ParsedData>) -> Result<Self, ()>
+    pub fn traverse_ast(mut self, ast: Vec<ParsedData>) -> Result<ByteChunk, ()>
     {
         for i in ast {
-            self.handle_stmt(i);
+            self.handle_data(i);
         }
-        Ok(self)
+        self.chunk.push_data(usize::max_value().to_vm_byte());
+        Ok(self.chunk)
     }
 
-    fn handle_stmt(&mut self, data: ParsedData) -> usize
+    fn handle_data(&mut self, data: ParsedData) -> usize
     {
         let line = data.line;
-        match data.value {
+        self.handle_stmt(data.value, line)
+    }
+
+    fn handle_stmt(&mut self, data: Statement, line: usize) -> usize
+    {
+        match data {
             Statement::Expression(expr) => self.handle_expr(expr, line),
             Statement::Decralation(name, declared_type, value_expr) =>
             {
                 let value_index = self.handle_expr(value_expr, line);
-                // let index = self.code.write_const(name);
-                self.code.push_opcode(OpCode::Define, line);
+                // let index = self.chunk.write_const(name);
+                self.chunk.push_opcode(OpCode::Define, line);
 
                 let name_vector = name.to_vm_byte();
                 let operands: Vec<u8> = vec![declared_type.bits(), name_vector[0], name_vector[1]];
-                self.code.push_operands(operands, line)
+                self.chunk.push_operands(operands, line)
             },
 
             Statement::Print(expr) => {
                 self.handle_expr(expr, line);
-                self.code.push_opcode(OpCode::DebugPrint, line)
+                self.chunk.push_opcode(OpCode::DebugPrint, line)
             },
-            Statement::If(expr, if_block, else_block) => {
-                unimplemented!();
-                0
+
+            Statement::If(expr, if_block, optional_else_block) => {
+                self.handle_expr(expr, line);
+
+                // ジャンプ用のインデックスを作っておく
+                let jump_opcode_index = self.chunk.push_opcode(OpCode::JumpIfFalse, line);
+                self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
+
+                // Ifの終わりにまでJumpする為のIndexが要る
+                let end_of_if_block = self.handle_stmt(*if_block, line);
+
+                // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
+                self.chunk.rewrite_operands(end_of_if_block.to_vm_byte(), jump_opcode_index);
+
+                if let Some(else_block) = optional_else_block
+                {
+                    // 
+                    // Elseがあるので、Elseを避けるためのJump命令をIf命令の最後に叩き込む
+                    let jump_block = self.chunk.push_opcode(OpCode::Jump, line);
+                    let after_operand = self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
+
+                    // Ifブロックの終了アドレスがあった部分を、Else避けJump分を加味して調整
+                    self.chunk.rewrite_operands(after_operand.to_vm_byte(), jump_opcode_index);
+
+                    // Ifブロックが丁度終わる位置のJumpオペランドを、Elseブロックの終了アドレスで上書き
+                    let end_of_else_block = self.handle_stmt(*else_block, line);
+                    self.chunk.rewrite_operands(end_of_else_block.to_vm_byte(), jump_block);
+                }
+
+                self.chunk.code_idx
+            },
+
+            Statement::Block(statements, total_assign_count) => {
+                self.chunk.push_opcode(OpCode::BlockIn, line);
+                self.current_block += 1;
+                for i in statements
+                {
+                    self.handle_stmt(i, line);
+                }
+                self.current_block -= 1;
+                self.chunk.push_opcode(OpCode::BlockOut, line)
             },
 
             Statement::While(expr, while_block) => {
-                unimplemented!();
-                0
+                /*
+                  どうやらアセンブラではWhileループは以下のように書かれるらしい:
+                  
+                  Jump to Loop1
+                  InsideLoop:
+                    Loop Inside
+                    Done, goes through to loop1
+                  
+                  loop1:
+                    Check if condition is true
+                    when True, Jump to InsideLoop
+
+                  なので、取り敢えずExprを判定する前に先にWhileBlockを処理しないとならない
+                  Breakはloop1の後に、ContinueはInsideLoopの頭にジャンプする命令になる
+                  https://stackoverflow.com/questions/28665528/while-do-while-for-loops-in-assembly-language-emu8086
+                 */
+
+                
+                let before_loop = self.chunk.code_idx;
+                let jump_conditional = self.chunk.push_opcode(OpCode::Jump, line);
+                let after_jump_conditional = self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
+
+                // この時点でContinue命令は after_jump_conditional に飛ぶようになる
+                let previous_loop_start = self.last_loop_start;
+                self.last_loop_start = after_jump_conditional;
+
+                self.handle_stmt(*while_block, line);
+
+                let before_expr = self.chunk.code_idx;
+                self.handle_expr(expr, line);
+                self.chunk.push_opcode(OpCode::Not, line);
+
+                self.chunk.push_opcode(OpCode::JumpIfFalse, line);
+                let end_of_loop = self.chunk.push_operands(after_jump_conditional.to_vm_byte(), line);
+
+                for i in self.break_call.drain(..)
+                {
+                    self.chunk.rewrite_operands(end_of_loop.to_vm_byte(), i);
+                }
+                self.chunk.rewrite_operands(before_expr.to_vm_byte(), jump_conditional);
+                self.last_loop_start = previous_loop_start;
+                end_of_loop 
             },
 
             Statement::Break => {
-                unimplemented!();
-                0
+                if self.last_loop_start != usize::max_value() {
+                    let break_index = self.chunk.push_opcode(OpCode::Jump, line);
+                    self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
+                    self.break_call.push(break_index);
+                }
+                self.chunk.code_idx
             },
+
             Statement::Continue => {
-                unimplemented!();
-                0
+                if self.last_loop_start != usize::max_value() {
+                    let break_index = self.chunk.push_opcode(OpCode::Jump, line);
+                    self.chunk.push_operands(self.last_loop_start.to_vm_byte(), line);
+                }
+                self.chunk.code_idx
             },
             _ => unreachable!(),
         }
@@ -313,8 +430,8 @@ impl VirtualMachine
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
-                self.code.push_opcode(OpCode::Read, line);
-                self.code.push_operands(name.to_vm_byte(), line)
+                self.chunk.push_opcode(if 0 < self.current_block {OpCode::LoadLocal } else { OpCode::LoadGlobal }, line);
+                self.chunk.push_operands(name.to_vm_byte(), line)
             },
             Expr::Literal(literal) => {
                 // TODO: handle it without making a clone.
@@ -322,27 +439,27 @@ impl VirtualMachine
                 match literal
                 {
                     Value::Boolean(boolean) => {
-                        let index = self.code.write_const(boolean, line);
-                        self.code._data_type.insert(index, Type::Boolean);
+                        let index = self.chunk.write_const(boolean, line);
+                        self.chunk._data_type.insert(index, Type::Boolean);
                         index
                     },
                     Value::Int(int) => {
-                        let index = self.code.write_const(int, line);
-                         self.code._data_type.insert(index, Type::Int);
+                        let index = self.chunk.write_const(int, line);
+                         self.chunk._data_type.insert(index, Type::Int);
                         index
                     },
                     Value::Float(float) => {
-                        let index = self.code.write_const(float, line);
-                        self.code._data_type.insert(index, Type::Float);
+                        let index = self.chunk.write_const(float, line);
+                        self.chunk._data_type.insert(index, Type::Float);
                         index
                     },
                     Value::Str(string) => {
-                        let index = self.code.write_const(string, line);
-                        self.code._data_type.insert(index, Type::Str);
+                        let index = self.chunk.write_const(string, line);
+                        self.chunk._data_type.insert(index, Type::Str);
                         index
                     },
                     Value::Null => {
-                        let index = self.code.write_null(line);
+                        let index = self.chunk.write_null(line);
                         index
                     },
                     _=> unreachable!(),
@@ -354,21 +471,21 @@ impl VirtualMachine
 
                 match operator.tokentype
                 {
-                    TokenType::Plus       => self.code.push_opcode(OpCode::Add, line),
-                    TokenType::Minus      => self.code.push_opcode(OpCode::Sub, line),
-                    TokenType::Asterisk   => self.code.push_opcode(OpCode::Mul, line),
-                    TokenType::Slash      => self.code.push_opcode(OpCode::Div, line),
-                    TokenType::Percent    => self.code.push_opcode(OpCode::Mod, line),
+                    TokenType::Plus       => self.chunk.push_opcode(OpCode::Add, line),
+                    TokenType::Minus      => self.chunk.push_opcode(OpCode::Sub, line),
+                    TokenType::Asterisk   => self.chunk.push_opcode(OpCode::Mul, line),
+                    TokenType::Slash      => self.chunk.push_opcode(OpCode::Div, line),
+                    TokenType::Percent    => self.chunk.push_opcode(OpCode::Mod, line),
 
                     // PartialEq Series
-                    TokenType::NotEqual   => self.code.push_opcode(OpCode::NotEq, line),
-                    TokenType::EqualEqual => self.code.push_opcode(OpCode::EqEq, line),
+                    TokenType::NotEqual   => self.chunk.push_opcode(OpCode::NotEq, line),
+                    TokenType::EqualEqual => self.chunk.push_opcode(OpCode::EqEq, line),
 
                     // PartialOrd Series
-                    TokenType::LessEqual  => self.code.push_opcode(OpCode::LessEq, line),
-                    TokenType::MoreEqual  => self.code.push_opcode(OpCode::MoreEq, line),
-                    TokenType::Less       => self.code.push_opcode(OpCode::Less, line),
-                    TokenType::More       => self.code.push_opcode(OpCode::More, line),
+                    TokenType::LessEqual  => self.chunk.push_opcode(OpCode::LessEq, line),
+                    TokenType::MoreEqual  => self.chunk.push_opcode(OpCode::MoreEq, line),
+                    TokenType::Less       => self.chunk.push_opcode(OpCode::Less, line),
+                    TokenType::More       => self.chunk.push_opcode(OpCode::More, line),
                     _ => unreachable!(),
                 }
             },
@@ -379,8 +496,8 @@ impl VirtualMachine
 
                 match operator.tokentype
                 {
-                    TokenType::And => self.code.push_opcode(OpCode::And, line),
-                    TokenType::Or => self.code.push_opcode(OpCode::Or, line),
+                    TokenType::And => self.chunk.push_opcode(OpCode::And, line),
+                    TokenType::Or => self.chunk.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
                 }
             },
@@ -389,8 +506,8 @@ impl VirtualMachine
                 self.handle_expr(*expr, line);
                 match operator.tokentype
                 {
-                    TokenType::Bang => self.code.push_opcode(OpCode::Not, line),
-                    TokenType::Minus => self.code.push_opcode(OpCode::Neg, line),
+                    TokenType::Bang => self.chunk.push_opcode(OpCode::Not, line),
+                    TokenType::Minus => self.chunk.push_opcode(OpCode::Neg, line),
                     _ => unreachable!(),
                 }
             },
@@ -398,10 +515,186 @@ impl VirtualMachine
             Expr::Assign(name, expr) =>
             {
                 self.handle_expr(*expr, line);
-                self.code.push_opcode(OpCode::Write, line);
-                self.code.push_operands(name.to_vm_byte(), line)
+                self.chunk.push_opcode(if 0 < self.current_block {OpCode::StoreLocal } else { OpCode::StoreGlobal }, line);
+                self.chunk.push_operands(name.to_vm_byte(), line)
             },
             _ => unreachable!(),
+        }
+    }
+}
+
+type EnvHashMap = HashMap<u16, (Type, Value)>;
+#[derive(Debug)]
+pub struct Environment 
+{
+    pub values: Vec<EnvHashMap>,
+    pub current: usize,
+}
+
+impl Environment 
+{
+    pub fn new() -> Self
+    {
+        Self {
+            values: vec![HashMap::new()],
+            current: 0,
+        }
+    }
+
+    pub fn connect(&mut self, env: Environment) -> usize
+    {
+        for i in env.values
+        {
+            self.values.push(i);
+            self.current += 1;
+        }
+        self.current
+    }
+
+    // pub fn define_function(&mut self, func: Value)
+    // {
+    //     if Value::Callable(x) = &func
+    //     {
+    //         if !x.retType.is_compatible(
+    //     }
+    // }
+    //
+    pub fn enter_block(&mut self) -> usize
+    {
+        self.values.push(HashMap::new());
+        self.current += 1;
+        self.current
+    }
+
+    pub fn leave_block(&mut self) -> (usize, EnvHashMap)
+    {
+        self.current -= 1;
+        (self.current, self.values.pop().unwrap())
+    }
+    pub fn is_toplevel(&self) -> bool
+    {
+        self.current == 0
+    }
+
+    pub fn define(&mut self, name: u16, _type: Type, value: Value)
+    {
+        if !_type.is_compatible(&value)
+        {
+            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", _type, name, value.to_type());
+        }
+        let exist_key = self.exist(name);
+        if let Some(key) = exist_key 
+        {
+            if key == self.current
+            {
+                let declared = self.values[key].get(&name).unwrap();
+                if declared.0.is_compatible(&value)
+                {
+                    unreachable!("Variable Declared Twice - Use an assignment instead.");
+                }
+            }
+        }
+        self.values[self.current].insert(name, (_type, value));
+    }
+
+    pub fn assign(&mut self, name: u16, new_value: Value)
+    {
+        let exist_key = self.exist(name);
+        if exist_key.is_none() {
+            panic!("Undefined Variable {}", name);
+        }
+        let exist_key = exist_key.unwrap();
+
+        let (c_type, v) = self.values[exist_key].get(&name).unwrap();
+        let c_type = c_type.clone();
+        if !c_type.is_compatible(&new_value)
+        {
+            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", c_type, name, new_value.to_type());
+        }
+            
+        self.values[exist_key].insert(name, (c_type, new_value));
+    }
+
+    pub fn assign_global(&mut self, name: u16, new_value: Value)
+    {
+        if !self.values[0].contains_key(&name)
+        {
+            panic!("Undefined Variable {}", name);
+        }
+
+        let (c_type, value) = self.values[0].get(&name).unwrap();
+        let c_type = c_type.clone();
+        if !c_type.is_compatible(&new_value)
+        {
+            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", c_type, name, new_value.to_type());
+        }
+            
+        self.values[0].insert(name, (c_type, new_value));
+    }
+
+    pub fn exist(&self, name: u16) -> Option<usize>
+    {
+        let mut counter = self.current;
+        while !self.values[counter].contains_key(&name)
+        {
+            if counter <= 0
+            {
+                return None;
+            }
+            counter -= 1;
+        }
+        Some(counter)
+    }
+
+    pub fn get(&self, name: u16) -> &Value
+    {
+        let exist_key = self.exist(name);
+        if exist_key.is_none() {
+            panic!("Undefined Variable {}", name);
+        }
+
+        let (_, x) = self.values[exist_key.unwrap()].get(&name).unwrap();
+        if x.is_same_type(&Value::Null)
+        {
+            unreachable!("Use of an uninitialized variable: {}", name);
+        }
+        x
+    }
+
+    pub fn get_global(&self, name: u16) -> &Value
+    {
+        if !self.values[0].contains_key(&name)
+        {
+            panic!("Undefined Variable {}", name);
+        }
+
+        let (_, x) = self.values[0].get(&name).unwrap();
+        if x.is_same_type(&Value::Null)
+        {
+            unreachable!("Use of an uninitialized variable: {}", name);
+        }
+        x
+    }
+}
+
+#[derive(Debug)]
+pub struct VirtualMachine
+{
+    pub stack: Vec<Value>,
+    pub code: ByteChunk,
+    pub variable: Environment,
+    pub last_op: OpCode,
+}
+
+impl VirtualMachine
+{
+    pub fn new(code: ByteChunk) -> Self
+    {
+        Self {
+            stack: Vec::new(),
+            code,
+            variable: Environment::new(),
+            last_op: OpCode::Interrupt,
         }
     }
 
@@ -415,6 +708,7 @@ impl VirtualMachine
             let current_line = self.code.code_line[current];
             println!("OpCode: {:?}", current_operation);
             println!("Current Stack: {:?}", self.stack);
+            println!("Current Environment: {:?}", self.variable);
 
             match current_operation 
             {
@@ -493,7 +787,6 @@ impl VirtualMachine
                     }
                     current = new_end;
                 },
-
                 OpCode::Const64 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     let value = self.code.read_data_64(index);
@@ -516,59 +809,71 @@ impl VirtualMachine
                     });
                     current = new_end;
                 },
+                OpCode::JumpIfFalse => {
+                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
+                    let test_value = self.stack.pop().unwrap();
+
+                    current = if test_value.is_truthy() { new_end } else { index };
+                },
+                OpCode::Jump => {
+                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
+
+                    current = index;
+                },
+                OpCode::BlockIn  => {
+                    self.variable.enter_block();
+                    current += 1;
+                },
+                OpCode::BlockOut => {
+                    self.variable.leave_block();
+                    current += 1;
+                },
                 OpCode::Define => {
                     // println!("Current: {:?}", self.stack);
                     let value = self.stack.pop().unwrap();
+
                     let type_operand = self.code.code_chunk[current + 1];
                     let actual_type = Type::from_bits(type_operand).unwrap();
 
-                    if !actual_type.is_compatible(&value) {
-                        panic!("Type Mismatch!: {:?} to {:?}", actual_type, value.to_type());
-                    }
-                    if value == Value::Null && !actual_type.is_nullable() {
-                        panic!("Tried to assign null to non-nullable variable: line {}", current_line);
-                    }
-
                     let u16_one = self.code.code_chunk[current + 2];
                     let u16_two = self.code.code_chunk[current + 3];
-
                     let identifier = u16::from_ne_bytes([u16_one, u16_two]);
-                    self.variable.insert(identifier, (actual_type, value));
+                    self.variable.define(identifier, actual_type, value);
                     current += 4;
                 },
-                OpCode::Write => {
+                OpCode::StoreGlobal => {
                     let new_value = self.stack.pop().unwrap();
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-                    if !self.variable.contains_key(&identifier)
-                    {
-                        panic!("Write of undeclared variable: Line {}", current_line);
-                    }
 
-                    let (current_type, current_value) = self.variable.get(&identifier).unwrap();
-                    if !current_type.is_compatible(&new_value)
-                    {
-                        panic!("Type Mismatch when Writing: Line {}", current_line);
-                    }
-
-                    self.variable.insert(identifier, (current_type.clone(), new_value.clone()));
-                    self.stack.push(new_value);
+                    self.variable.assign_global(identifier, new_value);
                     current += 3;
                 },
-                OpCode::Read => {
+                OpCode::StoreLocal => {
+                    let new_value = self.stack.pop().unwrap();
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-                    if !self.variable.contains_key(&identifier)
-                    {
-                        panic!("Read of undeclared variable: Line {}", current_line);
-                    }
-                    let (_, value) = self.variable.get(&identifier).unwrap();
-                    if value.to_type() == Type::Null
-                    {
-                        panic!("Use of uninitialized variable: Line {}", current_line);
-                    }
+
+                    self.variable.assign(identifier, new_value);
+                    current += 3;
+                },
+                OpCode::LoadGlobal => {
+                    let operand_one = self.code.code_chunk[current + 1];
+                    let operand_two = self.code.code_chunk[current + 2];
+                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
+
+                    let value = self.variable.get_global(identifier);
+                    self.stack.push(value.clone());
+                    current += 3;
+                },
+                OpCode::LoadLocal => {
+                    let operand_one = self.code.code_chunk[current + 1];
+                    let operand_two = self.code.code_chunk[current + 2];
+                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
+
+                    let value = self.variable.get(identifier);
                     self.stack.push(value.clone());
                     current += 3;
                 },
@@ -588,7 +893,10 @@ impl VirtualMachine
                     else {
                         current + 5
                     };
-                    self.code.disassemble(current - 5, max_len);
+                    for message in self.code.disassemble(current - 5, max_len)
+                    {
+                        println!("{}", message);
+                    }
                     panic!();
                 },
                 _ => current += 1,

@@ -32,7 +32,9 @@ const MAX_IDENTIFIER_LENGTH: usize = 530;
 pub struct Parser
 {
     tokens: Vec<Token>,
-    current: usize
+    current: usize,
+    assign_count: usize,
+    block_count: usize,
 }
 
 
@@ -45,7 +47,12 @@ impl Parser
 {
     pub fn new(_tok: Vec<Token>) -> Self
     {
-        Self { tokens: _tok, current: 0 }
+        Self { 
+            tokens: _tok,
+            current: 0,
+            assign_count: 0,
+            block_count: 0
+        }
     }
 
     pub fn parse(&mut self) -> Vec<ParsedData>
@@ -80,7 +87,19 @@ impl Parser
             // so no need for check
             TokenType::If => { self.advance(); return self.if_statement(); },
             TokenType::While => { self.advance(); return self.while_statement(); },
-            TokenType::OpenBrace => { self.advance(); return Statement::Block(self.block()); },
+            TokenType::OpenBrace => { 
+                // Keep track of local assignment
+                self.advance(); 
+                let previous_count = self.assign_count;
+                self.assign_count = 0;
+                self.block_count += 1;
+
+                let block = self.block();
+                let local_assign_count = self.assign_count;
+                self.assign_count = previous_count;
+                self.block_count -= 1;
+                return Statement::Block(block, local_assign_count);
+            },
 
             // Semicolon Expected, I have to handle it here
             TokenType::Print => { self.advance(); Statement::Print(self.expression()) },
@@ -245,6 +264,7 @@ impl Parser
          *     Variable - TYPE: IDENTIFIER = X;
          *
          * */
+        self.assign_count += 1;
         let (_type, iden) = self.get_variable_type_and_identifier();
         let iden_id = util_string_to_u16(&iden);
         // self.current += 1;

@@ -19,40 +19,48 @@ const USIZE_LENGTH: usize = 8;
 #[repr(u8)]
 pub enum OpCode
 {
-    // Const       = 0b01000000,
-    Const8      = 0b01000001, // usize分の大きさのオペランドを取る
-    Const16     = 0b01000010, // usize分の大きさのオペランドを取る
-    Const32     = 0b01000011, // usize分の大きさのオペランドを取る
-    Const64     = 0b01000100, // usize分の大きさのオペランドを取る
-    ConstDyn    = 0b01000111, // usize分の大きさのオペランドを取る
-    ConstPtr    = 0b01001000, // usize分の大きさのオペランドを取る
+    // Const       = 0b00010000,
+    Const8      = 0b00010001, // usize分の大きさのオペランドを取る
+    Const16     = 0b00010010, // usize分の大きさのオペランドを取る
+    Const32     = 0b00010011, // usize分の大きさのオペランドを取る
+    Const64     = 0b00010100, // usize分の大きさのオペランドを取る
+    ConstDyn    = 0b00010111, // usize分の大きさのオペランドを取る
+    ConstPtr    = 0b00011000, // usize分の大きさのオペランドを取る
 
-    // Operational = 0b00010000,
-    Return      = 0b00010000,
-    Define      = 0b00010001, // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
-    Push        = 0b00010010,
-    Pop         = 0b00010011,
-    Read        = 0b00010100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    Write       = 0b00010101, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    // Operational = 0b00100000,
+    Return      = 0b00100000,
+    Define      = 0b00100001, // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
+    Push        = 0b00100010,
+    Pop         = 0b00100011,
+    LoadGlobal  = 0b00100100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    StoreGlobal = 0b00100101, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    BlockIn     = 0b00100110, 
+    BlockOut    = 0b00100111,
+    LoadLocal   = 0b00101000, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    StoreLocal  = 0b00101001, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
 
-    // Arithmitic = 0b00100000,
-    Add        = 0b00100001,
-    Sub        = 0b00100010,
-    Mul        = 0b00100011,
-    Div        = 0b00100100,
-    Mod        = 0b00100101,
-    Not        = 0b00100111,
-    Neg        = 0b00101000,
+    // Arithmitic = 0b00110000,
+    Add        = 0b00110001,
+    Sub        = 0b00110010,
+    Mul        = 0b00110011,
+    Div        = 0b00110100,
+    Mod        = 0b00110101,
+    Not        = 0b00110111,
+    Neg        = 0b00111000,
 
-    // Logical    = 0b00110000,
-    EqEq       = 0b00110001,
-    NotEq      = 0b00110010,
-    LessEq     = 0b00110011,
-    MoreEq     = 0b00110100,
-    Less       = 0b00110101,
-    More       = 0b00110111,
-    And        = 0b00111000,
-    Or         = 0b00111001,
+    // Logical    = 0b01000000,
+    EqEq       = 0b01000001,
+    NotEq      = 0b01000010,
+    LessEq     = 0b01000011,
+    MoreEq     = 0b01000100,
+    Less       = 0b01000101,
+    More       = 0b01000111,
+    And        = 0b01001000,
+    Or         = 0b01001001,
+
+    // Branching  = 0b01010000,
+    Jump          = 0b01010000,
+    JumpIfFalse   = 0b01010010,
 
     // System     = 0b11110000,
     Interrupt  = 0b11111111,
