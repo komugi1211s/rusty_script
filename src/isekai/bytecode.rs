@@ -1,6 +1,6 @@
 
 use super::types::{ Type, Value, OpCode, toVmByte };
-use super::parse::{ Statement, Expr, ParsedData };
+use super::parse::{ Statement, Expr, ParserNode, DeclarationData, BlockData };
 use super::token::{ Token, TokenType };
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -281,7 +281,7 @@ impl BytecodeGenerator
         }
     }
 
-    pub fn traverse_ast(mut self, ast: Vec<ParsedData>) -> Result<ByteChunk, ()>
+    pub fn traverse_ast(mut self, ast: Vec<ParserNode>) -> Result<ByteChunk, ()>
     {
         for i in ast {
             self.handle_data(i);
@@ -290,7 +290,7 @@ impl BytecodeGenerator
         Ok(self.chunk)
     }
 
-    fn handle_data(&mut self, data: ParsedData) -> usize
+    fn handle_data(&mut self, data: ParserNode) -> usize
     {
         let line = data.line;
         self.handle_stmt(data.value, line)
@@ -300,13 +300,18 @@ impl BytecodeGenerator
     {
         match data {
             Statement::Expression(expr) => self.handle_expr(expr, line),
-            Statement::Decralation(name, declared_type, value_expr) =>
+            Statement::Decralation(declaration_info) =>
             {
-                let value_index = self.handle_expr(value_expr, line);
+                let value_index = match declaration_info.expr {
+                    Some(expression) => self.handle_expr(expression, line),
+                    None             => self.chunk.write_null(line),
+                };
+
                 // let index = self.chunk.write_const(name);
                 self.chunk.push_opcode(OpCode::Define, line);
 
-                let name_vector = name.to_vm_byte();
+                let declared_type = declaration_info._type;
+                let name_vector = declaration_info.name_u16.to_vm_byte();
                 let operands: Vec<u8> = vec![declared_type.bits(), name_vector[0], name_vector[1]];
                 self.chunk.push_operands(operands, line)
             },
@@ -347,10 +352,11 @@ impl BytecodeGenerator
                 self.chunk.code_idx
             },
 
-            Statement::Block(statements, total_assign_count) => {
+            Statement::Block(block_data) =>
+            {
                 self.chunk.push_opcode(OpCode::BlockIn, line);
                 self.current_block += 1;
-                for i in statements
+                for i in block_data.statements 
                 {
                     self.handle_stmt(i, line);
                 }
@@ -430,7 +436,7 @@ impl BytecodeGenerator
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
-                self.chunk.push_opcode(if 0 < self.current_block {OpCode::LoadLocal } else { OpCode::LoadGlobal }, line);
+                self.chunk.push_opcode(if 0 < self.current_block { OpCode::LoadLocal } else { OpCode::LoadGlobal }, line);
                 self.chunk.push_operands(name.to_vm_byte(), line)
             },
             Expr::Literal(literal) => {
@@ -515,7 +521,7 @@ impl BytecodeGenerator
             Expr::Assign(name, expr) =>
             {
                 self.handle_expr(*expr, line);
-                self.chunk.push_opcode(if 0 < self.current_block {OpCode::StoreLocal } else { OpCode::StoreGlobal }, line);
+                self.chunk.push_opcode(if 0 < self.current_block { OpCode::StoreLocal } else { OpCode::StoreGlobal }, line);
                 self.chunk.push_operands(name.to_vm_byte(), line)
             },
             _ => unreachable!(),
@@ -778,7 +784,6 @@ impl VirtualMachine
                     self.stack.push(Value::Boolean(value != 0));
                     current = new_end;
                 },
-
                 OpCode::ConstPtr => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     if index == 0 // Null Pointer

@@ -1,3 +1,6 @@
+#[macro_use]
+use bitflags;
+
 use std::fmt;
 use super::types::{ Value, Type };
 use super::token::{ Token, TokenType };
@@ -10,12 +13,6 @@ pub trait Visitor<T>
 }
 
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct ParsedData
-{
-    pub line: usize,
-    pub value: Statement,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr
@@ -23,12 +20,14 @@ pub enum Expr
     Binary(Box<Expr>, Box<Expr>, Token),
     Logical(Box<Expr>, Box<Expr>, Token),
     FunctionCall(Box<Expr>, Token, Vec<Expr>),
-    Grouping(Box<Expr>),
+    Assign(u16, Box<Expr>),
+
     Literal(Value),
+    Grouping(Box<Expr>),
     Unary(Box<Expr>, Token),  
     Variable(u16),
-    Assign(u16, Box<Expr>),
 }
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement
@@ -38,18 +37,110 @@ pub enum Statement
     Return(Expr),
     Expression(Expr),
     // Defer(Expr),
-    Decralation(u16, Type, Expr),
-    Function(u16, Type, Vec<Statement>, Box<Statement>),
+    Decralation(DeclarationData),
+    Function(u16, Type, Vec<DeclarationData>, Box<Statement>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(Box<Statement>, Expr, Expr, Box<Statement>),
-    Block(Vec<Statement>, usize),
+    Block(BlockData),
     Break,
     Continue,
     Empty,
 }
 
-impl ParsedData
+#[derive(Debug, PartialEq, Clone)]
+pub enum Either<A, B> {
+    Left(A),
+    Right(B),
+    Neither
+}
+
+impl<a, b> Either<a, b> {
+    pub fn is_neither(&self) -> bool
+    {
+        match self
+        {
+            Self::Neither => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct DeclarationData
+{
+    pub name:  String,
+    pub name_u16: u16,
+    pub _type: Type,
+    pub expr: Option<Expr>,
+}
+
+pub struct DeclarationDataBuilder
+{
+    name: Option<String>,
+    name_u16: Option<u16>,
+    _type: Option<Type>,
+    expr: Option<Expr>,
+}
+
+impl DeclarationDataBuilder
+{
+    pub fn new() -> Self 
+    {
+        Self {
+            name: None,
+            name_u16: None,
+            _type: None,
+            expr: None,
+        }
+    }
+
+    pub fn setname(mut self, name: &str) -> Self
+    {
+        self.name = Some(name.to_string());
+        self.name_u16 = Some(name.as_bytes().iter().map(|x| *x as u16).sum());
+        self
+    }
+    
+    pub fn settype(mut self, ty: Type) -> Self
+    {
+        self._type = Some(ty);
+        self
+    }
+    
+    pub fn setexpr(mut self, expr: Expr) -> Self
+    {
+        self.expr = Some(expr);
+        self
+    }
+
+    pub fn build(mut self) -> DeclarationData
+    {
+        DeclarationData {
+            name: self.name.unwrap(),
+            _type: self._type.unwrap(),
+            name_u16: self.name_u16.unwrap(),
+            expr: self.expr
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BlockData
+{
+    pub local_count: usize,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ParserNode
+{
+    pub line: usize,
+    pub value: Statement,
+}
+
+
+impl ParserNode 
 {
     pub fn new(stmt: Statement, line: usize) -> Self
     {

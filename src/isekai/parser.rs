@@ -2,7 +2,14 @@
 use super::{
     types::{ Value, Type },
     token::{ TokenType, Token },
-    parse::{ ParsedData, Expr, Statement },
+    parse::{ 
+        ParserNode,
+        Expr,
+        Either,
+        Statement,
+        DeclarationData, DeclarationDataBuilder,
+        BlockData
+    },
 };
 
 
@@ -55,14 +62,14 @@ impl Parser
         }
     }
 
-    pub fn parse(&mut self) -> Vec<ParsedData>
+    pub fn parse(&mut self) -> Vec<ParserNode>
     {
-        let mut statements: Vec<ParsedData> = Vec::new();
+        let mut statements: Vec<ParserNode> = Vec::new();
         while !self.is_at_end()
         {
             let current_line = self.tokens[self.current].line;
             let x = self.decralation();
-            statements.push(ParsedData::new(x, current_line));
+            statements.push(ParserNode::new(x, current_line));
         }
         statements
     }
@@ -90,15 +97,8 @@ impl Parser
             TokenType::OpenBrace => { 
                 // Keep track of local assignment
                 self.advance(); 
-                let previous_count = self.assign_count;
-                self.assign_count = 0;
-                self.block_count += 1;
-
                 let block = self.block();
-                let local_assign_count = self.assign_count;
-                self.assign_count = previous_count;
-                self.block_count -= 1;
-                return Statement::Block(block, local_assign_count);
+                return Statement::Block(block);
             },
 
             // Semicolon Expected, I have to handle it here
@@ -141,16 +141,25 @@ impl Parser
         return Statement::While(condition, Box::new(_loop));
     }
 
-    fn block(&mut self) -> Vec<Statement>
+    fn block(&mut self) -> BlockData 
     {
+        let previous_count = self.assign_count;
+        self.assign_count = 0;
+        self.block_count += 1;
         let mut vector = Vec::new();
         while !self.is_at_end() && !self.is(TokenType::CloseBrace) 
         {
             vector.push(self.decralation());
         }
+        let local_assign_count = self.assign_count;
+        self.assign_count = previous_count;
+        self.block_count -= 1;
 
         self.consume(TokenType::CloseBrace).expect("ParserError: Expected Close Bracket");
-        vector
+        BlockData {
+            statements: vector,
+            local_count: local_assign_count
+        }
     }
 
     fn return_statement(&mut self) -> Statement
@@ -206,22 +215,30 @@ impl Parser
         (_type, possible_iden.lexeme.clone())
     }
 
-    fn declare_argument(&mut self) -> Vec<Statement>
+    fn declare_argument(&mut self) -> Vec<DeclarationData>
     {
         self.consume(TokenType::OpenParen).expect("Why it failed?");
-        let mut arguments: Vec<Statement> = Vec::new();
+        let mut arguments: Vec<DeclarationData> = Vec::new();
+
 
         while TokenType::is_typekind(&self.get_current().tokentype)
         {
             let (_type, iden) = self.get_variable_type_and_identifier();
-            let iden_id = util_string_to_u16(&iden);
+            let mut builder = DeclarationDataBuilder::new()
+                              .setname(&iden)
+                              .settype(_type);
+
             let bridge_token = self.advance();
             match bridge_token.tokentype
             {
                 TokenType::Equal => {
                     let item = self.expression();
-                    println!("{}", item);
-                    arguments.push(Statement::Decralation(iden_id, _type, item));
+                    let data = builder
+                               .setexpr(item)
+                               .build();
+
+                    arguments.push(data);
+
                     match self.advance().tokentype
                     {
                         TokenType::Comma => continue,
@@ -231,12 +248,14 @@ impl Parser
                 },
                 TokenType::Comma =>
                 {
-                    arguments.push(Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null)));
+                    let data = builder.setexpr(Expr::Literal(Value::Null)).build();
+                    arguments.push(data);
                     continue;
                 },
                 TokenType::CloseParen =>
                 { 
-                    arguments.push(Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null)));
+                    let data = builder.setexpr(Expr::Literal(Value::Null)).build();
+                    arguments.push(data);
                     return arguments;
                 },
                 _ => unreachable!("About to declare argument, found {:?}", bridge_token)
@@ -266,9 +285,11 @@ impl Parser
          * */
         self.assign_count += 1;
         let (_type, iden) = self.get_variable_type_and_identifier();
-        let iden_id = util_string_to_u16(&iden);
         // self.current += 1;
 
+        let mut builder = DeclarationDataBuilder::new()
+                          .setname(&iden)
+                          .settype(_type);
         let mut state = Statement::Empty;
 
         // Initialization, Outside
@@ -276,27 +297,26 @@ impl Parser
         {
             self.current += 1;
             let item = self.expression();
+            let data = builder.setexpr(item).build();
             self.consume(TokenType::SemiColon).expect("ParserError: Expected Semicolon After Decralation.");
-            state = Statement::Decralation(iden_id, _type, item);
+            state = Statement::Decralation(data);
         }
         // Declaration, Outside
         else if self.is(TokenType::SemiColon)
         {
             self.current += 1;
-            if !_type.is_nullable() {
+            if !_type.is_nullable()
+            {
                 panic!("Uninitialized non-nullable variable: {}", iden);
             }
-            return Statement::Decralation(iden_id, _type, Expr::Literal(Value::Null));
+            let data = builder.build();
+            return Statement::Decralation(data);
         }
 
         // This is a function.
         else if self.is(TokenType::OpenParen)
         {
-            // Declaration of Functions
-            let arguments = self.declare_argument();
-
-            let inside_func = self.statement();
-            return Statement::Function(iden_id, _type, arguments, Box::new(inside_func));
+            return self.declare_function(&iden, _type);
         }
 
         match state
@@ -304,6 +324,14 @@ impl Parser
             Statement::Empty => panic!("Failed to parse the declaration process."),
             _ => state,
         }
+    }
+
+    fn declare_function(&mut self, identity: &str, _ty: Type) -> Statement
+    {
+        let iden_id = util_string_to_u16(identity);
+        let arguments = self.declare_argument();
+        let inside_func = self.statement();
+        Statement::Function(iden_id, _ty, arguments, Box::new(inside_func))
     }
 
     fn expression(&mut self) -> Expr
@@ -381,7 +409,7 @@ impl Parser
         
         use TokenType::*;
         // 分かりづらッ！！
-        while (!self.is_at_end() 
+        while !self.is_at_end() 
             && match self.get_current().tokentype {
                     LessEqual => true,
                     MoreEqual => true,
@@ -389,7 +417,6 @@ impl Parser
                     More      => true,
                     _         => false,
                 }
-        )
         {
             self.current += 1;
             let compare_operator = self.tokens.get(self.current - 1).unwrap().clone();
@@ -452,7 +479,7 @@ impl Parser
     {
         let mut expr = self.primary();
 
-        while true {
+        loop {
             if self.is(TokenType::OpenParen) {
                 expr = self.finish_func_call(expr);
             } else {
