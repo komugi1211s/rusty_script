@@ -202,13 +202,13 @@ impl ByteChunk
                 current += 1;
 
                 let operand = self.get_disassemble_operand(current, padding);
-                let formatted = format!("{:<12} {}", opcode, operand);
+                let formatted = format!("{:<16} {}", opcode, operand);
                 let in_byte = format!("{:02X} {}", opbyte, operand);
                 vector.push(format!(" | {:04X} | {:<48} | {}", current, formatted, in_byte)); 
                 current += padding;
             } else {
                 let in_byte = format!("{:02X}", opbyte);
-                let formatted = format!("{:<12}", opcode);
+                let formatted = format!("{:<16}", opcode);
                 vector.push(format!(" | {:04X} | {:<48} | {}", current, formatted, in_byte));
                 current += 1;
             }
@@ -334,6 +334,9 @@ impl BytecodeGenerator
                 let mut value_index = 0;
                 let mut actual_type = Type::Null;
 
+                let name = declaration_info.name_u16;
+                let mut declared_type = declaration_info._type;
+
                 match declaration_info.expr {
                     Some(expression) => { 
                         let expr_handle_result = self.handle_expr(expression, line);
@@ -344,8 +347,6 @@ impl BytecodeGenerator
                         value_index = self.chunk.write_null(line)
                     },
                 };
-
-                let mut declared_type = declaration_info._type;
 
                 if actual_type == Type::Null
                 {
@@ -373,14 +374,14 @@ impl BytecodeGenerator
 
                 let is_exist = self.current_define
                                 .iter()
-                                .position(|&x| x.1 == declaration_info.name_u16);
+                                .position(|&x| x.1 == name);
 
                 if is_exist.is_some() 
                 { 
                     panic!("Same Variable Declared TWICE.");
                 }
 
-                self.current_define.push((declared_type, declaration_info.name_u16));
+                self.current_define.push((declared_type, name));
                 let position = self.current_define.len() - 1;
                 // let index = self.chunk.write_const(name);
                 if self.current_block > 0
@@ -395,6 +396,7 @@ impl BytecodeGenerator
                         Type::Float   => OpCode::FStore,
                         Type::Boolean => OpCode::BStore,
                         Type::Str     => OpCode::SStore,
+                        _ => panic!("Unsupported opcode for here"),
                     };
                     let operands = position as u8;
 
@@ -552,7 +554,12 @@ impl BytecodeGenerator
 
                     if is_exist.is_none()
                     {
-                        panic!("Undefined Variable");
+                        // panic!("Undefined Variable");
+
+                        // it could be a global variable;
+                        self.chunk.push_opcode(OpCode::GlobalLoad, line);
+                        handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                        return handled_result;
                     }
 
                     let mut index = 0;
@@ -567,6 +574,7 @@ impl BytecodeGenerator
                         &Type::Float   => OpCode::FLoad,
                         &Type::Str     => OpCode::SLoad,
                         &Type::Boolean => OpCode::BLoad,
+                        _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
                     handled_result.index = self.chunk.push_operand(index as u8, line);
@@ -699,6 +707,7 @@ impl BytecodeGenerator
                         Type::Int     => OpCode::IStore,
                         Type::Str     => OpCode::SStore,
                         Type::Float   => OpCode::FStore,
+                        _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
                     handled_result.index = self.chunk.push_operand(index as u8, line);
@@ -873,6 +882,7 @@ impl Environment
 pub struct VirtualMachine
 {
     pub stack: Vec<Value>,
+    pub stack_pointer: usize,
     pub code: ByteChunk,
     pub variable: Environment,
     pub last_op: OpCode,
@@ -884,6 +894,7 @@ impl VirtualMachine
     {
         Self {
             stack: Vec::new(),
+            stack_pointer: 0,
             code,
             variable: Environment::new(),
             last_op: OpCode::Interrupt,
@@ -892,6 +903,8 @@ impl VirtualMachine
 
     pub fn run(&mut self)
     {
+        // Meta
+        let mut stack_pointer_stack: Vec<usize> = Vec::new();
         let mut current: usize = 0;
         let max: usize = self.code.code_idx;
         while current < max 
@@ -1006,17 +1019,37 @@ impl VirtualMachine
 
                     current = if test_value.is_truthy() { new_end } else { index };
                 },
+
+                OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
+                    current += 1;
+                    let index = self.stack_pointer + self.code.code_chunk[current] as usize;
+                    let value = self.stack.last().unwrap().clone();
+                    self.stack[index] = value;
+                    current += 1;
+                },
+                OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad  => {
+                    current += 1;
+                    let index = self.stack_pointer + self.code.code_chunk[current] as usize;
+                    println!("stack_pointer: {}", self.stack_pointer);
+                    println!("{}", index);
+                    let data = self.stack[index].clone();
+                    self.stack.push(data);
+                    current += 1;
+                },
                 OpCode::Jump => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
-
                     current = index;
                 },
                 OpCode::BlockIn  => {
-                    self.variable.enter_block();
+                    println!("Current Stack length: {}", self.stack.len());
+                    stack_pointer_stack.push(self.stack.len());
+                    self.stack_pointer = self.stack.len();
                     current += 1;
                 },
                 OpCode::BlockOut => {
-                    self.variable.leave_block();
+                    let index = stack_pointer_stack.pop().unwrap();
+                    self.stack_pointer = index;
+                    self.stack.truncate(index);
                     current += 1;
                 },
                 OpCode::GlobalDefine => {
@@ -1055,7 +1088,7 @@ impl VirtualMachine
                     println!("{}", a);
                     current += 1;
                 },
-                OpCode::Interrupt => {
+                _ => {
                     println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");
                     println!("OpCode Interrupt Detected at index {}", current);
                     println!("Current Stack Data: {:?}", self.stack);
@@ -1072,7 +1105,6 @@ impl VirtualMachine
                     }
                     panic!();
                 },
-                _ => current += 1,
             }
             self.last_op = current_operation;
         }

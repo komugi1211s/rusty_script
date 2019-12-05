@@ -175,19 +175,15 @@ impl Parser
     
     fn decralation(&mut self) -> Statement
     {
-        // Called at [type]: iden = value
+        // Called at iden: [type] = value
         //           ^ right here
-        //
-        // self.current     = typename ( or var )
-        // self.current + 1 = colon
-        // self.current + 2 = identity
-        // self.current + 3 = equal
-        // self.current + 4 = value
-        //
         // if TokenType::is_typekind(&x.tokentype)
+        println!("{}", self.get_current());
+        println!("{}", self.get_next());
         if self.is(TokenType::Iden) &&
-        self.is_next(TokenType::Colon)
+            self.is_next(TokenType::Colon)
         {
+            println!("This is a Declaration.");
             return self.declare_variable();
         }
 
@@ -196,42 +192,32 @@ impl Parser
 
     fn get_variable_type_and_identifier(&mut self) -> (Type, String)
     {
-        let identity = self.get_previous();
-        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
-        let type_token = self.advance();
-
-        let mut _type = if TokenType::is_typekind(&type_token.tokentype)
-        {
-            Type::from_tokentype(&type_token.tokentype)
-        }
-        else
-        {
-            Type::Any
+        let identity = { self.get_previous().lexeme.clone() };
+        self.consume(TokenType::Colon)
+            .expect("Expected Colon, Got Something Different");
+        let declared_type = {
+            if TokenType::is_typekind(&self.get_current().tokentype)
+            {
+                let mut _type = Type::from_tokentype(&self.advance().tokentype);
+                if self.is(TokenType::Question)
+                {
+                    _type.set_nullable();
+                }
+                _type
+            }
+            else
+            {
+                Type::Any
+            }
         };
 
-        if self.is(TokenType::Question)
-        {
-            self.advance();
-            _type.insert(Type::Null);
-        }
-
-        // let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
-        let possible_iden = self.advance();
-
-        if TokenType::Iden != possible_iden.tokentype
-        {
-            panic!("Identity Expected, got {:?}", possible_iden);
-        }
-
-
-        (_type, possible_iden.lexeme.clone())
+        (declared_type, identity)
     }
 
     fn declare_argument(&mut self) -> Vec<DeclarationData>
     {
         self.consume(TokenType::OpenParen).expect("Why it failed?");
         let mut arguments: Vec<DeclarationData> = Vec::new();
-
 
         while self.is(TokenType::Iden)
         {
@@ -296,8 +282,8 @@ impl Parser
          *
          * */
         self.assign_count += 1;
+        self.current += 1;
         let (_type, iden) = self.get_variable_type_and_identifier();
-        // self.current += 1;
 
         let mut builder = DeclarationDataBuilder::new()
                           .setname(&iden)
@@ -548,8 +534,8 @@ impl Parser
 
     fn get_next(&self) -> &Token
     {
-        if self.tokens.len() >= self.current + 1 {
-            panic!("Exceeded length");
+        if self.current + 1 >= self.tokens.len() {
+            return self.get_current();
         }
         self.tokens.get(self.current + 1).unwrap()
     }
