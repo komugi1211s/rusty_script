@@ -20,51 +20,61 @@ const USIZE_LENGTH: usize = 8;
 pub enum OpCode
 {
     // Const       = 0b00010000,
-    Const8      = 0b00010001, // usize分の大きさのオペランドを取る
-    Const16     = 0b00010010, // usize分の大きさのオペランドを取る
-    Const32     = 0b00010011, // usize分の大きさのオペランドを取る
-    Const64     = 0b00010100, // usize分の大きさのオペランドを取る
-    ConstDyn    = 0b00010111, // usize分の大きさのオペランドを取る
-    ConstPtr    = 0b00011000, // usize分の大きさのオペランドを取る
+    Const8         = 0b00010001, // usize分の大きさのオペランドを取る
+    Const16        = 0b00010010, // usize分の大きさのオペランドを取る
+    Const32        = 0b00010011, // usize分の大きさのオペランドを取る
+    Const64        = 0b00010100, // usize分の大きさのオペランドを取る
+    ConstDyn       = 0b00010111, // usize分の大きさのオペランドを取る
+    ConstPtr       = 0b00011000, // usize分の大きさのオペランドを取る
 
     // Operational = 0b00100000,
-    Return      = 0b00100000,
-    Define      = 0b00100001, // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
-    Push        = 0b00100010,
-    Pop         = 0b00100011,
-    LoadGlobal  = 0b00100100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    StoreGlobal = 0b00100101, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    BlockIn     = 0b00100110, 
-    BlockOut    = 0b00100111,
-    LoadLocal   = 0b00101000, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    StoreLocal  = 0b00101001, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    Return         = 0b00100000,
+    Push           = 0b00100010,
+    Pop            = 0b00100011,
+    BlockIn        = 0b00100110, 
+    BlockOut       = 0b00100111,
 
     // Arithmitic = 0b00110000,
-    Add        = 0b00110001,
-    Sub        = 0b00110010,
-    Mul        = 0b00110011,
-    Div        = 0b00110100,
-    Mod        = 0b00110101,
-    Not        = 0b00110111,
-    Neg        = 0b00111000,
+    Add           = 0b00110001,
+    Sub           = 0b00110010,
+    Mul           = 0b00110011,
+    Div           = 0b00110100,
+    Mod           = 0b00110101,
+    Not           = 0b00110111,
+    Neg           = 0b00111000,
 
     // Logical    = 0b01000000,
-    EqEq       = 0b01000001,
-    NotEq      = 0b01000010,
-    LessEq     = 0b01000011,
-    MoreEq     = 0b01000100,
-    Less       = 0b01000101,
-    More       = 0b01000111,
-    And        = 0b01001000,
-    Or         = 0b01001001,
+    EqEq          = 0b01000001,
+    NotEq         = 0b01000010,
+    LessEq        = 0b01000011,
+    MoreEq        = 0b01000100,
+    Less          = 0b01000101,
+    More          = 0b01000111,
+    And           = 0b01001000,
+    Or            = 0b01001001,
 
     // Branching  = 0b01010000,
     Jump          = 0b01010000,
     JumpIfFalse   = 0b01010010,
 
+    // Definement  = 0b01100000,
+    GlobalDefine   = 0b01100001, // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
+    GlobalLoad     = 0b01100010, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GlobalStore    = 0b01100011, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+
+    ILoad       = 0b01100100, // index(u8) の1つのオペランドを取る
+    IStore      = 0b01100101, // index(u8) の1つのオペランドを取る
+    FLoad       = 0b01100111, // index(u8) の1つのオペランドを取る
+    FStore      = 0b01101000, // index(u8) の1つのオペランドを取る
+    SLoad       = 0b01101001, // index(u8) の1つのオペランドを取る
+    SStore      = 0b01101010, // index(u8) の1つのオペランドを取る
+    BLoad       = 0b01101011, // index(u8) の1つのオペランドを取る
+    BStore      = 0b01101100, // index(u8) の1つのオペランドを取る
+
     // System     = 0b11110000,
-    Interrupt  = 0b11111111,
-    DebugPrint = 0b11110001,
+    Interrupt     = 0b11111111,
+    DebugPrint    = 0b11110001,
+    Extends       = 0b11110101, // Opcode Index Index の3つのオペランドを取る
 }
 
 pub trait toVmByte
@@ -172,6 +182,11 @@ impl Type
         self.contains(Type::Null)
     }
 
+    pub fn is_any(&self) -> bool
+    {
+        self.contains(Type::Any)
+    }
+
     pub fn from_tokentype(t: &TokenType) -> Self
     {
         match t
@@ -217,7 +232,14 @@ impl Type
     }
 }
 
+/*
 
+    TODO:
+    ValueをここでEnumとして実装するより、trait Valueを作って各型に実装し、
+    Box<dyn Value>でトレイトオブジェクトで取り回した方が良いのかな…と思った
+
+    が、動的ディスパッチになるので可能なら避けたい
+ */
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value
 {
@@ -226,7 +248,9 @@ pub enum Value
     Str(String),
     Boolean(bool),
     Type(Type),
-  //  Struct(String, Vec<(Type, usize, Value)>),
+    //  Struct(String, Vec<(Type, usize, Value)>),
+
+    // TODO: この辺はCallableDataとかのStructとして纏めたほうが楽かも
     Callable(Type, Vec<Statement>, Vec<Statement>),
     NativeCallable(Type, Vec<(Type, Value)>, fn(Vec<Value>) -> Value),
     Null

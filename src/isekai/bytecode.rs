@@ -2,6 +2,7 @@
 use super::types::{ Type, Value, OpCode, toVmByte };
 use super::parse::{ Statement, Expr, ParserNode, DeclarationData, BlockData };
 use super::token::{ Token, TokenType };
+use std::mem;
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
@@ -246,11 +247,19 @@ impl ByteChunk
             OpCode::ConstDyn => USIZE_LENGTH,
 
             OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
-            OpCode::Define => 3,
-            OpCode::LoadGlobal => 2,
-            OpCode::StoreGlobal => 2,
-            OpCode::LoadLocal => 2,
-            OpCode::StoreLocal => 2,
+
+            OpCode::GlobalDefine => 3,
+            OpCode::GlobalLoad   => 2,
+            OpCode::GlobalStore  => 2,
+
+            OpCode::ILoad => 1,
+            OpCode::FLoad => 1,
+            OpCode::SLoad => 1,
+            OpCode::BLoad => 1,
+            OpCode::IStore => 1,
+            OpCode::FStore => 1,
+            OpCode::SStore => 1,
+            OpCode::BStore => 1,
             _ => 0
         }
     }
@@ -262,10 +271,23 @@ impl ByteChunk
 pub struct BytecodeGenerator
 {
     pub chunk: ByteChunk,
-    pub current_define: usize,
+    pub current_define: Vec<(Type, u16)>,
     pub last_loop_start: usize,
-    pub current_block: usize,
+    current_block: usize,
     pub break_call: Vec<usize>,
+}
+
+struct StatementHandleResult
+{
+    index: usize,
+    line: usize,
+}
+
+struct ExpressionHandleResult
+{
+    index: usize,
+    line: usize,
+    _type: Type
 }
 
 impl BytecodeGenerator
@@ -274,7 +296,7 @@ impl BytecodeGenerator
     {
         Self {
             chunk: ByteChunk::default(),
-            current_define: 0,
+            current_define: Vec::new(),
             last_loop_start: usize::max_value(),
             current_block: 0,
             break_call: Vec::new(),
@@ -290,35 +312,109 @@ impl BytecodeGenerator
         Ok(self.chunk)
     }
 
-    fn handle_data(&mut self, data: ParserNode) -> usize
+    fn handle_data(&mut self, data: ParserNode)
     {
         let line = data.line;
-        self.handle_stmt(data.value, line)
+        self.handle_stmt(data.value, line);
     }
 
-    fn handle_stmt(&mut self, data: Statement, line: usize) -> usize
+    fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult
     {
+        let mut handled_result = StatementHandleResult {
+            line: line,
+            index: 0,
+        };
         match data {
-            Statement::Expression(expr) => self.handle_expr(expr, line),
+            Statement::Expression(expr) => { 
+                handled_result.index = self.handle_expr(expr, line).index;
+                handled_result
+            },
             Statement::Decralation(declaration_info) =>
             {
-                let value_index = match declaration_info.expr {
-                    Some(expression) => self.handle_expr(expression, line),
-                    None             => self.chunk.write_null(line),
+                let mut value_index = 0;
+                let mut actual_type = Type::Null;
+
+                match declaration_info.expr {
+                    Some(expression) => { 
+                        let expr_handle_result = self.handle_expr(expression, line);
+                        value_index = expr_handle_result.index;
+                        actual_type = expr_handle_result._type;
+                    },
+                    None             => {
+                        value_index = self.chunk.write_null(line)
+                    },
                 };
 
-                // let index = self.chunk.write_const(name);
-                self.chunk.push_opcode(OpCode::Define, line);
+                let mut declared_type = declaration_info._type;
 
-                let declared_type = declaration_info._type;
-                let name_vector = declaration_info.name_u16.to_vm_byte();
-                let operands: Vec<u8> = vec![declared_type.bits(), name_vector[0], name_vector[1]];
-                self.chunk.push_operands(operands, line)
+                if actual_type == Type::Null
+                {
+                    if !declared_type.is_nullable()
+                    {
+                        panic!("an attempt to initialize non-nullable variable with null");
+                    }
+
+                    if declared_type.is_any()
+                    {
+                        panic!("You cannot initialize Any type with null");
+                    }
+                }
+                else
+                {
+                    if declared_type.is_any() 
+                    {
+                        declared_type = actual_type
+                    }
+                    else if declared_type != actual_type
+                    {
+                        panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
+                    }
+                }
+
+                let is_exist = self.current_define
+                                .iter()
+                                .position(|&x| x.1 == declaration_info.name_u16);
+
+                if is_exist.is_some() 
+                { 
+                    panic!("Same Variable Declared TWICE.");
+                }
+
+                self.current_define.push((declared_type, declaration_info.name_u16));
+                let position = self.current_define.len() - 1;
+                // let index = self.chunk.write_const(name);
+                if self.current_block > 0
+                {
+                    if self.current_define.len() > 254
+                    {
+                        panic!("You cannot have more than 255 local variables");
+                    }
+                    let opcode = match declared_type
+                    {
+                        Type::Int     => OpCode::IStore,
+                        Type::Float   => OpCode::FStore,
+                        Type::Boolean => OpCode::BStore,
+                        Type::Str     => OpCode::SStore,
+                    };
+                    let operands = position as u8;
+
+                    self.chunk.push_opcode(opcode, line);
+                    handled_result.index = self.chunk.push_operand(operands, line);
+                }
+                else
+                {
+                    self.chunk.push_opcode(OpCode::GlobalDefine, line);
+                    let name_vector = declaration_info.name_u16.to_vm_byte();
+                    let operands: Vec<u8> = vec![declared_type.bits(), name_vector[0], name_vector[1]];
+                    handled_result.index = self.chunk.push_operands(operands, line);
+                }
+                handled_result
             },
 
             Statement::Print(expr) => {
                 self.handle_expr(expr, line);
-                self.chunk.push_opcode(OpCode::DebugPrint, line)
+                handled_result.index = self.chunk.push_opcode(OpCode::DebugPrint, line);
+                handled_result
             },
 
             Statement::If(expr, if_block, optional_else_block) => {
@@ -329,7 +425,7 @@ impl BytecodeGenerator
                 self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
 
                 // Ifの終わりにまでJumpする為のIndexが要る
-                let end_of_if_block = self.handle_stmt(*if_block, line);
+                let end_of_if_block = self.handle_stmt(*if_block, line).index;
 
                 // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
                 self.chunk.rewrite_operands(end_of_if_block.to_vm_byte(), jump_opcode_index);
@@ -345,23 +441,27 @@ impl BytecodeGenerator
                     self.chunk.rewrite_operands(after_operand.to_vm_byte(), jump_opcode_index);
 
                     // Ifブロックが丁度終わる位置のJumpオペランドを、Elseブロックの終了アドレスで上書き
-                    let end_of_else_block = self.handle_stmt(*else_block, line);
+                    let end_of_else_block = self.handle_stmt(*else_block, line).index;
                     self.chunk.rewrite_operands(end_of_else_block.to_vm_byte(), jump_block);
                 }
 
-                self.chunk.code_idx
+                handled_result.index = self.chunk.code_idx;
+                handled_result
             },
 
             Statement::Block(block_data) =>
             {
                 self.chunk.push_opcode(OpCode::BlockIn, line);
+                let previous_vec = mem::replace(&mut self.current_define, Vec::new());
                 self.current_block += 1;
                 for i in block_data.statements 
                 {
                     self.handle_stmt(i, line);
                 }
                 self.current_block -= 1;
-                self.chunk.push_opcode(OpCode::BlockOut, line)
+                let recent_vec = mem::replace(&mut self.current_define, previous_vec);
+                handled_result.index = self.chunk.push_opcode(OpCode::BlockOut, line);
+                handled_result
             },
 
             Statement::While(expr, while_block) => {
@@ -406,7 +506,8 @@ impl BytecodeGenerator
                 }
                 self.chunk.rewrite_operands(before_expr.to_vm_byte(), jump_conditional);
                 self.last_loop_start = previous_loop_start;
-                end_of_loop 
+                handled_result.index = end_of_loop;
+                handled_result
             },
 
             Statement::Break => {
@@ -415,7 +516,8 @@ impl BytecodeGenerator
                     self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
                     self.break_call.push(break_index);
                 }
-                self.chunk.code_idx
+                handled_result.index = self.chunk.code_idx;
+                handled_result
             },
 
             Statement::Continue => {
@@ -423,21 +525,58 @@ impl BytecodeGenerator
                     let break_index = self.chunk.push_opcode(OpCode::Jump, line);
                     self.chunk.push_operands(self.last_loop_start.to_vm_byte(), line);
                 }
-                self.chunk.code_idx
+                handled_result.index = self.chunk.code_idx;
+                handled_result
             },
             _ => unreachable!(),
         }
     }
 
-    fn handle_expr(&mut self, expr: Expr, line: usize) -> usize
+    fn handle_expr(&mut self, expr: Expr, line: usize) -> ExpressionHandleResult
     {
+        let mut handled_result = ExpressionHandleResult {
+            line: line,
+            index: 0,
+            _type: Type::Null
+        };
         match expr
         {
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
-                self.chunk.push_opcode(if 0 < self.current_block { OpCode::LoadLocal } else { OpCode::LoadGlobal }, line);
-                self.chunk.push_operands(name.to_vm_byte(), line)
+                if 0 < self.current_block
+                {
+                    let is_exist = self.current_define
+                                    .iter()
+                                    .position(|&x| x.1 == name);
+
+                    if is_exist.is_none()
+                    {
+                        panic!("Undefined Variable");
+                    }
+
+                    let mut index = 0;
+                    let (_type, _) = {
+                        index = is_exist.unwrap();
+                        self.current_define.get(index).unwrap()
+                    };
+
+                    let opcode = match _type
+                    {
+                        &Type::Int     => OpCode::ILoad,
+                        &Type::Float   => OpCode::FLoad,
+                        &Type::Str     => OpCode::SLoad,
+                        &Type::Boolean => OpCode::BLoad,
+                    };
+                    self.chunk.push_opcode(opcode, line);
+                    handled_result.index = self.chunk.push_operand(index as u8, line);
+                }
+                else
+                {
+                    self.chunk.push_opcode(OpCode::GlobalLoad, line);
+                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                }
+                handled_result
             },
             Expr::Literal(literal) => {
                 // TODO: handle it without making a clone.
@@ -447,35 +586,41 @@ impl BytecodeGenerator
                     Value::Boolean(boolean) => {
                         let index = self.chunk.write_const(boolean, line);
                         self.chunk._data_type.insert(index, Type::Boolean);
-                        index
+                        handled_result.index = index;
+                        handled_result._type = Type::Boolean;
                     },
                     Value::Int(int) => {
                         let index = self.chunk.write_const(int, line);
-                         self.chunk._data_type.insert(index, Type::Int);
-                        index
+                        self.chunk._data_type.insert(index, Type::Int);
+                        handled_result.index = index;
+                        handled_result._type = Type::Int;
                     },
                     Value::Float(float) => {
                         let index = self.chunk.write_const(float, line);
                         self.chunk._data_type.insert(index, Type::Float);
-                        index
+                        handled_result.index = index;
+                        handled_result._type = Type::Float;
                     },
                     Value::Str(string) => {
                         let index = self.chunk.write_const(string, line);
                         self.chunk._data_type.insert(index, Type::Str);
-                        index
+                        handled_result.index = index;
+                        handled_result._type = Type::Str;
                     },
                     Value::Null => {
                         let index = self.chunk.write_null(line);
-                        index
+                        handled_result.index = index;
+                        handled_result._type = Type::Null;
                     },
                     _=> unreachable!(),
-                }
+                };
+                handled_result
             },
             Expr::Binary(left, right, operator) => {
                 let left = self.handle_expr(*left, line);
                 let right = self.handle_expr(*right, line);
 
-                match operator.tokentype
+                handled_result.index = match operator.tokentype
                 {
                     TokenType::Plus       => self.chunk.push_opcode(OpCode::Add, line),
                     TokenType::Minus      => self.chunk.push_opcode(OpCode::Sub, line),
@@ -493,36 +638,77 @@ impl BytecodeGenerator
                     TokenType::Less       => self.chunk.push_opcode(OpCode::Less, line),
                     TokenType::More       => self.chunk.push_opcode(OpCode::More, line),
                     _ => unreachable!(),
-                }
+                };
+                handled_result
             },
             Expr::Logical(left, right, operator) =>
             {
                 self.handle_expr(*left, line);
                 self.handle_expr(*right, line);
 
-                match operator.tokentype
+                handled_result.index = match operator.tokentype
                 {
                     TokenType::And => self.chunk.push_opcode(OpCode::And, line),
                     TokenType::Or => self.chunk.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
-                }
+                };
+                handled_result._type = Type::Boolean;
+                handled_result
             },
             Expr::Unary(expr, operator) =>
             {
-                self.handle_expr(*expr, line);
-                match operator.tokentype
+                let another_result = self.handle_expr(*expr, line);
+                handled_result.index = match operator.tokentype
                 {
                     TokenType::Bang => self.chunk.push_opcode(OpCode::Not, line),
                     TokenType::Minus => self.chunk.push_opcode(OpCode::Neg, line),
                     _ => unreachable!(),
-                }
+                };
+                handled_result._type = another_result._type;
+                handled_result
             },
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) =>
             {
-                self.handle_expr(*expr, line);
-                self.chunk.push_opcode(if 0 < self.current_block { OpCode::StoreLocal } else { OpCode::StoreGlobal }, line);
-                self.chunk.push_operands(name.to_vm_byte(), line)
+                let another_result = self.handle_expr(*expr, line);
+                if 0 < self.current_block 
+                {
+                    let is_exist = self.current_define
+                                    .iter()
+                                    .position(|&x| x.1 == name);
+
+                    if is_exist.is_none()
+                    {
+                        panic!("Undefined Variable");
+                    }
+
+                    let mut index = 0;
+                    let (declared_type, _) = {
+                        index = is_exist.unwrap();
+                        self.current_define.get(index).unwrap()
+                    };
+
+                    if declared_type != &another_result._type
+                    {
+                        panic!("Type Mismatch when Assigning");
+                    }
+
+                    let opcode = match another_result._type
+                    {
+                        Type::Boolean => OpCode::BStore,
+                        Type::Int     => OpCode::IStore,
+                        Type::Str     => OpCode::SStore,
+                        Type::Float   => OpCode::FStore,
+                    };
+                    self.chunk.push_opcode(opcode, line);
+                    handled_result.index = self.chunk.push_operand(index as u8, line);
+                }
+                else
+                {
+                    self.chunk.push_opcode(OpCode::GlobalStore, line);
+                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                }
+                handled_result
             },
             _ => unreachable!(),
         }
@@ -833,7 +1019,7 @@ impl VirtualMachine
                     self.variable.leave_block();
                     current += 1;
                 },
-                OpCode::Define => {
+                OpCode::GlobalDefine => {
                     // println!("Current: {:?}", self.stack);
                     let value = self.stack.pop().unwrap();
 
@@ -846,25 +1032,7 @@ impl VirtualMachine
                     self.variable.define(identifier, actual_type, value);
                     current += 4;
                 },
-                OpCode::StoreGlobal => {
-                    let new_value = self.stack.pop().unwrap();
-                    let operand_one = self.code.code_chunk[current + 1];
-                    let operand_two = self.code.code_chunk[current + 2];
-                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-
-                    self.variable.assign_global(identifier, new_value);
-                    current += 3;
-                },
-                OpCode::StoreLocal => {
-                    let new_value = self.stack.pop().unwrap();
-                    let operand_one = self.code.code_chunk[current + 1];
-                    let operand_two = self.code.code_chunk[current + 2];
-                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-
-                    self.variable.assign(identifier, new_value);
-                    current += 3;
-                },
-                OpCode::LoadGlobal => {
+                OpCode::GlobalLoad => {
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
@@ -873,7 +1041,7 @@ impl VirtualMachine
                     self.stack.push(value.clone());
                     current += 3;
                 },
-                OpCode::LoadLocal => {
+                OpCode::GlobalStore => {
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);

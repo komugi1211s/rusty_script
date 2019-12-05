@@ -12,8 +12,6 @@ pub trait Visitor<T>
     fn visit(&mut self, t: &T) -> Self::Result;
 }
 
-
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr
 {
@@ -27,7 +25,6 @@ pub enum Expr
     Unary(Box<Expr>, Token),  
     Variable(u16),
 }
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement

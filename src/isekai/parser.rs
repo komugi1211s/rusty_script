@@ -184,8 +184,9 @@ impl Parser
         // self.current + 3 = equal
         // self.current + 4 = value
         //
-        let x = self.get_current();
-        if TokenType::is_typekind(&x.tokentype)
+        // if TokenType::is_typekind(&x.tokentype)
+        if self.is(TokenType::Iden) &&
+        self.is_next(TokenType::Colon)
         {
             return self.declare_variable();
         }
@@ -195,15 +196,26 @@ impl Parser
 
     fn get_variable_type_and_identifier(&mut self) -> (Type, String)
     {
-        let _type = self.advance();
-        let mut _type = Type::from_tokentype(&_type.tokentype);
+        let identity = self.get_previous();
+        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
+        let type_token = self.advance();
+
+        let mut _type = if TokenType::is_typekind(&type_token.tokentype)
+        {
+            Type::from_tokentype(&type_token.tokentype)
+        }
+        else
+        {
+            Type::Any
+        };
+
         if self.is(TokenType::Question)
         {
             self.advance();
             _type.insert(Type::Null);
         }
 
-        let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
+        // let should_be_colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
         let possible_iden = self.advance();
 
         if TokenType::Iden != possible_iden.tokentype
@@ -221,7 +233,7 @@ impl Parser
         let mut arguments: Vec<DeclarationData> = Vec::new();
 
 
-        while TokenType::is_typekind(&self.get_current().tokentype)
+        while self.is(TokenType::Iden)
         {
             let (_type, iden) = self.get_variable_type_and_identifier();
             let mut builder = DeclarationDataBuilder::new()
@@ -512,9 +524,34 @@ impl Parser
             self.get_current().tokentype == _type)
     }
 
+    fn is_next(&self, _type: TokenType) -> bool
+    {
+        (!self.is_at_end() &&
+            self.get_next().tokentype == _type)
+    }
+
+    fn is_previous(&self, _type: TokenType) -> bool
+    {
+        (!self.is_at_end() &&
+            self.get_previous().tokentype == _type)
+    }
+
     fn get_current(&self) -> &Token
     {
         self.tokens.get(self.current).unwrap()
+    }
+
+    fn get_previous(&self) -> &Token
+    {
+        self.tokens.get(self.current - 1).unwrap()
+    }
+
+    fn get_next(&self) -> &Token
+    {
+        if self.tokens.len() >= self.current + 1 {
+            panic!("Exceeded length");
+        }
+        self.tokens.get(self.current + 1).unwrap()
     }
 
     fn advance(&mut self) -> &Token
