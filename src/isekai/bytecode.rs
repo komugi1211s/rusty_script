@@ -252,14 +252,14 @@ impl ByteChunk
             OpCode::GlobalLoad   => 2,
             OpCode::GlobalStore  => 2,
 
-            OpCode::ILoad => 1,
-            OpCode::FLoad => 1,
-            OpCode::SLoad => 1,
-            OpCode::BLoad => 1,
-            OpCode::IStore => 1,
-            OpCode::FStore => 1,
-            OpCode::SStore => 1,
-            OpCode::BStore => 1,
+            OpCode::ILoad  => 2,
+            OpCode::FLoad  => 2,
+            OpCode::SLoad  => 2,
+            OpCode::BLoad  => 2,
+            OpCode::IStore => 2,
+            OpCode::FStore => 2,
+            OpCode::SStore => 2,
+            OpCode::BStore => 2,
             _ => 0
         }
     }
@@ -267,22 +267,25 @@ impl ByteChunk
 
 
 
+type Local = (Type, u16);
 #[derive(Debug)]
 pub struct BytecodeGenerator
 {
     pub chunk: ByteChunk,
-    pub current_define: Vec<(Type, u16)>,
+    pub current_define: Vec<Local>,
     pub last_loop_start: usize,
     current_block: usize,
     pub break_call: Vec<usize>,
 }
 
+#[derive(Debug)]
 struct StatementHandleResult
 {
     index: usize,
     line: usize,
 }
 
+#[derive(Debug)]
 struct ExpressionHandleResult
 {
     index: usize,
@@ -336,28 +339,32 @@ impl BytecodeGenerator
 
                 let name = declaration_info.name_u16;
                 let mut declared_type = declaration_info._type;
+                let mut empty_expr = false;
+                println!("Declaration: {:?}", &declaration_info);
 
                 match declaration_info.expr {
                     Some(expression) => { 
                         let expr_handle_result = self.handle_expr(expression, line);
+                        println!("Declaration_Expr: {:?}", &expr_handle_result);
                         value_index = expr_handle_result.index;
                         actual_type = expr_handle_result._type;
                     },
                     None             => {
+                        empty_expr = true;
                         value_index = self.chunk.write_null(line)
                     },
                 };
 
                 if actual_type == Type::Null
                 {
-                    if !declared_type.is_nullable()
-                    {
-                        panic!("an attempt to initialize non-nullable variable with null");
-                    }
-
                     if declared_type.is_any()
                     {
                         panic!("You cannot initialize Any type with null");
+                    }
+
+                    if !declared_type.is_nullable()
+                    {
+                        panic!("an attempt to initialize non-nullable variable with null");
                     }
                 }
                 else
@@ -386,10 +393,6 @@ impl BytecodeGenerator
                 // let index = self.chunk.write_const(name);
                 if self.current_block > 0
                 {
-                    if self.current_define.len() > 254
-                    {
-                        panic!("You cannot have more than 255 local variables");
-                    }
                     let opcode = match declared_type
                     {
                         Type::Int     => OpCode::IStore,
@@ -398,10 +401,10 @@ impl BytecodeGenerator
                         Type::Str     => OpCode::SStore,
                         _ => panic!("Unsupported opcode for here"),
                     };
-                    let operands = position as u8;
+                    let operands = position as u16;
 
                     self.chunk.push_opcode(opcode, line);
-                    handled_result.index = self.chunk.push_operand(operands, line);
+                    handled_result.index = self.chunk.push_operands(operands.to_vm_byte(), line);
                 }
                 else
                 {
@@ -555,7 +558,6 @@ impl BytecodeGenerator
                     if is_exist.is_none()
                     {
                         // panic!("Undefined Variable");
-
                         // it could be a global variable;
                         self.chunk.push_opcode(OpCode::GlobalLoad, line);
                         handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
@@ -567,6 +569,7 @@ impl BytecodeGenerator
                         index = is_exist.unwrap();
                         self.current_define.get(index).unwrap()
                     };
+                    let index = index as u16;
 
                     let opcode = match _type
                     {
@@ -577,7 +580,7 @@ impl BytecodeGenerator
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
-                    handled_result.index = self.chunk.push_operand(index as u8, line);
+                    handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 }
                 else
                 {
@@ -710,6 +713,7 @@ impl BytecodeGenerator
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
+                    handled_result._type = *declared_type; 
                     handled_result.index = self.chunk.push_operand(index as u8, line);
                 }
                 else
@@ -772,6 +776,7 @@ impl Environment
         self.current -= 1;
         (self.current, self.values.pop().unwrap())
     }
+
     pub fn is_toplevel(&self) -> bool
     {
         self.current == 0
@@ -1030,8 +1035,6 @@ impl VirtualMachine
                 OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad  => {
                     current += 1;
                     let index = self.stack_pointer + self.code.code_chunk[current] as usize;
-                    println!("stack_pointer: {}", self.stack_pointer);
-                    println!("{}", index);
                     let data = self.stack[index].clone();
                     self.stack.push(data);
                     current += 1;
@@ -1041,15 +1044,14 @@ impl VirtualMachine
                     current = index;
                 },
                 OpCode::BlockIn  => {
-                    println!("Current Stack length: {}", self.stack.len());
-                    stack_pointer_stack.push(self.stack.len());
+                    stack_pointer_stack.push(self.stack_pointer);
                     self.stack_pointer = self.stack.len();
                     current += 1;
                 },
                 OpCode::BlockOut => {
+                    self.stack.truncate(self.stack_pointer);
                     let index = stack_pointer_stack.pop().unwrap();
                     self.stack_pointer = index;
-                    self.stack.truncate(index);
                     current += 1;
                 },
                 OpCode::GlobalDefine => {
