@@ -1,6 +1,6 @@
 
 use super::{
-    types::{ Value, Type },
+    types::{ Constant, Type },
     token::{ TokenType, Token },
     parse::{ 
         ParserNode,
@@ -164,7 +164,7 @@ impl Parser
 
     fn return_statement(&mut self) -> Statement
     {
-        let mut result = Expr::Literal(Value::Null);
+        let mut result = Expr::Literal(Constant::null());
         if !self.is(TokenType::SemiColon)
         {
             result = self.expression();
@@ -246,13 +246,13 @@ impl Parser
                 },
                 TokenType::Comma =>
                 {
-                    let data = builder.setexpr(Expr::Literal(Value::Null)).build();
+                    let data = builder.setexpr(Expr::Literal(Constant::null())).build();
                     arguments.push(data);
                     continue;
                 },
                 TokenType::CloseParen =>
                 { 
-                    let data = builder.setexpr(Expr::Literal(Value::Null)).build();
+                    let data = builder.setexpr(Expr::Literal(Constant::null())).build();
                     arguments.push(data);
                     return arguments;
                 },
@@ -553,18 +553,18 @@ impl Parser
         let result = match &inside.tokentype
         {
             False => {
-                Expr::Literal(Value::Boolean(false))
+                Expr::Literal(false.into())
             },
             True => 
             {
-                Expr::Literal(Value::Boolean(true))
+                Expr::Literal(true.into())
             },
             Null =>
             {
                 // TODO:
                 // This is a bug.
                 // once something gets initialized with Null, that variable becomes "Any" type.
-                Expr::Literal(Value::Null)
+                Expr::Literal(Constant::null())
             },
             Digit => {
 
@@ -574,12 +574,12 @@ impl Parser
                     checking if the digit is int or not by using this method(trunc) is dangerous
                 */
                 match inside.lexeme.parse::<i64>() {
-                    Ok(n) => Expr::Literal(Value::Int(n)),
-                    Err(_) => Expr::Literal(Value::Float(inside.lexeme.parse::<f64>().unwrap()))
+                    Ok(n) => Expr::Literal(n.into()),
+                    Err(_) => Expr::Literal(inside.lexeme.parse::<f64>().unwrap().into())
                 }
             },
             Str => {
-                Expr::Literal(Value::Str(inside.lexeme.to_string()))
+                Expr::Literal(inside.lexeme.to_string().into())
             },
             Iden => {
                 if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
@@ -599,14 +599,7 @@ impl Parser
             },
             s => 
             {
-                if TokenType::is_typekind(s)
-                {
-                    Expr::Literal(Value::Type(Type::from_tokentype(s)))
-                }
-                else
-                {
-                    unreachable!("ParserError: while Handling Primary: Token {:?}", inside);
-                }
+                unreachable!("ParserError: while Handling Primary: Token {:?}", inside);
             },
         };
 

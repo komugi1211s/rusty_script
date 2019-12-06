@@ -1,5 +1,5 @@
 
-use super::types::{ Type, Value, OpCode, toVmByte };
+use super::types::{ Type, Value, Constant, OpCode, toVmByte };
 use super::parse::{ Statement, Expr, ParserNode, DeclarationData, BlockData };
 use super::token::{ Token, TokenType };
 use std::mem;
@@ -75,12 +75,10 @@ impl ByteChunk
         self.code_idx
     }
 
-    fn write_const<T>(&mut self, value: T, line: usize) -> usize
-        where
-            T: toVmByte
+    fn write_const(&mut self, constant: Constant, line: usize) -> usize
     {
-        let opcode = value.sufficient_opcode();
-        let value = value.to_vm_byte();
+        let opcode = constant.code;
+        let value = constant.value;
         let length = value.len();
 
         let start_index = if opcode == OpCode::ConstDyn
@@ -248,9 +246,14 @@ impl ByteChunk
 
             OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
 
-            OpCode::GlobalDefine => 3,
-            OpCode::GlobalLoad   => 2,
-            OpCode::GlobalStore  => 2,
+            OpCode::GILoad  => 2,
+            OpCode::GFLoad  => 2,
+            OpCode::GSLoad  => 2,
+            OpCode::GBLoad  => 2,
+            OpCode::GIStore => 2,
+            OpCode::GFStore => 2,
+            OpCode::GSStore => 2,
+            OpCode::GBStore => 2,
 
             OpCode::ILoad  => 2,
             OpCode::FLoad  => 2,
@@ -272,6 +275,7 @@ type Local = (Type, u16);
 pub struct BytecodeGenerator
 {
     pub chunk: ByteChunk,
+    pub global_type: HashMap<u16, Type>,
     pub current_define: Vec<Local>,
     pub last_loop_start: usize,
     current_block: usize,
@@ -299,6 +303,7 @@ impl BytecodeGenerator
     {
         Self {
             chunk: ByteChunk::default(),
+            global_type: HashMap::new(),
             current_define: Vec::new(),
             last_loop_start: usize::max_value(),
             current_block: 0,
@@ -379,20 +384,21 @@ impl BytecodeGenerator
                     }
                 }
 
-                let is_exist = self.current_define
-                                .iter()
-                                .position(|&x| x.1 == name);
-
-                if is_exist.is_some() 
-                { 
-                    panic!("Same Variable Declared TWICE.");
-                }
-
-                self.current_define.push((declared_type, name));
-                let position = self.current_define.len() - 1;
                 // let index = self.chunk.write_const(name);
                 if self.current_block > 0
                 {
+                    let is_exist = self.current_define
+                                    .iter()
+                                    .position(|&x| x.1 == name);
+
+                    if is_exist.is_some() 
+                    { 
+                        panic!("Same Variable Declared TWICE.");
+                    }
+
+                    self.current_define.push((declared_type, name));
+                    let position = self.current_define.len() - 1;
+
                     let opcode = match declared_type
                     {
                         Type::Int     => OpCode::IStore,
@@ -408,10 +414,17 @@ impl BytecodeGenerator
                 }
                 else
                 {
-                    self.chunk.push_opcode(OpCode::GlobalDefine, line);
-                    let name_vector = declaration_info.name_u16.to_vm_byte();
-                    let operands: Vec<u8> = vec![declared_type.bits(), name_vector[0], name_vector[1]];
-                    handled_result.index = self.chunk.push_operands(operands, line);
+                    self.global_type.insert(name, declared_type);
+                    let opcode = match declared_type
+                    {
+                        Type::Int     => OpCode::GIStore,
+                        Type::Float   => OpCode::GFStore,
+                        Type::Boolean => OpCode::GBStore,
+                        Type::Str     => OpCode::GSStore,
+                        _ => panic!("Unsupported opcode for here"),
+                    };
+                    self.chunk.push_opcode(opcode, line);
+                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
                 }
                 handled_result
             },
@@ -457,14 +470,12 @@ impl BytecodeGenerator
             Statement::Block(block_data) =>
             {
                 self.chunk.push_opcode(OpCode::BlockIn, line);
-                let previous_vec = mem::replace(&mut self.current_define, Vec::new());
                 self.current_block += 1;
                 for i in block_data.statements 
                 {
                     self.handle_stmt(i, line);
                 }
                 self.current_block -= 1;
-                let recent_vec = mem::replace(&mut self.current_define, previous_vec);
                 handled_result.index = self.chunk.push_opcode(OpCode::BlockOut, line);
                 handled_result
             },
@@ -549,84 +560,64 @@ impl BytecodeGenerator
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
-                if 0 < self.current_block
-                {
-                    let is_exist = self.current_define
-                                    .iter()
-                                    .position(|&x| x.1 == name);
+                let is_exist = self.current_define
+                                .iter()
+                                .position(|&x| x.1 == name);
 
-                    if is_exist.is_none()
+                if is_exist.is_none()
+                {
+                    // it could be a global variable;
+                    if !self.global_type.contains_key(&name)
                     {
-                        // panic!("Undefined Variable");
-                        // it could be a global variable;
-                        self.chunk.push_opcode(OpCode::GlobalLoad, line);
-                        handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
-                        return handled_result;
+                        panic!("Undefined Variable");
                     }
 
-                    let mut index = 0;
-                    let (_type, _) = {
-                        index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap()
-                    };
-                    let index = index as u16;
-
+                    let _type = self.global_type.get(&name).unwrap().clone();
                     let opcode = match _type
                     {
-                        &Type::Int     => OpCode::ILoad,
-                        &Type::Float   => OpCode::FLoad,
-                        &Type::Str     => OpCode::SLoad,
-                        &Type::Boolean => OpCode::BLoad,
+                        Type::Int     => OpCode::GILoad,
+                        Type::Float   => OpCode::GFLoad,
+                        Type::Str     => OpCode::GSLoad,
+                        Type::Boolean => OpCode::GBLoad,
                         _ => unreachable!(),
                     };
+                    handled_result._type = _type;
                     self.chunk.push_opcode(opcode, line);
-                    handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
-                }
-                else
-                {
-                    self.chunk.push_opcode(OpCode::GlobalLoad, line);
                     handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                    return handled_result;
                 }
+
+                let mut index = 0;
+                let (_type, _) = {
+                    index = is_exist.unwrap();
+                    self.current_define.get(index).unwrap().clone()
+                };
+                let index = index as u16;
+                handled_result._type = _type;
+
+                let opcode = match _type
+                {
+                    Type::Int     => OpCode::ILoad,
+                    Type::Float   => OpCode::FLoad,
+                    Type::Str     => OpCode::SLoad,
+                    Type::Boolean => OpCode::BLoad,
+                    _ => unreachable!(),
+                };
+                self.chunk.push_opcode(opcode, line);
+                handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 handled_result
             },
             Expr::Literal(literal) => {
                 // TODO: handle it without making a clone.
                 // self.stack.push(literal);
-                match literal
-                {
-                    Value::Boolean(boolean) => {
-                        let index = self.chunk.write_const(boolean, line);
-                        self.chunk._data_type.insert(index, Type::Boolean);
-                        handled_result.index = index;
-                        handled_result._type = Type::Boolean;
-                    },
-                    Value::Int(int) => {
-                        let index = self.chunk.write_const(int, line);
-                        self.chunk._data_type.insert(index, Type::Int);
-                        handled_result.index = index;
-                        handled_result._type = Type::Int;
-                    },
-                    Value::Float(float) => {
-                        let index = self.chunk.write_const(float, line);
-                        self.chunk._data_type.insert(index, Type::Float);
-                        handled_result.index = index;
-                        handled_result._type = Type::Float;
-                    },
-                    Value::Str(string) => {
-                        let index = self.chunk.write_const(string, line);
-                        self.chunk._data_type.insert(index, Type::Str);
-                        handled_result.index = index;
-                        handled_result._type = Type::Str;
-                    },
-                    Value::Null => {
-                        let index = self.chunk.write_null(line);
-                        handled_result.index = index;
-                        handled_result._type = Type::Null;
-                    },
-                    _=> unreachable!(),
-                };
-                handled_result
+                let _type = literal.ctype;
+                let index = self.chunk.write_const(literal, line);
+                self.chunk._data_type.insert(index, _type.clone());
+                handled_result.index = index;
+                handled_result._type = _type.clone();
+                return handled_result;
             },
+
             Expr::Binary(left, right, operator) => {
                 let left = self.handle_expr(*left, line);
                 let right = self.handle_expr(*right, line);
@@ -690,16 +681,36 @@ impl BytecodeGenerator
 
                     if is_exist.is_none()
                     {
-                        panic!("Undefined Variable");
+                        if !self.global_type.contains_key(&name)
+                        {
+                            panic!("Undefined Variable");
+                        }
+
+                        let _type = self.global_type.get(&name).unwrap().clone();
+                        if &_type != &another_result._type
+                        {
+                            panic!("Type Mismatch when Assigning");
+                        }
+                        let opcode = match another_result._type
+                        {
+                            Type::Boolean => OpCode::GBStore,
+                            Type::Int     => OpCode::GIStore,
+                            Type::Str     => OpCode::GSStore,
+                            Type::Float   => OpCode::GFStore,
+                            _ => unreachable!(),
+                        };
+                        self.chunk.push_opcode(opcode, line);
+                        handled_result._type = _type; 
+                        handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
                     }
 
                     let mut index = 0;
                     let (declared_type, _) = {
                         index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap()
+                        self.current_define.get(index).unwrap().clone()
                     };
 
-                    if declared_type != &another_result._type
+                    if &declared_type != &another_result._type
                     {
                         panic!("Type Mismatch when Assigning");
                     }
@@ -713,13 +724,8 @@ impl BytecodeGenerator
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
-                    handled_result._type = *declared_type; 
-                    handled_result.index = self.chunk.push_operand(index as u8, line);
-                }
-                else
-                {
-                    self.chunk.push_opcode(OpCode::GlobalStore, line);
-                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                    handled_result._type = declared_type; 
+                    handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 }
                 handled_result
             },
@@ -728,168 +734,15 @@ impl BytecodeGenerator
     }
 }
 
-type EnvHashMap = HashMap<u16, (Type, Value)>;
-#[derive(Debug)]
-pub struct Environment 
-{
-    pub values: Vec<EnvHashMap>,
-    pub current: usize,
-}
-
-impl Environment 
-{
-    pub fn new() -> Self
-    {
-        Self {
-            values: vec![HashMap::new()],
-            current: 0,
-        }
-    }
-
-    pub fn connect(&mut self, env: Environment) -> usize
-    {
-        for i in env.values
-        {
-            self.values.push(i);
-            self.current += 1;
-        }
-        self.current
-    }
-
-    // pub fn define_function(&mut self, func: Value)
-    // {
-    //     if Value::Callable(x) = &func
-    //     {
-    //         if !x.retType.is_compatible(
-    //     }
-    // }
-    //
-    pub fn enter_block(&mut self) -> usize
-    {
-        self.values.push(HashMap::new());
-        self.current += 1;
-        self.current
-    }
-
-    pub fn leave_block(&mut self) -> (usize, EnvHashMap)
-    {
-        self.current -= 1;
-        (self.current, self.values.pop().unwrap())
-    }
-
-    pub fn is_toplevel(&self) -> bool
-    {
-        self.current == 0
-    }
-
-    pub fn define(&mut self, name: u16, _type: Type, value: Value)
-    {
-        if !_type.is_compatible(&value)
-        {
-            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", _type, name, value.to_type());
-        }
-        let exist_key = self.exist(name);
-        if let Some(key) = exist_key 
-        {
-            if key == self.current
-            {
-                let declared = self.values[key].get(&name).unwrap();
-                if declared.0.is_compatible(&value)
-                {
-                    unreachable!("Variable Declared Twice - Use an assignment instead.");
-                }
-            }
-        }
-        self.values[self.current].insert(name, (_type, value));
-    }
-
-    pub fn assign(&mut self, name: u16, new_value: Value)
-    {
-        let exist_key = self.exist(name);
-        if exist_key.is_none() {
-            panic!("Undefined Variable {}", name);
-        }
-        let exist_key = exist_key.unwrap();
-
-        let (c_type, v) = self.values[exist_key].get(&name).unwrap();
-        let c_type = c_type.clone();
-        if !c_type.is_compatible(&new_value)
-        {
-            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", c_type, name, new_value.to_type());
-        }
-            
-        self.values[exist_key].insert(name, (c_type, new_value));
-    }
-
-    pub fn assign_global(&mut self, name: u16, new_value: Value)
-    {
-        if !self.values[0].contains_key(&name)
-        {
-            panic!("Undefined Variable {}", name);
-        }
-
-        let (c_type, value) = self.values[0].get(&name).unwrap();
-        let c_type = c_type.clone();
-        if !c_type.is_compatible(&new_value)
-        {
-            unreachable!("Mismatched Type and Value: {:?}: {} = {:?}", c_type, name, new_value.to_type());
-        }
-            
-        self.values[0].insert(name, (c_type, new_value));
-    }
-
-    pub fn exist(&self, name: u16) -> Option<usize>
-    {
-        let mut counter = self.current;
-        while !self.values[counter].contains_key(&name)
-        {
-            if counter <= 0
-            {
-                return None;
-            }
-            counter -= 1;
-        }
-        Some(counter)
-    }
-
-    pub fn get(&self, name: u16) -> &Value
-    {
-        let exist_key = self.exist(name);
-        if exist_key.is_none() {
-            panic!("Undefined Variable {}", name);
-        }
-
-        let (_, x) = self.values[exist_key.unwrap()].get(&name).unwrap();
-        if x.is_same_type(&Value::Null)
-        {
-            unreachable!("Use of an uninitialized variable: {}", name);
-        }
-        x
-    }
-
-    pub fn get_global(&self, name: u16) -> &Value
-    {
-        if !self.values[0].contains_key(&name)
-        {
-            panic!("Undefined Variable {}", name);
-        }
-
-        let (_, x) = self.values[0].get(&name).unwrap();
-        if x.is_same_type(&Value::Null)
-        {
-            unreachable!("Use of an uninitialized variable: {}", name);
-        }
-        x
-    }
-}
+type GlobalMap = HashMap<u16, Constant>;
 
 #[derive(Debug)]
 pub struct VirtualMachine
 {
-    pub stack: Vec<Value>,
+    pub stack: Vec<Constant>,
     pub stack_pointer: usize,
     pub code: ByteChunk,
-    pub variable: Environment,
+    pub globals: GlobalMap,
     pub last_op: OpCode,
 }
 
@@ -901,7 +754,7 @@ impl VirtualMachine
             stack: Vec::new(),
             stack_pointer: 0,
             code,
-            variable: Environment::new(),
+            globals: GlobalMap::new(),
             last_op: OpCode::Interrupt,
         }
     }
@@ -916,9 +769,9 @@ impl VirtualMachine
         {
             let current_operation = OpCode::from_u8(self.code.code_chunk[current]).unwrap();
             let current_line = self.code.code_line[current];
-            println!("OpCode: {:?}", current_operation);
-            println!("Current Stack: {:?}", self.stack);
-            println!("Current Environment: {:?}", self.variable);
+            // println!("OpCode: {:?}", current_operation);
+            // println!("Current Stack: {:?}", self.stack);
+            // println!("Current Environment: {:?}", self.globals);
 
             match current_operation 
             {
@@ -985,14 +838,14 @@ impl VirtualMachine
                 OpCode::Const8 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     let value = self.code.read_data_8(index);
-                    self.stack.push(Value::Boolean(value != 0));
+                    self.stack.push((value != 0).into());
                     current = new_end;
                 },
                 OpCode::ConstPtr => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     if index == 0 // Null Pointer
                     {
-                        self.stack.push(Value::Null);
+                        self.stack.push(Constant::null());
                     }
                     current = new_end;
                 },
@@ -1002,8 +855,8 @@ impl VirtualMachine
                     // GET_TYPE
                     self.stack.push(match self.code._data_type.get(&index).unwrap()
                     {
-                        &Type::Int => Value::Int(i64::from_ne_bytes(value)),
-                        &Type::Float => Value::Float(f64::from_bits(u64::from_ne_bytes(value))),
+                        &Type::Int => i64::from_ne_bytes(value).into(),
+                        &Type::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
                         _ => unreachable!(),
                     });
                     current = new_end;
@@ -1027,17 +880,21 @@ impl VirtualMachine
 
                 OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
                     current += 1;
-                    let index = self.stack_pointer + self.code.code_chunk[current] as usize;
+                    let indone = self.code.code_chunk[current];
+                    let indtwo = self.code.code_chunk[current + 1];
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
                     let value = self.stack.last().unwrap().clone();
                     self.stack[index] = value;
-                    current += 1;
+                    current += 2;
                 },
                 OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad  => {
                     current += 1;
-                    let index = self.stack_pointer + self.code.code_chunk[current] as usize;
+                    let indone = self.code.code_chunk[current];
+                    let indtwo = self.code.code_chunk[current + 1];
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
                     let data = self.stack[index].clone();
                     self.stack.push(data);
-                    current += 1;
+                    current += 2;
                 },
                 OpCode::Jump => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
@@ -1054,35 +911,22 @@ impl VirtualMachine
                     self.stack_pointer = index;
                     current += 1;
                 },
-                OpCode::GlobalDefine => {
-                    // println!("Current: {:?}", self.stack);
-                    let value = self.stack.pop().unwrap();
-
-                    let type_operand = self.code.code_chunk[current + 1];
-                    let actual_type = Type::from_bits(type_operand).unwrap();
-
-                    let u16_one = self.code.code_chunk[current + 2];
-                    let u16_two = self.code.code_chunk[current + 3];
-                    let identifier = u16::from_ne_bytes([u16_one, u16_two]);
-                    self.variable.define(identifier, actual_type, value);
-                    current += 4;
-                },
-                OpCode::GlobalLoad => {
+                OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad  => {
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
-                    let value = self.variable.get_global(identifier);
+                    let value = self.globals.get(&identifier).unwrap();
                     self.stack.push(value.clone());
                     current += 3;
                 },
-                OpCode::GlobalStore => {
+                OpCode::GBStore | OpCode::GIStore | OpCode::GFStore | OpCode::GSStore => {
                     let operand_one = self.code.code_chunk[current + 1];
                     let operand_two = self.code.code_chunk[current + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
-                    let value = self.variable.get(identifier);
-                    self.stack.push(value.clone());
+                    let data = self.stack.pop().unwrap();
+                    let value = self.globals.insert(identifier, data);
                     current += 3;
                 },
                 OpCode::DebugPrint => {

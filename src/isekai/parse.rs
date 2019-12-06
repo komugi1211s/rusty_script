@@ -2,7 +2,7 @@
 use bitflags;
 
 use std::fmt;
-use super::types::{ Value, Type };
+use super::types::{ Value, Type, Constant };
 use super::token::{ Token, TokenType };
 
 // TODO: REMOVE CLONE 
@@ -12,7 +12,7 @@ pub trait Visitor<T>
     fn visit(&mut self, t: &T) -> Self::Result;
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
@@ -20,13 +20,13 @@ pub enum Expr
     FunctionCall(Box<Expr>, Token, Vec<Expr>),
     Assign(u16, Box<Expr>),
 
-    Literal(Value),
+    Literal(Constant),
     Grouping(Box<Expr>),
     Unary(Box<Expr>, Token),  
     Variable(u16),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Statement
 {
     // DebugPrint
@@ -45,25 +45,7 @@ pub enum Statement
     Empty,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Either<A, B> {
-    Left(A),
-    Right(B),
-    Neither
-}
-
-impl<a, b> Either<a, b> {
-    pub fn is_neither(&self) -> bool
-    {
-        match self
-        {
-            Self::Neither => true,
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct DeclarationData
 {
     pub name:  String,
@@ -122,14 +104,14 @@ impl DeclarationDataBuilder
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct BlockData
 {
     pub local_count: usize,
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct ParserNode
 {
     pub line: usize,
@@ -156,7 +138,7 @@ impl fmt::Display for Expr {
             Expr::Binary(ref left, ref right, ref token) => write!(f, "{} {} {}", left, right, token),
             Expr::Logical(ref left, ref right, ref token) => write!(f, "{} {} {}", left, right, token),
             Expr::Grouping(ref inside) => write!(f, "({})", inside),
-            Expr::Literal(ref lit) => write!(f, "{}", lit),
+            Expr::Literal(ref lit) => write!(f, "{:?}", lit),
             Expr::Unary(ref item, ref t) => write!(f, "{}{}", t, item),
             Expr::Variable(ref s) => write!(f, "{}", s),
             Expr::Assign(s, ex) => write!(f, "{} = {}", s, ex),

@@ -57,10 +57,15 @@ pub enum OpCode
     Jump           = 0b01010000,
     JumpIfFalse    = 0b01010010,
 
-    // Data        = 0b01100000,
-    GlobalDefine   = 0b01100001,  // Type 名前のu16(1) 名前のu16(2) の3つのオペランドを取る
-    GlobalLoad     = 0b01100010,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GlobalStore    = 0b01100011,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    // Globals = 0b01100000,
+    GILoad     = 0b01100001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GIStore    = 0b01100010,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GFLoad     = 0b01100011,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GFStore    = 0b01100100,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GSLoad     = 0b01100101,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GSStore    = 0b01100110,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GBLoad     = 0b01100111,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GBStore    = 0b01101000,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
     
     // Locals      = 0b01110000,
     ILoad          = 0b01110001, // index(u16 - u8 + u8) の2つのオペランドを取る
@@ -215,26 +220,11 @@ impl Type
             else {
                 self.contains(v.to_type())
             }
-            // match self
-            // {
-            //     Type::Int     => v.to_type().contains(Type::Int),
-            //     Type::Boolean => v.to_type().contains(Type::Boolean),
-            //     Type::Str     => v.to_type().contains(Type::Str),
-            //     Type::Float   => v.to_type().contains(Type::Float),
-            //     Type::Type    => if let Value::Type(_) = v { true } else { false },
-            //     Type::Any     => true,
-            //     Type::Null    => {
-            //         self.remove(Type::Null);
-            //         self.is_compatible(v)
-            //     },
-            //     _ => false,
-            // }
         }
     }
 }
 
 /*
-
     TODO:
     ValueをここでEnumとして実装するより、trait Valueを作って各型に実装し、
     Box<dyn Value>でトレイトオブジェクトで取り回した方が良いのかな…と思った
@@ -280,6 +270,42 @@ impl From<bool> for Type
     fn from(_: bool) -> Self
     { Type::Boolean }
 }
+
+#[derive(Debug, Clone)]
+pub struct Constant
+{
+    pub ctype: Type,
+    pub value: Vec<u8>,
+    pub code: OpCode,
+}
+
+impl Constant
+{
+    pub fn null() -> Self
+    {
+        Self
+        {
+            ctype: Type::Null,
+            value: vec![],
+            code: OpCode::ConstPtr,
+        }
+    }
+}
+
+impl<T> From<T> for Constant
+where T:
+    toVmByte + Into<Type> + Clone
+{
+    fn from(t: T) -> Self
+    {
+        Self {
+            ctype: t.clone().into(),
+            value: t.to_vm_byte(),
+            code: t.sufficient_opcode()
+        }
+    }
+}
+
 
 impl From<i64> for Value 
 {
