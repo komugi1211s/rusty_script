@@ -86,6 +86,7 @@ pub enum OpCode
 pub trait toVmByte
 {
     fn to_vm_byte(&self) -> Vec<u8>;
+    fn from_vm_byte(t: Vec<u8>) -> Self;
     fn sufficient_opcode(&self) -> OpCode;
 }
 
@@ -94,6 +95,10 @@ impl toVmByte for u16
     fn to_vm_byte(&self) -> Vec<u8>
     {
         self.to_ne_bytes().iter().cloned().collect()
+    }
+    fn from_vm_byte(bytes: Vec<u8>) -> u16
+    {
+        u16::from_ne_bytes(bytes)
     }
     fn sufficient_opcode(&self) -> OpCode
     {
@@ -107,6 +112,10 @@ impl toVmByte for i64
     {
         self.to_ne_bytes().iter().cloned().collect()
     }
+    fn from_vm_byte(bytes: Vec<u8>) -> i64
+    {
+        Self::from_ne_bytes(bytes)
+    }
     fn sufficient_opcode(&self) -> OpCode
     {
         OpCode::Const64
@@ -118,6 +127,10 @@ impl toVmByte for f64
     fn to_vm_byte(&self) -> Vec<u8>
     {
         self.to_bits().to_ne_bytes().iter().cloned().collect()
+    }
+    fn from_vm_byte(bytes: Vec<u8>) -> f64
+    {
+        Self::from_bits(u64::from_ne_bytes(bytes))
     }
 
     fn sufficient_opcode(&self) -> OpCode
@@ -132,7 +145,11 @@ impl toVmByte for String
     {
         self.clone().into_bytes()
     }
-    
+    fn from_vm_byte(bytes: Vec<u8>) -> String
+    {
+        Self::from_utf8(bytes).unwrap_or(String::new())
+    }
+
     fn sufficient_opcode(&self) -> OpCode
     {
         OpCode::ConstDyn
@@ -144,6 +161,11 @@ impl toVmByte for bool
     fn to_vm_byte(&self) -> Vec<u8>
     {
         vec![*self as u8]
+    }
+    fn from_vm_byte(bytes: Vec<u8>) -> Self
+    {
+        let x = bytes[0];
+        x != 0
     }
     fn sufficient_opcode(&self) -> OpCode
     {
@@ -157,7 +179,10 @@ impl toVmByte for usize
     {
         self.to_ne_bytes().iter().cloned().collect()
     }
-
+    fn from_vm_byte(bytes: Vec<u8>) -> Self
+    {
+        Self::from_ne_bytes(bytes)
+    }
     fn sufficient_opcode(&self) -> OpCode
     {
         OpCode::Interrupt
@@ -306,12 +331,229 @@ where T:
     }
 }
 
+impl ops::Add<Constant> for Constant
+{
+    type Output = Constant;
 
-impl From<i64> for Value 
+    fn add(self, other: Constant) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        other.ctype.remove(Type::Null);
+        match self.ctype
+        {
+            Type::Int if other.ctype == Type::Int => {
+                let a: i64 = i64::from_vm_byte(self.value);
+                let b: i64 = i64::from_vm_byte(other.value);
+                return (a + b).into();
+            },
+            Type::Float if other.ctype == Type::Int => {
+                let a: f64 = f64::from_vm_byte(self.value);
+                let b: i64 = i64::from_vm_byte(other.value);
+                return (a + b as f64).into();
+            },
+            Type::Int if other.ctype == Type::Float => {
+                let a: i64 = i64::from_vm_byte(self.value);
+                let b: f64 = f64::from_vm_byte(other.value);
+                return (a as f64 + b).into();
+            },
+            Type::Float if other.ctype == Type::Float => {
+                let a: f64 = f64::from_vm_byte(self.value);
+                let b: f64 = f64::from_vm_byte(other.value);
+                return (a as f64 + b).into();
+            },
+            Type::Str if other.ctype == Type::Str => {
+                let a: String = String::from_vm_byte(self.value);
+                let b: String = String::from_vm_byte(other.value);
+                return format!("{}{}", a, b).into();
+            },
+            _ => unreachable!(),
+        }
+    }
+}
+
+
+impl ops::Sub<Constant> for Constant
+{
+    type Output = Constant;
+    fn sub(self, other: Constant) -> Self
+    {
+        self.ctype.remove(Type::Null);
+        other.ctype.remove(Type::Null);
+        if self.ctype != Type::Float && self.ctype != Type::Int
+        {
+            unreachable!();
+        }
+        if other.ctype != Type::Float && other.ctype != Type::Int
+        {
+            unreachable!();
+        }
+
+        self + -other
+    }
+}
+
+impl ops::Mul<Constant> for Constant
+{
+    type Output = Constant;
+
+    fn mul(self, other: Constant) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        other.ctype.remove(Type::Null);
+        match self.ctype
+            {
+                Type::Int if other.ctype == Type::Int => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a * b).into();
+                },
+                Type::Float if other.ctype == Type::Int => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a * b as f64).into();
+                },
+                Type::Int if other.ctype == Type::Float => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a as f64 * b).into();
+                },
+                Type::Float if other.ctype == Type::Float => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a * b).into();
+                },
+                _ => unreachable!(),
+            }
+    }
+}
+
+impl ops::Div<Constant> for Constant
+{
+    type Output = Constant;
+
+    fn div(self, other: Constant) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        other.ctype.remove(Type::Null);
+        match self.ctype
+            {
+                Type::Int if other.ctype == Type::Int => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a / b).into();
+                },
+                Type::Float if other.ctype == Type::Int => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a / b as f64).into();
+                },
+                Type::Int if other.ctype == Type::Float => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a as f64 / b).into();
+                },
+                Type::Float if other.ctype == Type::Float => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a as f64 / b).into();
+                },
+                _ => unreachable!(),
+            }
+    }
+}
+
+impl ops::Rem<Constant> for Constant
+{
+    type Output = Constant;
+
+    fn rem(self, other: Constant) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        other.ctype.remove(Type::Null);
+        match self.ctype
+            {
+                Type::Int if other.ctype == Type::Int => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a % b).into();
+                },
+                Type::Float if other.ctype == Type::Int => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: i64 = i64::from_vm_byte(other.value);
+                    return (a % b as f64).into();
+                },
+                Type::Int if other.ctype == Type::Float => {
+                    let a: i64 = i64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a as f64 % b).into();
+                },
+                Type::Float if other.ctype == Type::Float => {
+                    let a: f64 = f64::from_vm_byte(self.value);
+                    let b: f64 = f64::from_vm_byte(other.value);
+                    return (a as f64 % b).into();
+                },
+                _ => unreachable!(),
+            }
+    }
+}
+
+impl ops::Neg for Constant
+{
+    type Output = Constant;
+
+    fn neg(mut self) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        match self.ctype
+            {
+                Type::Int => {
+                    let x = i64::from_vm_byte(self.value.clone());
+                    self.value = (-x).to_vm_byte();
+                    self
+                },
+                Type::Float => {
+                    let x = f64::from_vm_byte(self.value.clone());
+                    self.value = (-x).to_vm_byte();
+                    self
+                },
+                _ => unreachable!(),
+            }
+    }
+}
+
+impl ops::Not for Constant
+{
+    type Output = Constant;
+
+    fn not(mut self) -> Self::Output
+    {
+        self.ctype.remove(Type::Null);
+        let _type = Type::Boolean;
+
+        match self.ctype
+            {
+                Type::Int => {
+                    let x = i64::from_vm_byte(self.value.clone());
+                    self.value = (-x).to_vm_byte();
+                    self
+                },
+                Type::Float => {
+                    let x = f64::from_vm_byte(self.value.clone());
+                    self.value = (-x).to_vm_byte();
+                    self
+                },
+                _ => unreachable!(),
+            }
+    }
+}
+
+
+impl From<i64> for Value
 {
     fn from(i: i64) -> Self
     { Value::Int(i) }
 }
+
 impl From<f64> for Value
 {
     fn from(f: f64) -> Self

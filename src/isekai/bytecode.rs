@@ -707,8 +707,8 @@ impl BytecodeGenerator
                     let mut index = 0;
                     let (declared_type, _) = {
                         index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap().clone()
-                    };
+                        self.current_define.get(index).unwrap()
+                    }.clone();
 
                     if &declared_type != &another_result._type
                     {
@@ -724,7 +724,7 @@ impl BytecodeGenerator
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
-                    handled_result._type = declared_type; 
+                    handled_result._type = declared_type.clone();
                     handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 }
                 handled_result
@@ -824,17 +824,6 @@ impl VirtualMachine
                     });
                     current += 1;
                 },
-                OpCode::EqEq | OpCode::NotEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::EqEq => (a >= b).into(),
-                        OpCode::NotEq => (a <= b).into(),
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
                 OpCode::Const8 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     let value = self.code.read_data_8(index);
@@ -866,7 +855,7 @@ impl VirtualMachine
                     let value = self.code.read_data_dyn(index);
 
                     self.stack.push(match self.code._data_type.get(&index).unwrap() {
-                        &Type::Str => Value::Str(String::from_utf8(value).unwrap()),
+                        &Type::Str => String::from_utf8(value).unwrap().into(),
                         _ => unreachable!(),
                     });
                     current = new_end;
