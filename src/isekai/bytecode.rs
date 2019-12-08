@@ -920,7 +920,7 @@ impl VirtualMachine
                 },
                 OpCode::DebugPrint => {
                     let a = self.stack.pop().unwrap();
-                    println!("{}", a);
+                    println!("{:?}", a);
                     current += 1;
                 },
                 _ => {
