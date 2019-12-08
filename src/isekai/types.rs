@@ -222,6 +222,68 @@ impl Type
             }
         }
     }
+
+    pub fn type_after_binary(a: &Type, b: &Type, oper: &TokenType) -> Result<Type, ()>
+    {
+        let a = a.clone();
+        let b = b.clone();
+        match oper {
+            TokenType::EqualEqual
+            | TokenType::NotEqual
+            | TokenType::More
+            | TokenType::MoreEqual
+            | TokenType::Less
+            | TokenType::LessEqual => Ok(Type::Boolean),
+
+            TokenType::Slash => Ok(Type::Float),
+            TokenType::Percent => Ok(Type::Int),
+            TokenType::Minus
+            | TokenType::Asterisk => {
+                if a == Type::Float || b == Type::Float
+                {
+                    Ok(Type::Float)
+                }
+                else
+                {
+                    Ok(Type::Int)
+                }
+            },
+            TokenType::Plus => {
+                if a == Type::Str && b == Type::Str
+                {
+                    Ok(Type::Str)
+                }
+                else {
+                    if a == Type::Float || b == Type::Float
+                    {
+                        Ok(Type::Float)
+                    }
+                    else
+                    {
+                        Ok(Type::Int)
+                    }
+                }
+            },
+            _ => Err(())
+        }
+    }
+
+    pub fn type_after_unary(a: &Type, oper: &TokenType) -> Result<Type, ()>
+    {
+        let a = a.clone();
+        match oper {
+            TokenType::Minus => {
+                if a == Type::Float || a == Type::Int
+                {
+                    return Ok(a.clone());
+                }
+                Err(())
+            },
+            TokenType::Bang => Ok(Type::Boolean),
+            _ => Err(())
+        }
+    }
+
 }
 
 /*
@@ -271,7 +333,7 @@ impl From<bool> for Type
     { Type::Boolean }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Constant
 {
     pub ctype: Type,

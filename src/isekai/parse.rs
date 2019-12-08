@@ -12,7 +12,7 @@ pub trait Visitor<T>
     fn visit(&mut self, t: &T) -> Self::Result;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr
 {
     Binary(Box<Expr>, Box<Expr>, Token),
@@ -26,7 +26,7 @@ pub enum Expr
     Variable(u16),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement
 {
     // DebugPrint
@@ -45,7 +45,7 @@ pub enum Statement
     Empty,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData
 {
     pub name:  String,
@@ -104,7 +104,7 @@ impl DeclarationDataBuilder
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockData
 {
     pub local_count: usize,

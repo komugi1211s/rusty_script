@@ -109,7 +109,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "any" => Some(TypeAny),
         "int" => Some(TypeInt),
         "float" => Some(TypeFloat),
-        "str" => Some(TypeStr),
+        "string" => Some(TypeStr),
         "bool" => Some(TypeBool),
 
         "and" => Some(And),

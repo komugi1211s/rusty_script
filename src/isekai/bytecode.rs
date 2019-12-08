@@ -622,6 +622,7 @@ impl BytecodeGenerator
                 let left = self.handle_expr(*left, line);
                 let right = self.handle_expr(*right, line);
 
+                handled_result._type = Type::type_after_binary(&left._type, &right._type, &operator.tokentype).unwrap();
                 handled_result.index = match operator.tokentype
                 {
                     TokenType::Plus       => self.chunk.push_opcode(OpCode::Add, line),
@@ -660,6 +661,7 @@ impl BytecodeGenerator
             Expr::Unary(expr, operator) =>
             {
                 let another_result = self.handle_expr(*expr, line);
+                handled_result._type = Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
                 handled_result.index = match operator.tokentype
                 {
                     TokenType::Bang => self.chunk.push_opcode(OpCode::Not, line),
@@ -724,7 +726,7 @@ impl BytecodeGenerator
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
-                    handled_result._type = declared_type; 
+                    handled_result._type = declared_type.clone();
                     handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 }
                 handled_result
@@ -734,12 +736,12 @@ impl BytecodeGenerator
     }
 }
 
-type GlobalMap = HashMap<u16, Constant>;
+type GlobalMap = HashMap<u16, Value>;
 
 #[derive(Debug)]
 pub struct VirtualMachine
 {
-    pub stack: Vec<Constant>,
+    pub stack: Vec<Value>,
     pub stack_pointer: usize,
     pub code: ByteChunk,
     pub globals: GlobalMap,
@@ -845,7 +847,7 @@ impl VirtualMachine
                     let (index, new_end): (usize, usize) = self.consume_const_index(current);
                     if index == 0 // Null Pointer
                     {
-                        self.stack.push(Constant::null());
+                        self.stack.push(Value::Null);
                     }
                     current = new_end;
                 },
