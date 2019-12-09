@@ -7,7 +7,8 @@ use super::{
         Expr,
         Statement,
         DeclarationData, DeclarationDataBuilder,
-        BlockData
+        BlockData,
+        FunctionData, 
     },
 };
 
@@ -220,6 +221,7 @@ impl Parser
 
         while self.is(TokenType::Iden)
         {
+            self.current += 1;
             let (_type, iden) = self.get_variable_type_and_identifier();
             let mut builder = DeclarationDataBuilder::new()
                               .setname(&iden)
@@ -253,14 +255,11 @@ impl Parser
                 { 
                     let data = builder.setexpr(Expr::Literal(Constant::null())).build();
                     arguments.push(data);
+                    self.consume(TokenType::CloseParen);
                     return arguments;
                 },
                 _ => unreachable!("About to declare argument, found {:?}", bridge_token)
             }
-        }
-        if self.is(TokenType::CloseParen)
-        {
-            self.consume(TokenType::CloseParen);
         }
         arguments
     }
@@ -325,10 +324,23 @@ impl Parser
 
     fn declare_function(&mut self, identity: &str, _ty: Type) -> Statement
     {
-        let iden_id = util_string_to_u16(identity);
+        let mut _type = _ty;
+        _type.insert(Type::Func);
+        let mut builder = DeclarationDataBuilder::new()
+                          .setname(identity)
+                          .settype(_type);
+
+        let data = builder.build();
         let arguments = self.declare_argument();
-        let inside_func = self.statement();
-        Statement::Function(iden_id, _ty, arguments, Box::new(inside_func))
+
+        self.consume(TokenType::OpenBrace).expect("Expected OpenBrace.");
+        let inside_func = self.block();
+        let data = FunctionData {
+            it: data,
+            args: arguments,
+            block: inside_func,
+        };
+        Statement::Function(data)
     }
 
     fn expression(&mut self) -> Expr

@@ -2,7 +2,8 @@ use super::token::{ Token };
 use super::tokenizer::{ Tokenizer, SyntaxError };
 use super::parser::Parser;
 // use super::evaluate::Interpreter;
-use super::bytecode::{ VirtualMachine, BytecodeGenerator };
+use super::bytecode::{ BytecodeGenerator };
+use super::vm::{ VirtualMachine };
 // use self::error::*;
 use std::time::{ Instant };
 

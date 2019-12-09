@@ -35,7 +35,7 @@ pub enum Statement
     Expression(Expr),
     // Defer(Expr),
     Decralation(DeclarationData),
-    Function(u16, Type, Vec<DeclarationData>, Box<Statement>),
+    Function(FunctionData),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(Box<Statement>, Expr, Expr, Box<Statement>),
@@ -52,6 +52,14 @@ pub struct DeclarationData
     pub name_u16: u16,
     pub _type: Type,
     pub expr: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionData
+{
+    pub it: DeclarationData,
+    pub args: Vec<DeclarationData>,
+    pub block: BlockData,
 }
 
 pub struct DeclarationDataBuilder

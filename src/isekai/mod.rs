@@ -10,4 +10,5 @@ pub mod parse;
 pub mod parser;
 
 // pub mod evaluate;
+pub mod vm;
 pub mod bytecode;

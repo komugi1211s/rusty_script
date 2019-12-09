@@ -1,6 +1,6 @@
 
 use super::types::{ Type, Value, Constant, OpCode, toVmByte };
-use super::parse::{ Statement, Expr, ParserNode, DeclarationData, BlockData };
+use super::parse::{ Statement, Expr, ParserNode, DeclarationData, BlockData, FunctionData };
 use super::token::{ Token, TokenType };
 use std::mem;
 use num_traits::FromPrimitive;
@@ -28,7 +28,7 @@ pub struct ByteChunk
 impl ByteChunk
 {
 
-    fn push_operand(&mut self, operand: u8, line: usize) -> usize
+    pub fn push_operand(&mut self, operand: u8, line: usize) -> usize
     {
         self.code_chunk.push(operand);
         self.code_line.push(line);
@@ -36,12 +36,12 @@ impl ByteChunk
         self.code_idx
     }
 
-    fn push_opcode(&mut self, code: OpCode, line: usize) -> usize
+    pub fn push_opcode(&mut self, code: OpCode, line: usize) -> usize
     {
         self.push_operand(code as u8, line)
     }
 
-    fn rewrite_operand(&mut self, byte: u8, index: usize) -> usize
+    pub fn rewrite_operand(&mut self, byte: u8, index: usize) -> usize
     {
         if self.code_idx < index
         {
@@ -52,7 +52,7 @@ impl ByteChunk
         self.code_idx
     }
 
-    fn rewrite_operands(&mut self, bytes: Vec<u8>, index: usize) -> usize
+    pub fn rewrite_operands(&mut self, bytes: Vec<u8>, index: usize) -> usize
     {
         for i in 0..bytes.len()
         {
@@ -61,12 +61,12 @@ impl ByteChunk
         self.code_idx
     }
 
-    fn rewrite_opcode(&mut self, code: OpCode, index: usize) -> usize
+    pub fn rewrite_opcode(&mut self, code: OpCode, index: usize) -> usize
     {
         self.rewrite_operand(code as u8, index)
     }
 
-    fn push_operands(&mut self, operands: Vec<u8>, line: usize) -> usize
+    pub fn push_operands(&mut self, operands: Vec<u8>, line: usize) -> usize
     {
         for i in &operands
         {
@@ -75,7 +75,7 @@ impl ByteChunk
         self.code_idx
     }
 
-    fn write_const(&mut self, constant: Constant, line: usize) -> usize
+    pub fn write_const(&mut self, constant: Constant, line: usize) -> usize
     {
         let opcode = constant.code;
         let value = constant.value;
@@ -95,15 +95,14 @@ impl ByteChunk
         start_index
     }
 
-    fn write_null(&mut self, line: usize) -> usize
+    pub fn write_null(&mut self, line: usize) -> usize
     {
-        self.push_opcode(OpCode::ConstPtr, line);
+        self.push_opcode(OpCode::PushPtr, line);
         self.push_operands(0usize.to_vm_byte(), line);
         self.data_idx
     }
 
-
-    fn push_data<T>(&mut self, data: T) -> usize
+    pub fn push_data<T>(&mut self, data: T) -> usize
     where
         T: IntoIterator<Item=u8>
     {
@@ -116,7 +115,7 @@ impl ByteChunk
         start_at
     }
 
-    fn assert_datarange(&self, index: usize)
+    pub fn assert_datarange(&self, index: usize)
     {
         if self.data_idx <= index
         {
@@ -124,13 +123,13 @@ impl ByteChunk
         }
     }
 
-    fn read_data_8(&self, index: usize) -> u8
+    pub fn read_data_8(&self, index: usize) -> u8
     {
         self.assert_datarange(index);
         self.data_chunk[index]
     }
     
-    fn read_data_16(&self, index: usize) -> [u8; 2]
+    pub fn read_data_16(&self, index: usize) -> [u8; 2]
     {
         self.assert_datarange(index);
         let first = self.data_chunk[index];
@@ -138,7 +137,7 @@ impl ByteChunk
         [first, second]
     }
 
-    fn read_data_32(&self, index: usize) -> [u8; 4]
+    pub fn read_data_32(&self, index: usize) -> [u8; 4]
     {
         self.assert_datarange(index);
         let f = self.data_chunk[index];
@@ -148,7 +147,7 @@ impl ByteChunk
         [f, s, t, fo]
     }
     
-    fn read_data_64(&self, index: usize) -> [u8; 8]
+    pub fn read_data_64(&self, index: usize) -> [u8; 8]
     {
         self.assert_datarange(index);
         let mut data: [u8; 8] = [0; 8];
@@ -160,7 +159,7 @@ impl ByteChunk
         data
     }
 
-    fn read_data_dyn(&self, index: usize) -> Vec<u8>
+    pub fn read_data_dyn(&self, index: usize) -> Vec<u8>
     {
         self.assert_datarange(index);
         let mut data: Vec<u8> = Vec::new();
@@ -241,10 +240,13 @@ impl ByteChunk
             OpCode::Const16 | 
             OpCode::Const32 | 
             OpCode::Const64 |
-            OpCode::ConstPtr |
             OpCode::ConstDyn => USIZE_LENGTH,
 
+
             OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
+            OpCode::Call => 2,
+            OpCode::PushPtr |
+            OpCode::Push => USIZE_LENGTH,
 
             OpCode::GILoad  => 2,
             OpCode::GFLoad  => 2,
@@ -332,6 +334,7 @@ impl BytecodeGenerator
             line: line,
             index: 0,
         };
+
         match data {
             Statement::Expression(expr) => { 
                 handled_result.index = self.handle_expr(expr, line).index;
@@ -339,93 +342,7 @@ impl BytecodeGenerator
             },
             Statement::Decralation(declaration_info) =>
             {
-                let mut value_index = 0;
-                let mut actual_type = Type::Null;
-
-                let name = declaration_info.name_u16;
-                let mut declared_type = declaration_info._type;
-                let mut empty_expr = false;
-                println!("Declaration: {:?}", &declaration_info);
-
-                match declaration_info.expr {
-                    Some(expression) => { 
-                        let expr_handle_result = self.handle_expr(expression, line);
-                        println!("Declaration_Expr: {:?}", &expr_handle_result);
-                        value_index = expr_handle_result.index;
-                        actual_type = expr_handle_result._type;
-                    },
-                    None             => {
-                        empty_expr = true;
-                        value_index = self.chunk.write_null(line)
-                    },
-                };
-
-                if actual_type == Type::Null
-                {
-                    if declared_type.is_any()
-                    {
-                        panic!("You cannot initialize Any type with null");
-                    }
-
-                    if !declared_type.is_nullable()
-                    {
-                        panic!("an attempt to initialize non-nullable variable with null");
-                    }
-                }
-                else
-                {
-                    if declared_type.is_any() 
-                    {
-                        declared_type = actual_type
-                    }
-                    else if declared_type != actual_type
-                    {
-                        panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
-                    }
-                }
-
-                // let index = self.chunk.write_const(name);
-                if self.current_block > 0
-                {
-                    let is_exist = self.current_define
-                                    .iter()
-                                    .position(|&x| x.1 == name);
-
-                    if is_exist.is_some() 
-                    { 
-                        panic!("Same Variable Declared TWICE.");
-                    }
-
-                    self.current_define.push((declared_type, name));
-                    let position = self.current_define.len() - 1;
-
-                    let opcode = match declared_type
-                    {
-                        Type::Int     => OpCode::IStore,
-                        Type::Float   => OpCode::FStore,
-                        Type::Boolean => OpCode::BStore,
-                        Type::Str     => OpCode::SStore,
-                        _ => panic!("Unsupported opcode for here"),
-                    };
-                    let operands = position as u16;
-
-                    self.chunk.push_opcode(opcode, line);
-                    handled_result.index = self.chunk.push_operands(operands.to_vm_byte(), line);
-                }
-                else
-                {
-                    self.global_type.insert(name, declared_type);
-                    let opcode = match declared_type
-                    {
-                        Type::Int     => OpCode::GIStore,
-                        Type::Float   => OpCode::GFStore,
-                        Type::Boolean => OpCode::GBStore,
-                        Type::Str     => OpCode::GSStore,
-                        _ => panic!("Unsupported opcode for here"),
-                    };
-                    self.chunk.push_opcode(opcode, line);
-                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
-                }
+                self.handle_declaration_data(&mut handled_result, declaration_info);
                 handled_result
             },
 
@@ -544,8 +461,124 @@ impl BytecodeGenerator
                 handled_result.index = self.chunk.code_idx;
                 handled_result
             },
+            Statement::Function(func_data) => {
+                self.handle_function_data(&mut handled_result, func_data);
+                handled_result
+            }
             _ => unreachable!(),
         }
+    }
+
+    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, info: DeclarationData)
+    {
+        let mut value_index = 0;
+        let mut actual_type = Type::Null;
+
+        let name = info.name_u16;
+        let mut declared_type = info._type;
+        let mut empty_expr = false;
+        println!("Declaration: {:?}", &info);
+
+        match info.expr {
+            Some(expression) => { 
+                let expr_handle_result = self.handle_expr(expression, out.line);
+                println!("Declaration_Expr: {:?}", &expr_handle_result);
+                value_index = expr_handle_result.index;
+                actual_type = expr_handle_result._type;
+            },
+            None             => {
+                empty_expr = true;
+                value_index = self.chunk.write_null(out.line)
+            },
+        };
+
+        if actual_type == Type::Null
+        {
+            if declared_type.is_any()
+            {
+                panic!("You cannot initialize Any type with null");
+            }
+
+            if !declared_type.is_nullable()
+            {
+                panic!("an attempt to initialize non-nullable variable with null");
+            }
+        }
+        else
+        {
+            if declared_type.is_any() 
+            {
+                declared_type = actual_type
+            }
+            else if declared_type != actual_type
+            {
+                panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
+            }
+        }
+
+        // let index = self.chunk.write_const(name);
+        if self.current_block > 0
+        {
+            let is_exist = self.current_define
+                            .iter()
+                            .position(|&x| x.1 == name);
+
+            if is_exist.is_some() 
+            { 
+                panic!("Same Variable Declared TWICE.");
+            }
+
+            self.current_define.push((declared_type, name));
+            let position = self.current_define.len() - 1;
+
+            let opcode = match declared_type
+            {
+                Type::Int     => OpCode::IStore,
+                Type::Float   => OpCode::FStore,
+                Type::Boolean => OpCode::BStore,
+                Type::Str     => OpCode::SStore,
+                _ => panic!("Unsupported opcode for here"),
+            };
+            let operands = position as u16;
+
+            self.chunk.push_opcode(opcode, out.line);
+            out.index = self.chunk.push_operands(operands.to_vm_byte(), out.line);
+        }
+        else
+        {
+            self.global_type.insert(name, declared_type);
+            let opcode = match declared_type
+            {
+                Type::Int     => OpCode::GIStore,
+                Type::Float   => OpCode::GFStore,
+                Type::Boolean => OpCode::GBStore,
+                Type::Str     => OpCode::GSStore,
+                _ => panic!("Unsupported opcode for here"),
+            };
+            self.chunk.push_opcode(opcode, out.line);
+            out.index = self.chunk.push_operands(name.to_vm_byte(), out.line);
+        }
+    }
+
+    fn handle_function_data(&mut self, out: &mut StatementHandleResult, data: FunctionData)
+    {
+        if 0 < self.current_block
+        {
+            panic!("You currently cannot create closure.");
+        }
+        let decl_info = data.it;
+        let arguments = data.args;
+        let body_block = data.block;
+        self.global_type.insert(decl_info.name_u16, decl_info._type);
+        self.chunk.push_opcode(OpCode::BlockIn, line);
+        self.current_block += 1;
+        for i in block_data.statements 
+        {
+            self.handle_stmt(i, line);
+        }
+        self.current_block -= 1;
+        handled_result.index = self.chunk.push_opcode(OpCode::BlockOut, line);
+        handled_result
     }
 
     fn handle_expr(&mut self, expr: Expr, line: usize) -> ExpressionHandleResult
@@ -675,302 +708,82 @@ impl BytecodeGenerator
             Expr::Assign(name, expr) =>
             {
                 let another_result = self.handle_expr(*expr, line);
-                if 0 < self.current_block 
+
+                let is_exist = self.current_define
+                                .iter()
+                                .position(|&x| x.1 == name);
+
+                if is_exist.is_none()
                 {
-                    let is_exist = self.current_define
-                                    .iter()
-                                    .position(|&x| x.1 == name);
-
-                    if is_exist.is_none()
+                    if !self.global_type.contains_key(&name)
                     {
-                        if !self.global_type.contains_key(&name)
-                        {
-                            panic!("Undefined Variable");
-                        }
-
-                        let _type = self.global_type.get(&name).unwrap().clone();
-                        if &_type != &another_result._type
-                        {
-                            panic!("Type Mismatch when Assigning");
-                        }
-                        let opcode = match another_result._type
-                        {
-                            Type::Boolean => OpCode::GBStore,
-                            Type::Int     => OpCode::GIStore,
-                            Type::Str     => OpCode::GSStore,
-                            Type::Float   => OpCode::GFStore,
-                            _ => unreachable!(),
-                        };
-                        self.chunk.push_opcode(opcode, line);
-                        handled_result._type = _type; 
-                        handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
+                        panic!("Undefined Variable");
                     }
 
-                    let mut index = 0;
-                    let (declared_type, _) = {
-                        index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap().clone()
-                    };
-
-                    if &declared_type != &another_result._type
+                    let _type = self.global_type.get(&name).unwrap().clone();
+                    let actual_type = &another_result._type;
+                    if &_type != actual_type 
                     {
-                        panic!("Type Mismatch when Assigning");
+                        panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
                     }
-
                     let opcode = match another_result._type
                     {
-                        Type::Boolean => OpCode::BStore,
-                        Type::Int     => OpCode::IStore,
-                        Type::Str     => OpCode::SStore,
-                        Type::Float   => OpCode::FStore,
+                        Type::Boolean => OpCode::GBStore,
+                        Type::Int     => OpCode::GIStore,
+                        Type::Str     => OpCode::GSStore,
+                        Type::Float   => OpCode::GFStore,
                         _ => unreachable!(),
                     };
                     self.chunk.push_opcode(opcode, line);
-                    handled_result._type = declared_type.clone();
-                    handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
+                    handled_result._type = _type; 
+                    handled_result.index = self.chunk.push_operands(name.to_vm_byte(), line);
                 }
+
+                let mut index = 0;
+                let (declared_type, _) = {
+                    index = is_exist.unwrap();
+                    self.current_define.get(index).unwrap().clone()
+                };
+
+                if &declared_type != &another_result._type
+                {
+                    panic!("Type Mismatch when Assigning");
+                }
+
+                let opcode = match another_result._type
+                {
+                    Type::Boolean => OpCode::BStore,
+                    Type::Int     => OpCode::IStore,
+                    Type::Str     => OpCode::SStore,
+                    Type::Float   => OpCode::FStore,
+                    _ => unreachable!(),
+                };
+                self.chunk.push_opcode(opcode, line);
+                handled_result._type = declared_type.clone();
+                handled_result.index = self.chunk.push_operands(index.to_vm_byte(), line);
                 handled_result
             },
+            Expr::FunctionCall(func_name, open_paren, mut arguments) => {
+                if let Expr::Variable(name) = *func_name {
+                    let address_section = self.chunk.push_opcode(OpCode::PushPtr, line);
+                    self.chunk.push_operands(usize::max_value().to_vm_byte(), line);
+                    arguments.reverse();
+                    for arg in arguments
+                    {
+                        self.handle_expr(arg, line);
+                    }
+                    self.chunk.push_opcode(OpCode::Call, line);
+                    let jump_here = self.chunk.push_operands(name.to_vm_byte(), line);
+                    self.chunk.push_opcode(OpCode::BlockOut, line);
+                    self.chunk.rewrite_operands(jump_here.to_vm_byte(), address_section);
+
+                    handled_result._type = *self.global_type.get(&name).unwrap_or(&Type::Int);
+                    handled_result.index = jump_here;
+                }
+                handled_result
+            }
             _ => unreachable!(),
         }
-    }
-}
-
-type GlobalMap = HashMap<u16, Value>;
-
-#[derive(Debug)]
-pub struct VirtualMachine
-{
-    pub stack: Vec<Value>,
-    pub stack_pointer: usize,
-    pub code: ByteChunk,
-    pub globals: GlobalMap,
-    pub last_op: OpCode,
-}
-
-impl VirtualMachine
-{
-    pub fn new(code: ByteChunk) -> Self
-    {
-        Self {
-            stack: Vec::new(),
-            stack_pointer: 0,
-            code,
-            globals: GlobalMap::new(),
-            last_op: OpCode::Interrupt,
-        }
-    }
-
-    pub fn run(&mut self)
-    {
-        // Meta
-        let mut stack_pointer_stack: Vec<usize> = Vec::new();
-        let mut current: usize = 0;
-        let max: usize = self.code.code_idx;
-        while current < max 
-        {
-            let current_operation = OpCode::from_u8(self.code.code_chunk[current]).unwrap();
-            let current_line = self.code.code_line[current];
-            // println!("OpCode: {:?}", current_operation);
-            // println!("Current Stack: {:?}", self.stack);
-            // println!("Current Environment: {:?}", self.globals);
-
-            match current_operation 
-            {
-                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div  => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::Add => a + b,
-                        OpCode::Sub => a - b,
-                        OpCode::Mul => a * b,
-                        OpCode::Div => a / b,
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
-                OpCode::Not | OpCode::Neg => {
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::Not => (!a).is_truthy().into(),
-                        OpCode::Neg => -a,
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
-
-                OpCode::EqEq | OpCode::NotEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::EqEq => (a == b).into(),
-                        OpCode::NotEq => (a != b).into(),
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
-
-                OpCode::LessEq | OpCode::MoreEq | OpCode::Less | OpCode::More => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::LessEq => (a <= b).into(),
-                        OpCode::MoreEq => (a >= b).into(),
-                        OpCode::Less   => (a < b).into(),
-                        OpCode::More   => (a > b).into(),
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
-                OpCode::EqEq | OpCode::NotEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-
-                    self.stack.push(match current_operation {
-                        OpCode::EqEq => (a >= b).into(),
-                        OpCode::NotEq => (a <= b).into(),
-                        _ => unreachable!(),
-                    });
-                    current += 1;
-                },
-                OpCode::Const8 => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    let value = self.code.read_data_8(index);
-                    self.stack.push((value != 0).into());
-                    current = new_end;
-                },
-                OpCode::ConstPtr => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    if index == 0 // Null Pointer
-                    {
-                        self.stack.push(Value::Null);
-                    }
-                    current = new_end;
-                },
-                OpCode::Const64 => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    let value = self.code.read_data_64(index);
-                    // GET_TYPE
-                    self.stack.push(match self.code._data_type.get(&index).unwrap()
-                    {
-                        &Type::Int => i64::from_ne_bytes(value).into(),
-                        &Type::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
-                        _ => unreachable!(),
-                    });
-                    current = new_end;
-                },
-                OpCode::ConstDyn => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    let value = self.code.read_data_dyn(index);
-
-                    self.stack.push(match self.code._data_type.get(&index).unwrap() {
-                        &Type::Str => Value::Str(String::from_utf8(value).unwrap()),
-                        _ => unreachable!(),
-                    });
-                    current = new_end;
-                },
-                OpCode::JumpIfFalse => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    let test_value = self.stack.pop().unwrap();
-
-                    current = if test_value.is_truthy() { new_end } else { index };
-                },
-
-                OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
-                    current += 1;
-                    let indone = self.code.code_chunk[current];
-                    let indtwo = self.code.code_chunk[current + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
-                    let value = self.stack.last().unwrap().clone();
-                    self.stack[index] = value;
-                    current += 2;
-                },
-                OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad  => {
-                    current += 1;
-                    let indone = self.code.code_chunk[current];
-                    let indtwo = self.code.code_chunk[current + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
-                    let data = self.stack[index].clone();
-                    self.stack.push(data);
-                    current += 2;
-                },
-                OpCode::Jump => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(current);
-                    current = index;
-                },
-                OpCode::BlockIn  => {
-                    stack_pointer_stack.push(self.stack_pointer);
-                    self.stack_pointer = self.stack.len();
-                    current += 1;
-                },
-                OpCode::BlockOut => {
-                    self.stack.truncate(self.stack_pointer);
-                    let index = stack_pointer_stack.pop().unwrap();
-                    self.stack_pointer = index;
-                    current += 1;
-                },
-                OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad  => {
-                    let operand_one = self.code.code_chunk[current + 1];
-                    let operand_two = self.code.code_chunk[current + 2];
-                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-
-                    let value = self.globals.get(&identifier).unwrap();
-                    self.stack.push(value.clone());
-                    current += 3;
-                },
-                OpCode::GBStore | OpCode::GIStore | OpCode::GFStore | OpCode::GSStore => {
-                    let operand_one = self.code.code_chunk[current + 1];
-                    let operand_two = self.code.code_chunk[current + 2];
-                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
-
-                    let data = self.stack.pop().unwrap();
-                    let value = self.globals.insert(identifier, data);
-                    current += 3;
-                },
-                OpCode::DebugPrint => {
-                    let a = self.stack.pop().unwrap();
-                    println!("{}", a);
-                    current += 1;
-                },
-                _ => {
-                    println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");
-                    println!("OpCode Interrupt Detected at index {}", current);
-                    println!("Current Stack Data: {:?}", self.stack);
-                    println!("Current Disassemble here");
-                    let max_len = if self.code.code_chunk.len() < current + 5 {
-                        self.code.code_chunk.len()
-                    }
-                    else {
-                        current + 5
-                    };
-                    for message in self.code.disassemble(current - 5, max_len)
-                    {
-                        println!("{}", message);
-                    }
-                    panic!();
-                },
-            }
-            self.last_op = current_operation;
-        }
-    }
-
-    pub fn consume_const_index(&mut self, start: usize) -> (/* result */usize, /* new_end */usize)
-    {
-        let start = start + 1;
-        let mut new_end = start;
-        let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
-        for i in 0..USIZE_LENGTH
-        {
-            result[i] = self.code.code_chunk[start + i];
-            new_end += 1;
-        }
-
-        let result: usize = usize::from_ne_bytes(result);
-        (result, new_end)
     }
 }
 

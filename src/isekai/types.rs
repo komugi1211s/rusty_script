@@ -25,11 +25,11 @@ pub enum OpCode
     Const32        = 0b00010011,  // usize分の大きさのオペランドを取る
     Const64        = 0b00010100,  // usize分の大きさのオペランドを取る
     ConstDyn       = 0b00010111,  // usize分の大きさのオペランドを取る
-    ConstPtr       = 0b00011000,  // usize分の大きさのオペランドを取る
 
     // Operational = 0b00100000,
     Return         = 0b00100000,
     Push           = 0b00100010,
+    PushPtr        = 0b00011000,  // usize分の大きさのオペランドを取る
     Pop            = 0b00100011,
     BlockIn        = 0b00100110, 
     BlockOut       = 0b00100111,
@@ -56,6 +56,7 @@ pub enum OpCode
     // Branching   = 0b01010000,
     Jump           = 0b01010000,
     JumpIfFalse    = 0b01010010,
+    Call           = 0b01010011,
 
     // Globals = 0b01100000,
     GILoad     = 0b01100001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
@@ -80,7 +81,6 @@ pub enum OpCode
     // System     = 0b11110000,
     Interrupt     = 0b11111111,
     DebugPrint    = 0b11110001,
-    Extends       = 0b11110101, // Opcode Index Index の3つのオペランドを取る
 }
 
 pub trait toVmByte
@@ -169,6 +169,7 @@ bitflags! {
     pub struct Type: u8 {
         const Null    = 0b10000000;
         const Any     = 0b01000000;
+        const Func    = 0b00100000;
         const Int     = 0b00000001;
         const Float   = 0b00000010;
         const Str     = 0b00000100;
@@ -300,6 +301,7 @@ pub enum Value
     Float(f64),
     Str(String),
     Boolean(bool),
+    Pointer(usize),
     Type(Type),
     //  Struct(String, Vec<(Type, usize, Value)>),
 
@@ -349,7 +351,7 @@ impl Constant
         {
             ctype: Type::Null,
             value: vec![],
-            code: OpCode::ConstPtr,
+            code: OpCode::PushPtr,
         }
     }
 }
@@ -391,6 +393,13 @@ impl From<bool> for Value
     fn from(b: bool) -> Self
     { Value::Boolean(b) }
 }
+
+impl From<usize> for Value
+{
+    fn from(u: usize) -> Self
+    { Value::Pointer(u) }
+}
+
 
 impl Value
 {
@@ -445,6 +454,7 @@ impl fmt::Display for Value
             Value::NativeCallable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
             Value::Null        => write!(f, "null"),
             Value::Type(x)      => write!(f, "{:?}", x),
+            Value::Pointer(x)   => write!(f, "Pointer{}", x),
         }
     }
 }
