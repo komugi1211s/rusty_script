@@ -3,19 +3,19 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     // 予約語
-    Define, // define {}
-    Reveal, // reveal(foreshadow)
-    If,     // if expr {
-    Else,   // else {
-    While,  // while expr {
-    For,    // for int: i in 0..10 {
-    Break,  // break;
+    Define,   // define {}
+    Reveal,   // reveal(foreshadow)
+    If,       // if expr {
+    Else,     // else {
+    While,    // while expr {
+    For,      // for int: i in 0..10 {
+    Break,    // break;
     Continue, // continue;
 
     True,   // true
     False,  // false
     Print,  // print "message"
-    Return,  // return "";
+    Return, // return "";
 
     // TODO: Remove TypeVoid
     TypeVoid,  // void: a = ...
@@ -24,7 +24,7 @@ pub enum TokenType {
     TypeFloat, // float: a =
     TypeStr,   // str: a =
     TypeBool,  // bool: a =
-    Null,  // null 
+    Null,      // null
 
     // データ型
     ForeShadow, // foreshadow ABC;
@@ -62,7 +62,7 @@ pub enum TokenType {
     Minus,    // -
     Asterisk, // *
     // Slash, <- 既に上の方で定義済み
-    Percent,  // %
+    Percent, // %
 
     // 概念
     Str,
@@ -71,12 +71,9 @@ pub enum TokenType {
     EOF,
 }
 
-impl TokenType
-{
-    pub fn is_typekind(given: &TokenType) -> bool
-    {
-        match given
-        {
+impl TokenType {
+    pub fn is_typekind(given: &TokenType) -> bool {
+        match given {
             TokenType::TypeAny => true,
             TokenType::TypeInt => true,
             TokenType::TypeFloat => true,
