@@ -173,7 +173,9 @@ impl Parser {
         // if TokenType::is_typekind(&x.tokentype)
         // println!("{}", self.get_current());
         // println!("{}", self.get_next());
-        if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
+        if self.is(TokenType::Iden) &&
+            self.is_next(TokenType::Colon)
+        {
             // println!("This is a Declaration.");
             return self.declare_variable();
         }
@@ -185,10 +187,13 @@ impl Parser {
         let identity = { self.get_previous().lexeme.clone() };
         self.consume(TokenType::Colon)
             .expect("Expected Colon, Got Something Different");
+
         let declared_type = {
             if TokenType::is_typekind(&self.get_current().tokentype) {
                 let mut _type = Type::from_tokentype(&self.advance().tokentype);
-                if self.is(TokenType::Question) {
+                if self.is(TokenType::Question)
+                {
+                    self.consume(TokenType::Question);
                     _type.set_nullable();
                 }
                 _type
@@ -260,6 +265,7 @@ impl Parser {
 
         let mut builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
         let mut state = Statement::Empty;
+        // println!("{:?}", self.get_current());
 
         // Initialization, Outside
         if self.is(TokenType::Equal) {
@@ -270,6 +276,7 @@ impl Parser {
                 .expect("ParserError: Expected Semicolon After Decralation.");
             state = Statement::Decralation(data);
         }
+
         // Declaration, Outside
         else if self.is(TokenType::SemiColon) {
             self.current += 1;
@@ -277,7 +284,7 @@ impl Parser {
                 panic!("Uninitialized non-nullable variable: {}", iden);
             }
             let data = builder.build();
-            return Statement::Decralation(data);
+            state =  Statement::Decralation(data);
         }
         // This is a function.
         else if self.is(TokenType::OpenParen) {

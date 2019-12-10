@@ -2,7 +2,7 @@ use super::parser::Parser;
 use super::token::Token;
 use super::tokenizer::{SyntaxError, Tokenizer};
 // use super::evaluate::Interpreter;
-use super::bytecode::CodeGenerator;
+use super::bytecode::BytecodeGenerator;
 use super::vm::VirtualMachine;
 // use self::error::*;
 use std::time::Instant;
@@ -28,9 +28,9 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
     );
     // println!("parsed_result: \x1B{:#?}", result);
 
-    let codegen = CodeGenerator::new();
-    let (bytecode, const_table) = codegen.traverse_ast(result).unwrap();
-    // let disassembled = bytecode.disassemble_all();
+    let codegen = BytecodeGenerator::new();
+    let (code, table) = codegen.traverse_ast(result).unwrap();
+    let disassembled = code.disassemble_all();
 
     // {
     //     let mut file = File::create("dump").expect("Dump File failed to create.");
@@ -40,7 +40,7 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
     //     file.flush().expect("File Flushing Failed.");
     // }
 
-    let mut vm = VirtualMachine::new(bytecode, const_table);
+    let mut vm = VirtualMachine::new(code, table);
     vm.run();
 
     /*
