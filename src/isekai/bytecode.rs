@@ -28,6 +28,11 @@ pub struct ConstantTable
 
 impl Code 
 {
+    fn merge(&mut self, other: Code)
+    {
+        self.bytes.extend(other.bytes);
+        self.line.extend(other.line);
+    }
 
     pub fn push_operand(&mut self, operand: u8, line: usize) -> usize
     {
@@ -154,22 +159,22 @@ impl Code
             OpCode::PushPtr |
             OpCode::Push => USIZE_LENGTH,
 
-            OpCode::GILoad  => 2,
-            OpCode::GFLoad  => 2,
-            OpCode::GSLoad  => 2,
-            OpCode::GBLoad  => 2,
-            OpCode::GIStore => 2,
-            OpCode::GFStore => 2,
-            OpCode::GSStore => 2,
+            OpCode::GILoad |
+            OpCode::GFLoad |
+            OpCode::GSLoad |
+            OpCode::GBLoad => 2,
+            OpCode::GIStore |
+            OpCode::GFStore |
+            OpCode::GSStore |
             OpCode::GBStore => 2,
 
-            OpCode::ILoad  => 2,
-            OpCode::FLoad  => 2,
-            OpCode::SLoad  => 2,
-            OpCode::BLoad  => 2,
-            OpCode::IStore => 2,
-            OpCode::FStore => 2,
-            OpCode::SStore => 2,
+            OpCode::ILoad |
+            OpCode::FLoad |
+            OpCode::SLoad |
+            OpCode::BLoad => 2,
+            OpCode::IStore |
+            OpCode::FStore |
+            OpCode::SStore |
             OpCode::BStore => 2,
             _ => 0
         }
@@ -259,10 +264,16 @@ type Local = (Type, u16);
 #[derive(Debug)]
 pub struct BytecodeGenerator
 {
+    // Things that we return
     pub code: Code,
     pub const_table: ConstantTable,
-    pub global_type: HashMap<u16, Type>,
+
+    // To keep track of definitions
     pub current_define: Vec<Local>,
+    pub global_type: HashMap<u16, Type>,
+    pub labels: HashMap<u16, usize>,
+
+    // Keep track of block nesting
     pub last_loop_start: usize,
     current_block: usize,
     pub break_call: Vec<usize>,
@@ -291,6 +302,7 @@ impl BytecodeGenerator
             code: Code::default(),
             const_table: ConstantTable::default(),
             global_type: HashMap::new(),
+            labels: HashMap::new(),
             current_define: Vec::new(),
             last_loop_start: usize::max_value(),
             current_block: 0,
@@ -447,7 +459,7 @@ impl BytecodeGenerator
                 handled_result
             },
             Statement::Function(func_data) => {
-                self.handle_function_data(&mut handled_result, func_data);
+                self.handle_function_data(&mut handled_result, func_data, line);
                 handled_result
             }
             _ => unreachable!(),
@@ -462,12 +474,11 @@ impl BytecodeGenerator
         let name = info.name_u16;
         let mut declared_type = info._type;
         let mut empty_expr = false;
-        println!("Declaration: {:?}", &info);
 
         match info.expr {
             Some(expression) => { 
                 let expr_handle_result = self.handle_expr(expression, out.line);
-                println!("Declaration_Expr: {:?}", &expr_handle_result);
+                // println!("Declaration_Expr: {:?}", &expr_handle_result);
                 value_index = expr_handle_result.index;
                 actual_type = expr_handle_result._type;
             },
@@ -546,10 +557,9 @@ impl BytecodeGenerator
         }
     }
 
-
-    fn handle_function_data(&mut self, out: &mut StatementHandleResult, data: FunctionData)
+    fn handle_function_data(&mut self, out: &mut StatementHandleResult, data: FunctionData, line: usize)
     {
-        /*
+
         if 0 < self.current_block
         {
             panic!("You currently cannot create closure.");
@@ -557,17 +567,19 @@ impl BytecodeGenerator
         let decl_info = data.it;
         let arguments = data.args;
         let body_block = data.block;
+
         self.global_type.insert(decl_info.name_u16, decl_info._type);
-        self.code.push_opcode(OpCode::BlockIn, line);
         self.current_block += 1;
-        for i in block_data.statements 
+        let main_code = mem::replace(&mut self.code, Code::default());
+        let main_local = mem::replace(&mut self.current_define, Vec::new());
+        for i in body_block.statements 
         {
             self.handle_stmt(i, line);
         }
+        let function_code = mem::replace(&mut self.code, main_code);
+        let function_local = mem::replace(&mut self.current_define, main_local);
         self.current_block -= 1;
-        handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
-        handled_result
-        */
+        out.index = self.code.current_length();
     }
 
     fn handle_constant_data(&mut self, out: &mut ExpressionHandleResult, constant: Constant, line: usize)

@@ -178,12 +178,12 @@ impl Parser
         // Called at iden: [type] = value
         //           ^ right here
         // if TokenType::is_typekind(&x.tokentype)
-        println!("{}", self.get_current());
-        println!("{}", self.get_next());
+        // println!("{}", self.get_current());
+        // println!("{}", self.get_next());
         if self.is(TokenType::Iden) &&
             self.is_next(TokenType::Colon)
         {
-            println!("This is a Declaration.");
+            // println!("This is a Declaration.");
             return self.declare_variable();
         }
 
@@ -289,7 +289,7 @@ impl Parser
                           .setname(&iden)
                           .settype(_type);
         let mut state = Statement::Empty;
-        println!("{:?}", self.get_current());
+        // println!("{:?}", self.get_current());
 
         // Initialization, Outside
         if self.is(TokenType::Equal)
