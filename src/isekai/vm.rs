@@ -1,5 +1,5 @@
 
-use super::bytecode::{ ByteChunk };
+use super::bytecode::{ Code, ConstantTable };
 use super::types::{ Value, Type, OpCode };
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -15,23 +15,25 @@ const USIZE_LENGTH: usize = 8;
 #[derive(Debug)]
 pub struct VirtualMachine
 {
+    pub code: Code,
+    pub const_table: ConstantTable,
     pub stack: Vec<Value>,
     pub code_ip: usize,
     pub stack_pointer: usize,
-    pub code: ByteChunk,
     pub globals: GlobalMap,
     pub last_op: OpCode,
 }
 
 impl VirtualMachine
 {
-    pub fn new(code: ByteChunk) -> Self
+    pub fn new(code: Code, const_table: ConstantTable) -> Self
     {
         Self {
             stack: Vec::new(),
             code_ip: 0, 
             stack_pointer: 0,
             code,
+            const_table,
             globals: GlobalMap::new(),
             last_op: OpCode::Interrupt,
         }
@@ -41,15 +43,19 @@ impl VirtualMachine
     {
         // Meta
         let mut stack_pointer_stack: Vec<usize> = Vec::new();
-        let max: usize = self.code.code_idx;
+        let max: usize = self.code.current_length();
         while self.code_ip < max 
         {
-            let current_operation = OpCode::from_u8(self.code.code_chunk[self.code_ip]).unwrap();
-            let current_line = self.code.code_line[self.code_ip];
+            let current_operation = OpCode::from_u8(self.code.bytes[self.code_ip]);
+            if current_operation.is_none() {
+                panic!("Received {:?}, which is not an actual opcode, at line {}", self.code.bytes[self.code_ip], self.code.line[self.code_ip]);
+            }
+            let current_line = self.code.line[self.code_ip];
             // println!("Current Stack: {:?}", self.stack);
             // println!("Current Environment: {:?}", self.globals);
+            let current_operation = current_operation.unwrap();
 
-            match current_operation 
+            match current_operation
             {
                 OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div  => {
                     let b = self.stack.pop().unwrap();
@@ -113,7 +119,7 @@ impl VirtualMachine
                 },
                 OpCode::Const8 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let value = self.code.read_data_8(index);
+                    let (value, _type) = self.const_table.read_data_8(index);
                     self.stack.push((value != 0).into());
                     self.code_ip = new_end;
                 },
@@ -131,9 +137,9 @@ impl VirtualMachine
                 },
                 OpCode::Const64 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let value = self.code.read_data_64(index);
+                    let (value, _type) = self.const_table.read_data_64(index);
                     // GET_TYPE
-                    self.stack.push(match self.code._data_type.get(&index).unwrap()
+                    self.stack.push(match _type 
                     {
                         &Type::Int => i64::from_ne_bytes(value).into(),
                         &Type::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
@@ -143,9 +149,9 @@ impl VirtualMachine
                 },
                 OpCode::ConstDyn => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let value = self.code.read_data_dyn(index);
+                    let (value, _type) = self.const_table.read_data_dyn(index);
 
-                    self.stack.push(match self.code._data_type.get(&index).unwrap() {
+                    self.stack.push(match _type {
                         &Type::Str => Value::Str(String::from_utf8(value).unwrap()),
                         _ => unreachable!(),
                     });
@@ -160,8 +166,8 @@ impl VirtualMachine
 
                 OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
                     self.code_ip += 1;
-                    let indone = self.code.code_chunk[self.code_ip];
-                    let indtwo = self.code.code_chunk[self.code_ip + 1];
+                    let indone = self.code.bytes[self.code_ip];
+                    let indtwo = self.code.bytes[self.code_ip + 1];
                     let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
                     let value = self.stack.last().unwrap().clone();
                     self.stack[index] = value;
@@ -169,8 +175,8 @@ impl VirtualMachine
                 },
                 OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad  => {
                     self.code_ip += 1;
-                    let indone = self.code.code_chunk[self.code_ip];
-                    let indtwo = self.code.code_chunk[self.code_ip + 1];
+                    let indone = self.code.bytes[self.code_ip];
+                    let indtwo = self.code.bytes[self.code_ip + 1];
                     let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
                     let data = self.stack[index].clone();
                     self.stack.push(data);
@@ -192,8 +198,8 @@ impl VirtualMachine
                     self.code_ip += 1;
                 },
                 OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad  => {
-                    let operand_one = self.code.code_chunk[self.code_ip + 1];
-                    let operand_two = self.code.code_chunk[self.code_ip + 2];
+                    let operand_one = self.code.bytes[self.code_ip + 1];
+                    let operand_two = self.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let value = self.globals.get(&identifier).unwrap();
@@ -201,8 +207,8 @@ impl VirtualMachine
                     self.code_ip += 3;
                 },
                 OpCode::GBStore | OpCode::GIStore | OpCode::GFStore | OpCode::GSStore => {
-                    let operand_one = self.code.code_chunk[self.code_ip + 1];
-                    let operand_two = self.code.code_chunk[self.code_ip + 2];
+                    let operand_one = self.code.bytes[self.code_ip + 1];
+                    let operand_two = self.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let data = self.stack.pop().unwrap();
@@ -219,8 +225,8 @@ impl VirtualMachine
                     println!("OpCode Interrupt Detected at index {}", self.code_ip);
                     println!("Current Stack Data: {:?}", self.stack);
                     println!("Current Disassemble here");
-                    let max_len = if self.code.code_chunk.len() < self.code_ip + 5 {
-                        self.code.code_chunk.len()
+                    let max_len = if self.code.current_length() < self.code_ip + 5 {
+                        self.code.current_length()
                     }
                     else {
                         self.code_ip + 5
@@ -243,7 +249,7 @@ impl VirtualMachine
         let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
         for i in 0..USIZE_LENGTH
         {
-            result[i] = self.code.code_chunk[start + i];
+            result[i] = self.code.bytes[start + i];
             new_end += 1;
         }
 

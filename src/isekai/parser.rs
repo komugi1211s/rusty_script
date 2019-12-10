@@ -195,12 +195,14 @@ impl Parser
         let identity = { self.get_previous().lexeme.clone() };
         self.consume(TokenType::Colon)
             .expect("Expected Colon, Got Something Different");
+
         let declared_type = {
             if TokenType::is_typekind(&self.get_current().tokentype)
             {
                 let mut _type = Type::from_tokentype(&self.advance().tokentype);
                 if self.is(TokenType::Question)
                 {
+                    self.consume(TokenType::Question);
                     _type.set_nullable();
                 }
                 _type
@@ -287,6 +289,7 @@ impl Parser
                           .setname(&iden)
                           .settype(_type);
         let mut state = Statement::Empty;
+        println!("{:?}", self.get_current());
 
         // Initialization, Outside
         if self.is(TokenType::Equal)
@@ -297,6 +300,7 @@ impl Parser
             self.consume(TokenType::SemiColon).expect("ParserError: Expected Semicolon After Decralation.");
             state = Statement::Decralation(data);
         }
+
         // Declaration, Outside
         else if self.is(TokenType::SemiColon)
         {
@@ -306,7 +310,7 @@ impl Parser
                 panic!("Uninitialized non-nullable variable: {}", iden);
             }
             let data = builder.build();
-            return Statement::Decralation(data);
+            state =  Statement::Decralation(data);
         }
 
         // This is a function.
