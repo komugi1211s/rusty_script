@@ -1,6 +1,5 @@
-
-use super::bytecode::{ Code, ConstantTable };
-use super::types::{ Value, Type, OpCode };
+use super::bytecode::{Code, ConstantTable};
+use super::types::{OpCode, Type, Value};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
@@ -13,8 +12,7 @@ const USIZE_LENGTH: usize = 4;
 const USIZE_LENGTH: usize = 8;
 
 #[derive(Debug)]
-pub struct VirtualMachine
-{
+pub struct VirtualMachine {
     pub code: Code,
     pub const_table: ConstantTable,
     pub stack: Vec<Value>,
@@ -24,10 +22,8 @@ pub struct VirtualMachine
     pub last_op: OpCode,
 }
 
-impl VirtualMachine
-{
-    pub fn new(code: Code, const_table: ConstantTable) -> Self
-    {
+impl VirtualMachine {
+    pub fn new(code: Code, const_table: ConstantTable) -> Self {
         Self {
             stack: Vec::new(),
             code_ip: 0,
@@ -43,20 +39,21 @@ impl VirtualMachine
         // Meta
         let mut stack_pointer_stack: Vec<usize> = Vec::new();
         let max: usize = self.code.current_length();
-        while self.code_ip < max 
-        {
+        while self.code_ip < max {
             let current_operation = OpCode::from_u8(self.code.bytes[self.code_ip]);
             if current_operation.is_none() {
-                panic!("Received {:?}, which is not an actual opcode, at line {}", self.code.bytes[self.code_ip], self.code.line[self.code_ip]);
+                panic!(
+                    "Received {:?}, which is not an actual opcode, at line {}",
+                    self.code.bytes[self.code_ip], self.code.line[self.code_ip]
+                );
             }
-            let current_line = self.code.line[self.code_ip];
+            let _current_line = self.code.line[self.code_ip];
             // println!("Current Stack: {:?}", self.stack);
             // println!("Current Environment: {:?}", self.globals);
             let current_operation = current_operation.unwrap();
 
-            match current_operation
-            {
-                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div  => {
+            match current_operation {
+                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
 
@@ -137,8 +134,7 @@ impl VirtualMachine
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
                     let (value, _type) = self.const_table.read_data_64(index);
                     // GET_TYPE
-                    self.stack.push(match _type 
-                    {
+                    self.stack.push(match _type {
                         &Type::Int => i64::from_ne_bytes(value).into(),
                         &Type::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
                         _ => unreachable!(),
@@ -170,7 +166,7 @@ impl VirtualMachine
                     self.code_ip += 1;
                     let indone = self.code.bytes[self.code_ip];
                     let indtwo = self.code.bytes[self.code_ip + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
                     let value = self.stack.last().unwrap().clone();
                     self.stack[index] = value;
                     self.code_ip += 2;
@@ -179,13 +175,13 @@ impl VirtualMachine
                     self.code_ip += 1;
                     let indone = self.code.bytes[self.code_ip];
                     let indtwo = self.code.bytes[self.code_ip + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize; 
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
                     let data = self.stack[index].clone();
                     self.stack.push(data);
                     self.code_ip += 2;
                 }
                 OpCode::Jump => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
+                    let (index, _new_end): (usize, usize) = self.consume_const_index(self.code_ip);
                     self.code_ip = index;
                 }
                 OpCode::BlockIn => {
@@ -198,8 +194,8 @@ impl VirtualMachine
                     let index = stack_pointer_stack.pop().unwrap();
                     self.stack_pointer = index;
                     self.code_ip += 1;
-                },
-                OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad  => {
+                }
+                OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad => {
                     let operand_one = self.code.bytes[self.code_ip + 1];
                     let operand_two = self.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
@@ -214,7 +210,7 @@ impl VirtualMachine
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let data = self.stack.pop().unwrap();
-                    let value = self.globals.insert(identifier, data);
+                    let _value = self.globals.insert(identifier, data);
                     self.code_ip += 3;
                 }
                 OpCode::DebugPrint => {
@@ -229,8 +225,7 @@ impl VirtualMachine
                     println!("Current Disassemble here");
                     let max_len = if self.code.current_length() < self.code_ip + 5 {
                         self.code.current_length()
-                    }
-                    else {
+                    } else {
                         self.code_ip + 5
                     };
                     for message in self.code.disassemble(self.code_ip - 5, max_len) {
@@ -250,8 +245,7 @@ impl VirtualMachine
         let start = start + 1;
         let mut new_end = start;
         let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
-        for i in 0..USIZE_LENGTH
-        {
+        for i in 0..USIZE_LENGTH {
             result[i] = self.code.bytes[start + i];
             new_end += 1;
         }

@@ -7,9 +7,6 @@ use super::vm::VirtualMachine;
 // use self::error::*;
 use std::time::Instant;
 
-use std::fs::File;
-use std::io::{prelude::*, BufReader};
-
 pub fn start(code: &str) -> Result<(), SyntaxError> {
     let start = Instant::now();
     let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
@@ -30,7 +27,7 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
 
     let codegen = BytecodeGenerator::new();
     let (code, table) = codegen.traverse_ast(result).unwrap();
-    let disassembled = code.disassemble_all();
+    let _disassembled = code.disassemble_all();
 
     // {
     //     let mut file = File::create("dump").expect("Dump File failed to create.");

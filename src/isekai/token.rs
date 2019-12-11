@@ -124,7 +124,7 @@ pub struct Token {
 
 impl Token {
     pub fn new(tokentype: TokenType, line: usize, lexeme: String) -> Self {
-        let lexeme = lexeme.to_owned();
+        let lexeme = lexeme;
         Token {
             tokentype,
             line,

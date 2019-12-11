@@ -214,12 +214,10 @@ impl Tokenizer {
     fn peek_shifted_to(&self, shift: usize) -> char {
         if self.is_at_end() {
             '\0'
+        } else if self.source.len() <= self.current + shift {
+            '\0'
         } else {
-            if self.source.len() <= self.current + shift {
-                '\0'
-            } else {
-                self.source[self.current + shift]
-            }
+            self.source[self.current + shift]
         }
     }
 

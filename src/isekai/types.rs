@@ -18,67 +18,67 @@ const USIZE_LENGTH: usize = 8;
 #[repr(u8)]
 pub enum OpCode {
     // Const       = 0b00010000,
-    Const8 = 0b00010001,   // usize分の大きさのオペランドを取る
-    Const16 = 0b00010010,  // usize分の大きさのオペランドを取る
-    Const32 = 0b00010011,  // usize分の大きさのオペランドを取る
-    Const64 = 0b00010100,  // usize分の大きさのオペランドを取る
-    ConstDyn = 0b00010111, // usize分の大きさのオペランドを取る
+    Const8 = 0b0001_0001,   // usize分の大きさのオペランドを取る
+    Const16 = 0b0001_0010,  // usize分の大きさのオペランドを取る
+    Const32 = 0b0001_0011,  // usize分の大きさのオペランドを取る
+    Const64 = 0b0001_0100,  // usize分の大きさのオペランドを取る
+    ConstDyn = 0b0001_0111, // usize分の大きさのオペランドを取る
 
     // Operational = 0b00100000,
-    Return = 0b00100000,
-    Push = 0b00100010,
-    PushPtr = 0b00011000, // usize分の大きさのオペランドを取る
-    Pop = 0b00100011,
-    BlockIn = 0b00100110,
-    BlockOut = 0b00100111,
+    Return = 0b0010_0000,
+    Push = 0b0010_0010,
+    PushPtr = 0b0001_1000, // usize分の大きさのオペランドを取る
+    Pop = 0b0010_0011,
+    BlockIn = 0b0010_0110,
+    BlockOut = 0b0010_0111,
 
     // Arithmitic = 0b00110000,
-    Add = 0b00110001,
-    Sub = 0b00110010,
-    Mul = 0b00110011,
-    Div = 0b00110100,
-    Mod = 0b00110101,
-    Not = 0b00110111,
-    Neg = 0b00111000,
+    Add = 0b0011_0001,
+    Sub = 0b0011_0010,
+    Mul = 0b0011_0011,
+    Div = 0b0011_0100,
+    Mod = 0b0011_0101,
+    Not = 0b0011_0111,
+    Neg = 0b0011_1000,
 
     // Logical     = 0b01000000,
-    EqEq = 0b01000001,
-    NotEq = 0b01000010,
-    LessEq = 0b01000011,
-    MoreEq = 0b01000100,
-    Less = 0b01000101,
-    More = 0b01000111,
-    And = 0b01001000,
-    Or = 0b01001001,
+    EqEq = 0b0100_0001,
+    NotEq = 0b0100_0010,
+    LessEq = 0b0100_0011,
+    MoreEq = 0b0100_0100,
+    Less = 0b0100_0101,
+    More = 0b0100_0111,
+    And = 0b0100_1000,
+    Or = 0b0100_1001,
 
     // Branching   = 0b01010000,
-    Jump = 0b01010000,
-    JumpIfFalse = 0b01010010,
-    Call = 0b01010011,
+    Jump = 0b0101_0000,
+    JumpIfFalse = 0b0101_0010,
+    Call = 0b0101_0011,
 
     // Globals = 0b01100000,
-    GILoad = 0b01100001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GIStore = 0b01100010, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GFLoad = 0b01100011,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GFStore = 0b01100100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GSLoad = 0b01100101,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GSStore = 0b01100110, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GBLoad = 0b01100111,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GBStore = 0b01101000, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GILoad = 0b0110_0001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GIStore = 0b0110_0010, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GFLoad = 0b0110_0011,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GFStore = 0b0110_0100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GSLoad = 0b0110_0101,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GSStore = 0b0110_0110, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GBLoad = 0b0110_0111,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
+    GBStore = 0b0110_1000, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
 
     // Locals      = 0b01110000,
-    ILoad = 0b01110001,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    IStore = 0b01110010, // index(u16 - u8 + u8) の2つのオペランドを取る
-    FLoad = 0b01110011,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    FStore = 0b01110100, // index(u16 - u8 + u8) の2つのオペランドを取る
-    SLoad = 0b01110101,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    SStore = 0b01110110, // index(u16 - u8 + u8) の2つのオペランドを取る
-    BLoad = 0b01110111,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    BStore = 0b01111000, // index(u16 - u8 + u8) の2つのオペランドを取る
+    ILoad = 0b0111_0001,  // index(u16 - u8 + u8) の2つのオペランドを取る
+    IStore = 0b0111_0010, // index(u16 - u8 + u8) の2つのオペランドを取る
+    FLoad = 0b0111_0011,  // index(u16 - u8 + u8) の2つのオペランドを取る
+    FStore = 0b0111_0100, // index(u16 - u8 + u8) の2つのオペランドを取る
+    SLoad = 0b0111_0101,  // index(u16 - u8 + u8) の2つのオペランドを取る
+    SStore = 0b0111_0110, // index(u16 - u8 + u8) の2つのオペランドを取る
+    BLoad = 0b0111_0111,  // index(u16 - u8 + u8) の2つのオペランドを取る
+    BStore = 0b0111_1000, // index(u16 - u8 + u8) の2つのオペランドを取る
 
     // System     = 0b11110000,
-    Interrupt = 0b11111111,
-    DebugPrint = 0b11110001,
+    Interrupt = 0b1111_1111,
+    DebugPrint = 0b1111_0001,
 }
 
 pub trait toVmByte {
@@ -88,7 +88,7 @@ pub trait toVmByte {
 
 impl toVmByte for u16 {
     fn to_vm_byte(&self) -> Vec<u8> {
-        self.to_ne_bytes().iter().cloned().collect()
+        self.to_ne_bytes().to_vec()
     }
     fn sufficient_opcode(&self) -> OpCode {
         OpCode::Const16
@@ -97,7 +97,7 @@ impl toVmByte for u16 {
 
 impl toVmByte for i64 {
     fn to_vm_byte(&self) -> Vec<u8> {
-        self.to_ne_bytes().iter().cloned().collect()
+        self.to_ne_bytes().to_vec()
     }
     fn sufficient_opcode(&self) -> OpCode {
         OpCode::Const64
@@ -106,7 +106,7 @@ impl toVmByte for i64 {
 
 impl toVmByte for f64 {
     fn to_vm_byte(&self) -> Vec<u8> {
-        self.to_bits().to_ne_bytes().iter().cloned().collect()
+        self.to_bits().to_ne_bytes().to_vec()
     }
 
     fn sufficient_opcode(&self) -> OpCode {
@@ -135,7 +135,7 @@ impl toVmByte for bool {
 
 impl toVmByte for usize {
     fn to_vm_byte(&self) -> Vec<u8> {
-        self.to_ne_bytes().iter().cloned().collect()
+        self.to_ne_bytes().to_vec()
     }
 
     fn sufficient_opcode(&self) -> OpCode {
@@ -145,13 +145,13 @@ impl toVmByte for usize {
 
 bitflags! {
     pub struct Type: u8 {
-        const Null    = 0b10000000;
-        const Any     = 0b01000000;
-        const Func    = 0b00100000;
-        const Int     = 0b00000001;
-        const Float   = 0b00000010;
-        const Str     = 0b00000100;
-        const Boolean = 0b00001000;
+        const Null    = 0b1000_0000;
+        const Any     = 0b0100_0000;
+        const Func    = 0b0010_0000;
+        const Int     = 0b0000_0001;
+        const Float   = 0b0000_0010;
+        const Str     = 0b0000_0100;
+        const Boolean = 0b0000_1000;
     }
 }
 
@@ -182,12 +182,10 @@ impl Type {
     pub fn is_compatible(self, v: &Value) -> bool {
         if v == &Value::Null {
             true
+        } else if self.contains(Self::Any) {
+            true
         } else {
-            if self.contains(Self::Any) {
-                true
-            } else {
-                self.contains(v.to_type())
-            }
+            self.contains(v.to_type())
         }
     }
 
@@ -214,12 +212,10 @@ impl Type {
             TokenType::Plus => {
                 if a == Type::Str && b == Type::Str {
                     Ok(Type::Str)
+                } else if a == Type::Float || b == Type::Float {
+                    Ok(Type::Float)
                 } else {
-                    if a == Type::Float || b == Type::Float {
-                        Ok(Type::Float)
-                    } else {
-                        Ok(Type::Int)
-                    }
+                    Ok(Type::Int)
                 }
             }
             _ => Err(()),
@@ -402,12 +398,12 @@ impl ops::Add<Value> for Value {
             Value::Int(il) => match right {
                 Value::Int(ir) => Value::Int(il + ir),
                 Value::Float(fr) => Value::Float(il as f64 + fr),
-                x @ _ => unreachable!("TypeError: Can't add Int and {} together", x),
+                x => unreachable!("TypeError: Can't add Int and {} together", x),
             },
             Value::Float(fl) => match right {
                 Value::Int(ir) => Value::Float(fl + ir as f64),
                 Value::Float(fr) => Value::Float(fl + fr),
-                x @ _ => unreachable!("TypeError: Can't add Float and {} together", x),
+                x => unreachable!("TypeError: Can't add Float and {} together", x),
             },
             Value::Str(ref sl) => {
                 if let Value::Str(ref sr) = right {
@@ -418,7 +414,7 @@ impl ops::Add<Value> for Value {
             }
 
             // Bool
-            x @ _ => unreachable!("TypeError: {} does not support Addition", x),
+            x => unreachable!("TypeError: {} does not support Addition", x),
         }
     }
 }
@@ -431,15 +427,15 @@ impl ops::Sub<Value> for Value {
             Value::Int(il) => match right {
                 Value::Int(ir) => Value::Int(il - ir),
                 Value::Float(fr) => Value::Float(il as f64 - fr),
-                x @ _ => unreachable!("TypeError: Can't subtract {} from Int", x),
+                x => unreachable!("TypeError: Can't subtract {} from Int", x),
             },
             Value::Float(fl) => match right {
                 Value::Int(ir) => Value::Float(fl - ir as f64),
                 Value::Float(fr) => Value::Float(fl - fr),
-                x @ _ => unreachable!("TypeError: Can't subtract {} from Float", x),
+                x => unreachable!("TypeError: Can't subtract {} from Float", x),
             },
 
-            x @ _ => unreachable!("TypeError: {} does not support Subtraction", x),
+            x => unreachable!("TypeError: {} does not support Subtraction", x),
         }
     }
 }
@@ -452,16 +448,16 @@ impl ops::Mul<Value> for Value {
             Value::Int(il) => match right {
                 Value::Int(ir) => Value::Int(il * ir),
                 Value::Float(fr) => Value::Float(il as f64 * fr),
-                x @ _ => unreachable!("TypeError: Can't multiply Int and {}", x),
+                x => unreachable!("TypeError: Can't multiply Int and {}", x),
             },
             Value::Float(fl) => match right {
                 Value::Int(ir) => Value::Float(fl * ir as f64),
                 Value::Float(fr) => Value::Float(fl * fr),
-                x @ _ => unreachable!("TypeError: Can't multiply Float and {}", x),
+                x => unreachable!("TypeError: Can't multiply Float and {}", x),
             },
 
             // Bool & Str cannot be subtracted from others
-            x @ _ => unreachable!("TypeError: {} does not support Multiplification", x),
+            x => unreachable!("TypeError: {} does not support Multiplification", x),
         }
     }
 }
@@ -474,16 +470,16 @@ impl ops::Div<Value> for Value {
             Value::Int(il) => match right {
                 Value::Int(ir) => Value::Float(il as f64 / ir as f64),
                 Value::Float(fr) => Value::Float(il as f64 / fr),
-                x @ _ => unreachable!("TypeError: Cannot divide Int with {}", x),
+                x => unreachable!("TypeError: Cannot divide Int with {}", x),
             },
             Value::Float(fl) => match right {
                 Value::Int(ir) => Value::Float(fl / ir as f64),
                 Value::Float(fr) => Value::Float(fl / fr),
-                x @ _ => unreachable!("TypeError: Cannot divide Float with {}", x),
+                x => unreachable!("TypeError: Cannot divide Float with {}", x),
             },
 
             // Bool & Str cannot be subtracted from others
-            x @ _ => unreachable!("TypeError: {} does not support Division", x),
+            x => unreachable!("TypeError: {} does not support Division", x),
         }
     }
 }
@@ -515,7 +511,7 @@ impl ops::Not for Value {
             Value::Boolean(b) => Value::Boolean(!b),
             Value::Int(i) => Value::Boolean(i == 0),
             Value::Float(f) => Value::Boolean(f == 0.0),
-            Value::Str(s) => Value::Boolean(s.len() == 0),
+            Value::Str(s) => Value::Boolean(s.is_empty()),
             Value::Null => Value::Boolean(true),
             _ => panic!("Unimplemented Not operation"),
         }
@@ -532,7 +528,7 @@ impl ops::Not for &Value {
             Value::Boolean(b) => Value::Boolean(!*b),
             Value::Int(i) => Value::Boolean(*i == 0),
             Value::Float(f) => Value::Boolean(*f == 0.0),
-            Value::Str(s) => Value::Boolean(s.len() == 0),
+            Value::Str(s) => Value::Boolean(s.is_empty()),
             Value::Null => Value::Boolean(true),
             _ => panic!("Unimplemented Not operation"),
         }
@@ -546,7 +542,7 @@ impl ops::Neg for Value {
         match self {
             Value::Int(i) => Value::Int(-i),
             Value::Float(f) => Value::Float(-f),
-            x @ _ => unreachable!("TypeError:{} does not support negation", x),
+            x => unreachable!("TypeError:{} does not support negation", x),
         }
     }
 }

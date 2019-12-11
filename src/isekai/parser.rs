@@ -118,7 +118,7 @@ impl Parser {
         let condition = self.expression();
         let true_route = self.statement();
 
-        return Statement::If(
+        Statement::If(
             condition,
             Box::new(true_route),
             match self.is(TokenType::Else) {
@@ -128,14 +128,14 @@ impl Parser {
                 }
                 false => None,
             },
-        );
+        )
     }
 
     fn while_statement(&mut self) -> Statement {
         let condition = self.expression();
         let _loop = self.statement();
 
-        return Statement::While(condition, Box::new(_loop));
+        Statement::While(condition, Box::new(_loop))
     }
 
     fn block(&mut self) -> BlockData {
@@ -164,7 +164,7 @@ impl Parser {
             result = self.expression();
         }
 
-        return Statement::Return(result);
+        Statement::Return(result)
     }
 
     fn decralation(&mut self) -> Statement {
@@ -173,14 +173,12 @@ impl Parser {
         // if TokenType::is_typekind(&x.tokentype)
         // println!("{}", self.get_current());
         // println!("{}", self.get_next());
-        if self.is(TokenType::Iden) &&
-            self.is_next(TokenType::Colon)
-        {
+        if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
             // println!("This is a Declaration.");
             return self.declare_variable();
         }
 
-        return self.statement();
+        self.statement()
     }
 
     fn get_variable_type_and_identifier(&mut self) -> (Type, String) {
@@ -191,8 +189,7 @@ impl Parser {
         let declared_type = {
             if TokenType::is_typekind(&self.get_current().tokentype) {
                 let mut _type = Type::from_tokentype(&self.advance().tokentype);
-                if self.is(TokenType::Question)
-                {
+                if self.is(TokenType::Question) {
                     self.consume(TokenType::Question);
                     _type.set_nullable();
                 }
@@ -212,7 +209,7 @@ impl Parser {
         while self.is(TokenType::Iden) {
             self.current += 1;
             let (_type, iden) = self.get_variable_type_and_identifier();
-            let mut builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
+            let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
 
             let bridge_token = self.advance();
             match bridge_token.tokentype {
@@ -263,7 +260,7 @@ impl Parser {
         self.current += 1;
         let (_type, iden) = self.get_variable_type_and_identifier();
 
-        let mut builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
+        let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
         let mut state = Statement::Empty;
         // println!("{:?}", self.get_current());
 
@@ -276,7 +273,6 @@ impl Parser {
                 .expect("ParserError: Expected Semicolon After Decralation.");
             state = Statement::Decralation(data);
         }
-
         // Declaration, Outside
         else if self.is(TokenType::SemiColon) {
             self.current += 1;
@@ -284,7 +280,7 @@ impl Parser {
                 panic!("Uninitialized non-nullable variable: {}", iden);
             }
             let data = builder.build();
-            state =  Statement::Decralation(data);
+            state = Statement::Decralation(data);
         }
         // This is a function.
         else if self.is(TokenType::OpenParen) {
@@ -300,7 +296,7 @@ impl Parser {
     fn declare_function(&mut self, identity: &str, _ty: Type) -> Statement {
         let mut _type = _ty;
         _type.insert(Type::Func);
-        let mut builder = DeclarationDataBuilder::new()
+        let builder = DeclarationDataBuilder::new()
             .setname(identity)
             .settype(_type);
 
@@ -336,7 +332,7 @@ impl Parser {
             }
         }
 
-        return expr;
+        expr
     }
 
     pub fn logical_or(&mut self) -> Expr {
@@ -396,7 +392,7 @@ impl Parser {
             start = Expr::Binary(Box::new(start), Box::new(right), compare_operator);
         }
 
-        return start;
+        start
     }
 
     fn addition(&mut self) -> Expr {
@@ -410,7 +406,7 @@ impl Parser {
             start = Expr::Binary(Box::new(start), Box::new(right), addition_oper);
         }
 
-        return start;
+        start
     }
 
     fn multiplification(&mut self) -> Expr {
@@ -427,7 +423,7 @@ impl Parser {
             start = Expr::Binary(Box::new(start), Box::new(right), multiply_oper);
         }
 
-        return start;
+        start
     }
 
     fn unary(&mut self) -> Expr {
@@ -440,7 +436,7 @@ impl Parser {
             return unary;
         }
 
-        return self.func_call();
+        self.func_call()
     }
 
     fn func_call(&mut self) -> Expr {
@@ -470,7 +466,7 @@ impl Parser {
         let paren = self
             .consume(TokenType::CloseParen)
             .expect("Close Parentheses Expected.");
-        return Expr::FunctionCall(Box::new(_expr), paren.clone(), v);
+        Expr::FunctionCall(Box::new(_expr), paren.clone(), v)
     }
 
     fn is(&self, _type: TokenType) -> bool {
@@ -548,7 +544,7 @@ impl Parser {
                     Expr::Grouping(Box::new(inside_paren))
                 }
             }
-            s => {
+            _s => {
                 unreachable!("ParserError: while Handling Primary: Token {:?}", inside);
             }
         };
@@ -561,6 +557,6 @@ impl Parser {
             return Ok(self.advance());
         }
 
-        return Err(self.get_current());
+        Err(self.get_current())
     }
 }

@@ -1,8 +1,6 @@
 #[macro_use]
-use bitflags;
-
-use super::token::{Token, TokenType};
-use super::types::{Constant, Type, Value};
+use super::token::{Token};
+use super::types::{Constant, Type};
 use std::fmt;
 
 // TODO: REMOVE CLONE
@@ -90,7 +88,7 @@ impl DeclarationDataBuilder {
         self
     }
 
-    pub fn build(mut self) -> DeclarationData {
+    pub fn build(self) -> DeclarationData {
         DeclarationData {
             name: self.name.unwrap(),
             _type: self._type.unwrap(),
