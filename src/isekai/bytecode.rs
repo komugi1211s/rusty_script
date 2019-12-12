@@ -1,4 +1,4 @@
-use super::parse::{DeclarationData, Expr, FunctionData, ParserNode, Statement};
+use super::parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode};
 use super::token::TokenType;
 use super::types::{toVmByte, Constant, OpCode, Type};
 use num_traits::FromPrimitive;
@@ -24,9 +24,11 @@ pub struct ConstantTable {
 }
 
 impl Code {
-    fn merge(&mut self, other: Code) {
+    fn merge(&mut self, other: Code) -> usize {
+        let current_length = self.current_length();
         self.bytes.extend(other.bytes);
         self.line.extend(other.line);
+        current_length
     }
 
     pub fn push_operand(&mut self, operand: u8, line: usize) -> usize {
@@ -76,80 +78,6 @@ impl Code {
         self.bytes.len()
     }
 
-    pub fn disassemble_all(&self) -> Vec<String> {
-        self.disassemble(0, self.bytes.len())
-    }
-
-    pub fn disassemble(&self, start: usize, max_len: usize) -> Vec<String> {
-        let mut vector: Vec<String> = Vec::new();
-        vector.push(" ============ DISASSEMBLED ============ \n".to_string());
-        let mut current = start;
-        let max = max_len;
-        while current < max {
-            let opbyte = self.bytes[current];
-            let mut opcode = format!("{:?}", OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
-            opcode.make_ascii_uppercase();
-            let padding =
-                self.disassemble_pad(OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
-            if 0 < padding {
-                current += 1;
-
-                let operand = self.get_disassemble_operand(current, padding);
-                let formatted = format!("{:<16} {}", opcode, operand);
-                let in_byte = format!("{:02X} {}", opbyte, operand);
-                vector.push(format!(
-                    " | {:04X} | {:<48} | {}",
-                    current, formatted, in_byte
-                ));
-                current += padding;
-            } else {
-                let in_byte = format!("{:02X}", opbyte);
-                let formatted = format!("{:<16}", opcode);
-                vector.push(format!(
-                    " | {:04X} | {:<48} | {}",
-                    current, formatted, in_byte
-                ));
-                current += 1;
-            }
-        }
-
-        vector.push("\n ========== DISASSEMBLE DONE ========== \n".to_string());
-        vector.push(" ============= BYTE CODES ============= \n".to_string());
-        let bytecode_hex: Vec<String> = (&self.bytes[start..max])
-            .iter()
-            .map(|x| format!("{:02x}", x))
-            .collect();
-        vector.push(bytecode_hex.join(" "));
-        vector.push("\n =========== BYTE CODES DONE ========== \n".to_string());
-        vector
-    }
-
-    fn get_disassemble_operand(&self, current: usize, padding: usize) -> String {
-        let operand = &self.bytes[(current)..(current + padding)];
-        let formatted: Vec<String> = operand.iter().map(|x| format!("{:02X}", x)).collect();
-        formatted.join(" ")
-    }
-
-    fn disassemble_pad(&self, opcode: OpCode) -> usize {
-        match opcode {
-            OpCode::Const8
-            | OpCode::Const16
-            | OpCode::Const32
-            | OpCode::Const64
-            | OpCode::ConstDyn => USIZE_LENGTH,
-
-            OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
-            OpCode::Call => 2,
-            OpCode::PushPtr | OpCode::Push => USIZE_LENGTH,
-
-            OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad | OpCode::GBLoad => 2,
-            OpCode::GIStore | OpCode::GFStore | OpCode::GSStore | OpCode::GBStore => 2,
-
-            OpCode::ILoad | OpCode::FLoad | OpCode::SLoad | OpCode::BLoad => 2,
-            OpCode::IStore | OpCode::FStore | OpCode::SStore | OpCode::BStore => 2,
-            _ => 0,
-        }
-    }
 }
 
 impl ConstantTable {
@@ -217,8 +145,104 @@ impl ConstantTable {
         (data, self.types.get(&index).unwrap())
     }
 }
-
 type Local = (Type, u16);
+
+#[derive(Debug, Clone)]
+struct FuncInfo {
+    position: usize,
+    arg_count: usize,
+    arg_types: Vec<Type>,
+    return_type: Type,
+}
+
+pub fn disassemble_all(code: &Code) -> Vec<String> {
+    disassemble(code, 0, code.bytes.len())
+}
+
+pub fn disassemble(code: &Code, start: usize, max_len: usize) -> Vec<String> {
+    let mut vector: Vec<String> = Vec::new();
+    vector.push(" ============ DISASSEMBLED ============ \n".to_string());
+    let mut current = start;
+    let max = max_len;
+    while current < max {
+        let opbyte = code.bytes[current];
+        let mut opcode = format!("{:?}", OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
+        opcode.make_ascii_uppercase();
+        let padding =
+            disassemble_pad(OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
+        if 0 < padding {
+            current += 1;
+
+            let operand = get_disassemble_operand(code, current, padding);
+            let formatted = format!("{:<16} {}", opcode, operand);
+            let in_byte = format!("{:02X} {}", opbyte, operand);
+            vector.push(format!(
+                " | {:04X} | {:<48} | {}",
+                current, formatted, in_byte
+            ));
+            current += padding;
+        } else {
+            let in_byte = format!("{:02X}", opbyte);
+            let formatted = format!("{:<16}", opcode);
+            vector.push(format!(
+                " | {:04X} | {:<48} | {}",
+                current, formatted, in_byte
+            ));
+            current += 1;
+        }
+    }
+
+    vector.push("\n ========== DISASSEMBLE DONE ========== \n".to_string());
+    vector.push(" ============= BYTE CODES ============= \n".to_string());
+    let bytecode_hex: Vec<String> = (&code.bytes[start..max])
+        .iter()
+        .map(|x| format!("{:02x}", x))
+        .collect();
+    vector.push(bytecode_hex.join(" "));
+    vector.push("\n =========== BYTE CODES DONE ========== \n".to_string());
+    vector
+}
+
+fn get_disassemble_operand(code: &Code, current: usize, padding: usize) -> String {
+    let operand = &code.bytes[(current)..(current + padding)];
+    let formatted: Vec<String> = operand.iter().map(|x| format!("{:02X}", x)).collect();
+    formatted.join(" ")
+}
+
+fn disassemble_pad(opcode: OpCode) -> usize {
+    match opcode {
+        OpCode::Const8
+        | OpCode::Const16
+        | OpCode::Const32
+        | OpCode::Const64
+        | OpCode::ConstDyn => USIZE_LENGTH,
+
+        OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
+        OpCode::Call => 2,
+        OpCode::PushPtr | OpCode::Push => USIZE_LENGTH,
+
+        OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad | OpCode::GBLoad => 2,
+        OpCode::GIStore | OpCode::GFStore | OpCode::GSStore | OpCode::GBStore => 2,
+
+        OpCode::ILoad | OpCode::FLoad | OpCode::SLoad | OpCode::BLoad => 2,
+        OpCode::IStore | OpCode::FStore | OpCode::SStore | OpCode::BStore => 2,
+        _ => 0,
+    }
+}
+
+impl FuncInfo
+{
+    fn new(position: usize, arg_count: usize, arg_types: Vec<Type>, return_type: Type) -> Self
+    {
+        Self {
+            position,
+            arg_count,
+            arg_types,
+            return_type
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct BytecodeGenerator {
     // Things that we return
@@ -228,7 +252,7 @@ pub struct BytecodeGenerator {
     // To keep track of definitions
     pub current_define: Vec<Local>,
     pub global_type: HashMap<u16, Type>,
-    pub labels: HashMap<u16, usize>,
+    function_table: HashMap<u16, FuncInfo>,
 
     // Keep track of block nesting
     pub last_loop_start: usize,
@@ -255,7 +279,7 @@ impl BytecodeGenerator {
             code: Code::default(),
             const_table: ConstantTable::default(),
             global_type: HashMap::new(),
-            labels: HashMap::new(),
+            function_table: HashMap::new(),
             current_define: Vec::new(),
             last_loop_start: usize::max_value(),
             current_block: 0,
@@ -263,12 +287,68 @@ impl BytecodeGenerator {
         }
     }
 
-    pub fn traverse_ast(mut self, ast: Vec<ParserNode>) -> Result<(Code, ConstantTable), ()> {
-        for i in ast {
-            self.handle_data(i);
+    pub fn traverse_ast(mut self, ast: ParsedResult) -> Result<(usize, Code, ConstantTable), ()> {
+        for function in ast.functions {
+            self.prepare_function(function);
+        }
+        let entry_point = self.code.current_length();
+        for i in ast.statements {
+            self.handle_stmt(i.value, i.line);
         }
         self.const_table.push_data(usize::max_value().to_vm_byte());
-        Ok((self.code, self.const_table))
+        Ok((entry_point, self.code, self.const_table))
+    }
+
+    fn prepare_function(
+        &mut self,
+        function: FunctionData,
+    ) {
+        let decl_info = function.it;
+        let body_block = function.block;
+        // 実際に使うことはないが、特定の関数が必要とするため用意
+        let mut placeholder = StatementHandleResult {
+            line: 0,
+            index: 0,
+        };
+
+        // 引数のデータをコピーして数を保存
+        let _arguments = function.args;
+        let arg_count = _arguments.len();
+
+        // 関数自体の戻り値をグローバルに定義しておく
+        let return_type = decl_info._type;
+        self.global_type.insert(decl_info.name_u16, decl_info._type);
+        
+        // 現在のコードセクションとローカルセクションを保存し、
+        // コールフレームを作るためローカル変数のインデックスをリセットした上で
+        // 変数を引数として処理する
+        let main_code = mem::replace(&mut self.code, Code::default());
+        let main_local = mem::replace(&mut self.current_define, Vec::new());
+
+        // current_block を加算する事でローカル領域として処理を進める
+        self.current_block += 1;
+        let mut argument_types = Vec::new();
+        for arg_decl_info in _arguments {
+            let arg_type = arg_decl_info._type;
+            argument_types.push(arg_type);
+            self.handle_declaration_data(&mut placeholder, arg_decl_info);
+        }
+
+        // コードセクションも上記と同様に処理する
+        for i in body_block.statements {
+            self.handle_stmt(i, 0);
+        }
+        self.current_block -= 1;
+
+        // 元のコードを復活させ、後付けでマージする
+        let _function_code = mem::replace(&mut self.code, main_code);
+        let _function_local = mem::replace(&mut self.current_define, main_local);
+        let function_index = self.code.merge(_function_code);
+
+        // 関数に関する情報を保存してテーブルに保存
+        let func_info = FuncInfo::new(function_index, arg_count, argument_types, return_type);
+        self.function_table.insert(decl_info.name_u16, func_info);
+        placeholder.index = self.code.current_length();
     }
 
     pub fn write_const(&mut self, constant: Constant, line: usize) -> usize {
@@ -291,11 +371,6 @@ impl BytecodeGenerator {
         self.code.push_opcode(opcode, line);
         self.code.push_operands(start_index.to_vm_byte(), line);
         start_index
-    }
-
-    fn handle_data(&mut self, data: ParserNode) {
-        let line = data.line;
-        self.handle_stmt(data.value, line);
     }
 
     fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
@@ -435,7 +510,14 @@ impl BytecodeGenerator {
                 handled_result
             }
             Statement::Function(func_data) => {
-                self.handle_function_data(&mut handled_result, func_data, line);
+                // self.handle_function_data(&mut handled_result, func_data, line);
+                handled_result
+            }
+            Statement::Return(opt_expr) => {
+                if let Some(expr) = opt_expr {
+                    self.handle_expr(expr, line);
+                }
+                handled_result.index = self.code.push_opcode(OpCode::Return, line);
                 handled_result
             }
             _ => unreachable!(),
@@ -463,7 +545,7 @@ impl BytecodeGenerator {
             }
         };
 
-        if actual_type == Type::Null {
+        if actual_type == Type::Null && !info.is_argument {
             if declared_type.is_any() {
                 panic!("You cannot initialize Any type with null");
             }
@@ -473,8 +555,13 @@ impl BytecodeGenerator {
             }
         } else if declared_type.is_any() {
             declared_type = actual_type
-        } else if declared_type != actual_type {
-            panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
+        
+        // FIXME: this is error prone, function that returns int can be overwritten by single
+        // primitive int value
+        } else if !declared_type.contains(actual_type) {
+            if !info.is_argument && actual_type == Type::Null {
+                panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
+            }
         }
 
         // let index = self.code.write_const(name);
@@ -488,13 +575,7 @@ impl BytecodeGenerator {
             self.current_define.push((declared_type, name));
             let position = self.current_define.len() - 1;
             declared_type.remove(Type::Null);
-            let opcode = match declared_type {
-                Type::Int => OpCode::IStore,
-                Type::Float => OpCode::FStore,
-                Type::Boolean => OpCode::BStore,
-                Type::Str => OpCode::SStore,
-                _ => panic!("Unsupported opcode for here"),
-            };
+            let opcode = self.get_store_opcode(declared_type, false);
             let operands = position as u16;
 
             self.code.push_opcode(opcode, out.line);
@@ -502,42 +583,43 @@ impl BytecodeGenerator {
         } else {
             self.global_type.insert(name, declared_type);
             declared_type.remove(Type::Null);
-            let opcode = match declared_type {
-                Type::Int => OpCode::GIStore,
-                Type::Float => OpCode::GFStore,
-                Type::Boolean => OpCode::GBStore,
-                Type::Str => OpCode::GSStore,
-                _ => panic!("Unsupported opcode for here"),
-            };
+            let opcode = self.get_store_opcode(declared_type, true);
             self.code.push_opcode(opcode, out.line);
             out.index = self.code.push_operands(name.to_vm_byte(), out.line);
         }
     }
 
-    fn handle_function_data(
-        &mut self,
-        out: &mut StatementHandleResult,
-        data: FunctionData,
-        line: usize,
-    ) {
-        if 0 < self.current_block {
-            panic!("You currently cannot create closure.");
-        }
-        let decl_info = data.it;
-        let _arguments = data.args;
-        let body_block = data.block;
+    fn get_load_opcode(&self, _type: Type, is_global: bool) -> OpCode
+    {
+        self.get_type_based_opcode(_type, is_global, true)
+    }
 
-        self.global_type.insert(decl_info.name_u16, decl_info._type);
-        self.current_block += 1;
-        let main_code = mem::replace(&mut self.code, Code::default());
-        let main_local = mem::replace(&mut self.current_define, Vec::new());
-        for i in body_block.statements {
-            self.handle_stmt(i, line);
+    fn get_store_opcode(&self, _type: Type, is_global: bool) -> OpCode
+    {
+        self.get_type_based_opcode(_type, is_global, false)
+    }
+
+    fn get_type_based_opcode(&self, _type: Type, is_global: bool, is_load: bool) -> OpCode {
+        match _type {
+            Type::Int     if is_global && !is_load  => OpCode::GIStore,
+            Type::Float   if is_global && !is_load  => OpCode::GFStore,
+            Type::Boolean if is_global && !is_load  => OpCode::GBStore,
+            Type::Str     if is_global && !is_load  => OpCode::GSStore,
+            Type::Int     if is_global && is_load   => OpCode::GILoad,
+            Type::Float   if is_global && is_load   => OpCode::GFLoad,
+            Type::Boolean if is_global && is_load   => OpCode::GBLoad,
+            Type::Str     if is_global && is_load   => OpCode::GSLoad,
+
+            Type::Int     if !is_global && !is_load => OpCode::IStore,
+            Type::Float   if !is_global && !is_load => OpCode::FStore,
+            Type::Boolean if !is_global && !is_load => OpCode::BStore,
+            Type::Str     if !is_global && !is_load => OpCode::SStore,
+            Type::Int     if !is_global && is_load  => OpCode::ILoad,
+            Type::Float   if !is_global && is_load  => OpCode::FLoad,
+            Type::Boolean if !is_global && is_load  => OpCode::BLoad,
+            Type::Str     if !is_global && is_load  => OpCode::SLoad,
+            _ => panic!("Unsupported opcode for here"),
         }
-        let _function_code = mem::replace(&mut self.code, main_code);
-        let _function_local = mem::replace(&mut self.current_define, main_local);
-        self.current_block -= 1;
-        out.index = self.code.current_length();
     }
 
     fn handle_constant_data(
@@ -585,13 +667,7 @@ impl BytecodeGenerator {
                     }
 
                     let _type = self.global_type.get(&name).unwrap().clone();
-                    let opcode = match _type {
-                        Type::Int => OpCode::GILoad,
-                        Type::Float => OpCode::GFLoad,
-                        Type::Str => OpCode::GSLoad,
-                        Type::Boolean => OpCode::GBLoad,
-                        _ => unreachable!(),
-                    };
+                    let opcode = self.get_load_opcode(_type, true);
                     handled_result._type = _type;
                     self.code.push_opcode(opcode, line);
                     handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
@@ -605,14 +681,7 @@ impl BytecodeGenerator {
                 };
                 let index = index as u16;
                 handled_result._type = _type;
-
-                let opcode = match _type {
-                    Type::Int => OpCode::ILoad,
-                    Type::Float => OpCode::FLoad,
-                    Type::Str => OpCode::SLoad,
-                    Type::Boolean => OpCode::BLoad,
-                    _ => unreachable!(),
-                };
+                let opcode = self.get_load_opcode(_type, false);
                 self.code.push_opcode(opcode, line);
                 handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
                 handled_result
@@ -678,7 +747,6 @@ impl BytecodeGenerator {
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) => {
                 let another_result = self.handle_expr(*expr, line);
-
                 let is_exist = self.current_define.iter().position(|&x| x.1 == name);
 
                 if is_exist.is_none() {
@@ -731,20 +799,23 @@ impl BytecodeGenerator {
             }
             Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
                 if let Expr::Variable(name) = *func_name {
-                    let address_section = self.code.push_opcode(OpCode::PushPtr, line);
-                    self.code
-                        .push_operands(usize::max_value().to_vm_byte(), line);
+                    let func_info = self.function_table.get(&name).expect("Undefined Function call.").clone();
+                    if func_info.arg_count != arguments.len()
+                    {
+                        panic!("Too Few / much arguments provided. require {}", func_info.arg_count);
+                    }
+                    let ARR_END = func_info.arg_count;
+                    let function_address = func_info.position;
                     arguments.reverse();
-                    for arg in arguments {
-                        self.handle_expr(arg, line);
+                    for (i, arg) in arguments.drain(..).enumerate() {
+                        let handled_type = self.handle_expr(arg, line);
+                        if func_info.arg_types[ARR_END - i] != handled_type._type {
+                            panic!("Type Mismatch when calling a function!! at line {}", line);
+                        }
                     }
                     self.code.push_opcode(OpCode::Call, line);
-                    let jump_here = self.code.push_operands(name.to_vm_byte(), line);
-                    self.code.push_opcode(OpCode::BlockOut, line);
-                    self.code
-                        .rewrite_operands(jump_here.to_vm_byte(), address_section);
-
-                    handled_result._type = *self.global_type.get(&name).unwrap_or(&Type::Int);
+                    let jump_here = self.code.push_operands(function_address.to_vm_byte(), line);
+                    handled_result._type = func_info.return_type; 
                     handled_result.index = jump_here;
                 }
                 handled_result

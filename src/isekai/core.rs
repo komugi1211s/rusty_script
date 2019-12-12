@@ -2,17 +2,20 @@ use super::parser::Parser;
 use super::token::Token;
 use super::tokenizer::{SyntaxError, Tokenizer};
 // use super::evaluate::Interpreter;
-use super::bytecode::BytecodeGenerator;
+use super::bytecode::{ BytecodeGenerator, disassemble_all };
 use super::vm::VirtualMachine;
 // use self::error::*;
 use std::time::Instant;
+use std::io::prelude::*;
+use std::fs::File;
+
 
 pub fn start(code: &str) -> Result<(), SyntaxError> {
     let start = Instant::now();
     let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
     println!(
-        "Tokenizer took: \x1b[32m{} ms\x1b[39m",
-        start.elapsed().as_millis()
+        "Tokenizer took: \x1b[32m{} micros\x1b[39m",
+        start.elapsed().as_micros()
     );
 
     let mut _parser: Parser = Parser::new(_tokens);
@@ -20,24 +23,33 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
     let parser_time = Instant::now();
     let result = _parser.parse();
     println!(
-        "Parser took: \x1b[32m{} ms\x1b[39m",
-        parser_time.elapsed().as_millis()
+        "Parser took: \x1b[32m{} micros\x1b[39m",
+        parser_time.elapsed().as_micros()
     );
     // println!("parsed_result: \x1B{:#?}", result);
 
     let codegen = BytecodeGenerator::new();
-    let (code, table) = codegen.traverse_ast(result).unwrap();
-    let _disassembled = code.disassemble_all();
+    let codegen_time = Instant::now();
+    let (ep, code, table) = codegen.traverse_ast(result).unwrap();
+    println!(
+        "Codegen took: \x1b[32m{} micros\x1b[39m",
+        codegen_time.elapsed().as_micros()
+    );
+    let disassembled = disassemble_all(&code);
 
-    // {
-    //     let mut file = File::create("dump").expect("Dump File failed to create.");
-    //     for i in disassembled {
-    //         writeln!(file, "{}", i).expect("Hey?");
-    //     }
-    //     file.flush().expect("File Flushing Failed.");
-    // }
+    {
+        let mut file = File::create("dump").expect("Dump File failed to create.");
+        for i in disassembled {
+            writeln!(file, "{}", i).expect("Hey?");
+        }
+        file.flush().expect("File Flushing Failed.");
+    }
 
-    let mut vm = VirtualMachine::new(code, table);
+    println!(
+        "Total Time: \x1b[32m{} micros\x1b[39m",
+        start.elapsed().as_micros()
+    );
+    let mut vm = VirtualMachine::new(ep, code, table);
     vm.run();
 
     /*

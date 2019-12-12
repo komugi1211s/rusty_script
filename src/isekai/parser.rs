@@ -1,6 +1,8 @@
 use super::{
     parse::{
-        BlockData, DeclarationData, DeclarationDataBuilder, Expr, FunctionData, ParserNode,
+        BlockData, DeclarationData, DeclarationDataBuilder, Expr, FunctionData,
+        StatementNode,
+        ParsedResult, 
         Statement,
     },
     token::{Token, TokenType},
@@ -31,7 +33,9 @@ const MAX_IDENTIFIER_LENGTH: usize = 530;
 
 pub struct Parser {
     tokens: Vec<Token>,
+    parsed_result: ParsedResult,
     current: usize,
+    current_line: usize,
     assign_count: usize,
     block_count: usize,
 }
@@ -44,20 +48,20 @@ impl Parser {
     pub fn new(_tok: Vec<Token>) -> Self {
         Self {
             tokens: _tok,
+            parsed_result: ParsedResult { functions: vec![], statements: vec![] },
             current: 0,
+            current_line: 0,
             assign_count: 0,
             block_count: 0,
         }
     }
 
-    pub fn parse(&mut self) -> Vec<ParserNode> {
-        let mut statements: Vec<ParserNode> = Vec::new();
+    pub fn parse(mut self) -> ParsedResult {
         while !self.is_at_end() {
-            let current_line = self.tokens[self.current].line;
-            let x = self.decralation();
-            statements.push(ParserNode::new(x, current_line));
+            let declaration = self.declaration();
+            self.parsed_result.statements.push(StatementNode::new(declaration, self.current_line));
         }
-        statements
+        self.parsed_result
     }
 
     fn is_at_end(&self) -> bool {
@@ -121,12 +125,11 @@ impl Parser {
         Statement::If(
             condition,
             Box::new(true_route),
-            match self.is(TokenType::Else) {
-                true => {
-                    self.current += 1;
-                    Some(Box::new(self.statement()))
-                }
-                false => None,
+            if self.is(TokenType::Else) {
+                self.current += 1;
+                Some(Box::new(self.statement()))
+            } else {
+                None
             },
         )
     }
@@ -144,7 +147,7 @@ impl Parser {
         self.block_count += 1;
         let mut vector = Vec::new();
         while !self.is_at_end() && !self.is(TokenType::CloseBrace) {
-            vector.push(self.decralation());
+            vector.push(self.declaration());
         }
         let local_assign_count = self.assign_count;
         self.assign_count = previous_count;
@@ -159,22 +162,16 @@ impl Parser {
     }
 
     fn return_statement(&mut self) -> Statement {
-        let mut result = Expr::Literal(Constant::null());
+        let mut result = None;
         if !self.is(TokenType::SemiColon) {
-            result = self.expression();
+            result = Some(self.expression());
         }
 
         Statement::Return(result)
     }
 
-    fn decralation(&mut self) -> Statement {
-        // Called at iden: [type] = value
-        //           ^ right here
-        // if TokenType::is_typekind(&x.tokentype)
-        // println!("{}", self.get_current());
-        // println!("{}", self.get_next());
+    fn declaration(&mut self) -> Statement {
         if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
-            // println!("This is a Declaration.");
             return self.declare_variable();
         }
 
@@ -209,7 +206,7 @@ impl Parser {
         while self.is(TokenType::Iden) {
             self.current += 1;
             let (_type, iden) = self.get_variable_type_and_identifier();
-            let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
+            let builder = DeclarationDataBuilder::new().setargmode(true).setname(&iden).settype(_type);
 
             let bridge_token = self.advance();
             match bridge_token.tokentype {
@@ -311,7 +308,8 @@ impl Parser {
             args: arguments,
             block: inside_func,
         };
-        Statement::Function(data)
+        self.parsed_result.functions.push(data);
+        Statement::Function(self.parsed_result.functions.len() - 1)
     }
 
     fn expression(&mut self) -> Expr {
@@ -469,36 +467,44 @@ impl Parser {
         Expr::FunctionCall(Box::new(_expr), paren.clone(), v)
     }
 
-    fn is(&self, _type: TokenType) -> bool {
+    fn is(&mut self, _type: TokenType) -> bool {
         (!self.is_at_end() && self.get_current().tokentype == _type)
     }
 
-    fn is_next(&self, _type: TokenType) -> bool {
+    fn is_next(&mut self, _type: TokenType) -> bool {
         (!self.is_at_end() && self.get_next().tokentype == _type)
     }
 
-    fn is_previous(&self, _type: TokenType) -> bool {
+    fn is_previous(&mut self, _type: TokenType) -> bool {
         (!self.is_at_end() && self.get_previous().tokentype == _type)
     }
 
-    fn get_current(&self) -> &Token {
-        self.tokens.get(self.current).unwrap()
+    fn get_current(&mut self) -> &Token {
+        let x = self.tokens.get(self.current).unwrap();
+        self.current_line = x.line;
+        x
     }
 
-    fn get_previous(&self) -> &Token {
-        self.tokens.get(self.current - 1).unwrap()
+    fn get_previous(&mut self) -> &Token {
+        let x = self.tokens.get(self.current - 1).unwrap();
+        self.current_line = x.line;
+        x
     }
 
-    fn get_next(&self) -> &Token {
+    fn get_next(&mut self) -> &Token {
         if self.current + 1 >= self.tokens.len() {
             return self.get_current();
         }
-        self.tokens.get(self.current + 1).unwrap()
+        let x = self.tokens.get(self.current + 1).unwrap();
+        self.current_line = x.line;
+        x
     }
 
     fn advance(&mut self) -> &Token {
         self.current += 1;
-        self.tokens.get(self.current - 1).unwrap()
+        let x = self.tokens.get(self.current - 1).unwrap();
+        self.current_line = x.line;
+        x
     }
 
     fn primary(&mut self) -> Expr {
@@ -538,10 +544,11 @@ impl Parser {
             OpenParen => {
                 let inside_paren = self.expression();
                 let closed_paren = self.consume(CloseParen);
-                if closed_paren.is_err() {
-                    panic!("ParserError: We could not find a closed Paren! current: {}, current_Token: {}", self.current, self.get_current());
-                } else {
-                    Expr::Grouping(Box::new(inside_paren))
+                match closed_paren {
+                    Ok(_) => Expr::Grouping(Box::new(inside_paren)),
+                    Err(instead) => {
+                        panic!("ParserError: we expected closed paren but instead we received: {}", instead);
+                    }
                 }
             }
             _s => {

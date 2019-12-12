@@ -1,4 +1,4 @@
-use super::bytecode::{Code, ConstantTable};
+use super::bytecode::{Code, ConstantTable, disassemble};
 use super::types::{OpCode, Type, Value};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -23,10 +23,10 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    pub fn new(code: Code, const_table: ConstantTable) -> Self {
+    pub fn new(ep: usize, code: Code, const_table: ConstantTable) -> Self {
         Self {
             stack: Vec::new(),
-            code_ip: 0,
+            code_ip: ep,
             stack_pointer: 0,
             code,
             const_table,
@@ -218,6 +218,19 @@ impl VirtualMachine {
                     println!("{}", a);
                     self.code_ip += 1;
                 }
+                OpCode::Call => {
+                    let operand_one = self.code.bytes[self.code_ip + 1];
+                    let operand_two = self.code.bytes[self.code_ip + 2];
+                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
+
+                    stack_pointer_stack.push(self.stack_pointer);
+                    self.stack_pointer = self.stack.len();
+                }
+                OpCode::Return => {
+                    let return_value = self.stack.pop().unwrap();
+                    let address = self.stack.pop().unwrap();
+                    self.stack.push(return_value);
+                }
                 _ => {
                     println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");
                     println!("OpCode Interrupt Detected at index {}", self.code_ip);
@@ -228,7 +241,7 @@ impl VirtualMachine {
                     } else {
                         self.code_ip + 5
                     };
-                    for message in self.code.disassemble(self.code_ip - 5, max_len) {
+                    for message in disassemble(&self.code, self.code_ip - 5, max_len) {
                         println!("{}", message);
                     }
                     panic!();
