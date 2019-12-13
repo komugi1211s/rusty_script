@@ -83,7 +83,6 @@ pub enum OpCode {
 
 pub trait toVmByte {
     fn to_vm_byte(&self) -> Vec<u8>;
-    fn from_vm_byte(t: &Vec<u8>) -> Self;
     fn sufficient_opcode(&self) -> OpCode;
 }
 
@@ -137,17 +136,6 @@ impl toVmByte for bool {
 impl toVmByte for usize {
     fn to_vm_byte(&self) -> Vec<u8> {
         self.to_ne_bytes().to_vec()
-    }
-    
-    fn from_vm_byte(bytes: &Vec<u8>) -> Self
-    {
-        assert_eq!(bytes.len(), 8);
-        let mut bytearray: [u8; 8] = [0; 8];
-        for (count, byte) in bytes.iter().enumerate()
-        {
-            bytearray[count] = *byte;
-        }
-        Self::from_ne_bytes(bytearray)
     }
 
     fn sufficient_opcode(&self) -> OpCode {
@@ -312,74 +300,7 @@ impl Constant {
             code: OpCode::PushPtr,
         }
     }
-    
-    pub fn as_bool(&self) -> Self
-    {
-        match self.ctype {
-            Type::Int       => i64::from_vm_byte(&self.value) != 0,
-            Type::Float     => f64::from_vm_byte(&self.value) != 0.0,
-            Type::Str       => String::from_vm_byte(&self.value).len() != 0,
-            Type::Boolean   => bool::from_vm_byte(&self.value),
-            Type::Null      => false,
-            _ => unreachable!(),
-        }.into()
-    }
-    
-    pub fn is_truthy(&self) -> bool 
-    {
-        match self.ctype {
-            Type::Int       => i64::from_vm_byte(&self.value) != 0,
-            Type::Float     => f64::from_vm_byte(&self.value) != 0.0,
-            Type::Str       => String::from_vm_byte(&self.value).len() != 0,
-            Type::Boolean   => bool::from_vm_byte(&self.value),
-            Type::Null      => false,
-            _ => unreachable!(),
-        }
-    }
 }
-
-impl PartialEq for Constant
-{
-    fn eq(&self, other: &Constant) -> bool
-    {
-        self.ctype == other.ctype && self.value == other.value
-    }
-}
-
-use std::cmp::Ordering;
-impl PartialOrd for Constant 
-{
-    fn partial_cmp(&self, other: &Constant) -> Option<Ordering>
-    {
-        match self.ctype {
-            Type::Int if other.ctype == Type::Int => {
-                let left = i64::from_vm_byte(&self.value);
-                let right = i64::from_vm_byte(&other.value);
-                left.partial_cmp(&right)
-            },
-
-            Type::Float if other.ctype == Type::Int => {
-                let left = f64::from_vm_byte(&self.value);
-                let right = i64::from_vm_byte(&other.value) as f64;
-                left.partial_cmp(&right)
-            },
-
-            Type::Int if other.ctype == Type::Float => {
-                let left = i64::from_vm_byte(&self.value) as f64;
-                let right = f64::from_vm_byte(&other.value);
-                left.partial_cmp(&right)
-            },
-
-            Type::Float if other.ctype == Type::Float => {
-                let left = f64::from_vm_byte(&self.value);
-                let right = f64::from_vm_byte(&other.value);
-                left.partial_cmp(&right)
-            },
-            _ => unreachable!(),
-        }
-    }
-}
-
 
 impl<T> From<T> for Constant
 where
@@ -627,7 +548,6 @@ impl ops::Neg for Value {
     }
 }
 
-/*
 use std::cmp::Ordering;
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Value) -> Option<Ordering> {
@@ -646,4 +566,3 @@ impl PartialOrd for Value {
         }
     }
 }
-*/
