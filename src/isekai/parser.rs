@@ -181,10 +181,10 @@ impl Parser {
 
     fn get_variable_type_and_identifier(&mut self) -> (Type, String) {
         let identity = { self.get_previous().lexeme.clone() };
-        self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
-        let type_token = self.advance();
+        let colon = self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
 
-        if TokenType::is_typekind(&type_token.tokentype) {
+        if TokenType::is_typekind(&self.get_current().tokentype) {
+            let type_token = self.advance();
             let mut dtype = Type::from_tokentype(&type_token.tokentype);
             let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
 
@@ -263,17 +263,19 @@ impl Parser {
         let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
         let mut state = Statement::Empty;
         // Initialization, Outside
-        if self.consume(TokenType::Equal).is_ok() {
+        if self.consume(TokenType::Equal).is_ok()
+        {
             let item = self.expression();
             let data = builder.setexpr(item).build();
             self.consume(TokenType::SemiColon)
                 .expect("ParserError: Expected Semicolon After Decralation.");
             state = Statement::Decralation(data);
-        }
-        // Declaration, Outside
-        else if self.consume(TokenType::SemiColon).is_ok() {
+        } 
+        else if self.consume(TokenType::SemiColon).is_ok()
+        {
             // return if nullable
-            if _type.is_nullable() {
+            if _type.is_nullable()
+            {
                 let data = builder.build();
                 state = Statement::Decralation(data);
             }
@@ -283,10 +285,12 @@ impl Parser {
             }
         }
         // This is a function.
-        else if self.is(TokenType::OpenParen) {
+        else if self.is(TokenType::OpenParen)
+        {
             return self.declare_function(&iden, _type);
         }
 
+        println!("{:?}", self.get_current());
         match state {
             Statement::Empty => panic!("Failed to parse the declaration process."),
             _ => state,
@@ -322,6 +326,7 @@ impl Parser {
     fn assignment(&mut self) -> Expr {
         let expr = self.logical_or();
 
+        // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
         if self.is(TokenType::Equal) {
             self.advance();
             let value = self.assignment();

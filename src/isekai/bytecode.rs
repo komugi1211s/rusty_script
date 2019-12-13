@@ -573,7 +573,7 @@ impl BytecodeGenerator {
         } else if declared_type.is_any() {
             declared_type = actual_type
         
-        // FIXME: this is error prone, function that returns int can be overwritten by single
+        // FIXME @Broken - this is error prone, function that returns int can be overwritten by single
         // primitive int value
         } else if !declared_type.contains(actual_type) {
             if !info.is_argument && actual_type == Type::Null {
