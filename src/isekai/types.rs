@@ -161,12 +161,20 @@ impl Type {
         self.insert(Type::Null);
     }
 
+    pub fn set_const(&mut self) {
+        self.insert(Type::Const);
+    }
+
     pub fn is_nullable(&self) -> bool {
         self.contains(Type::Null)
     }
 
     pub fn is_any(&self) -> bool {
         self.contains(Type::Any)
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.contains(Type::Const)
     }
 
     pub fn from_tokentype(t: &TokenType) -> Self {

@@ -3,8 +3,6 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     // 予約語
-    Define,   // define {}
-    Reveal,   // reveal(foreshadow)
     If,       // if expr {
     Else,     // else {
     While,    // while expr {
@@ -18,18 +16,12 @@ pub enum TokenType {
     Return, // return "";
 
     // TODO: Remove TypeVoid
-    TypeVoid,  // void: a = ...
-    TypeAny,   // any: a = ...
-    TypeInt,   // int: a =
-    TypeFloat, // float: a =
-    TypeStr,   // str: a =
-    TypeBool,  // bool: a =
+    TypeAny,   // a: any = ...
+    TypeInt,   // a: int =
+    TypeFloat, // a: float =
+    TypeStr,   // a: string =
+    TypeBool,  // a: bool =
     Null,      // null
-
-    // データ型
-    ForeShadow, // foreshadow ABC;
-    Chapter,    // chapter "chapterName" {}
-    Story,      // story "storyname" {}
 
     // 括弧とか文字とか
     DoubleQuote, // ""
@@ -87,9 +79,6 @@ impl TokenType {
 pub fn match_identity(keywords: &str) -> Option<TokenType> {
     use TokenType::*;
     match keywords {
-        "define" => Some(Define),
-        "reveal" => Some(Reveal),
-
         "if" => Some(If),
         "else" => Some(Else),
         "while" => Some(While),
@@ -103,11 +92,11 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "false" => Some(False),
         "null" => Some(Null),
 
-        "any" => Some(TypeAny),
-        "int" => Some(TypeInt),
-        "float" => Some(TypeFloat),
-        "string" => Some(TypeStr),
-        "bool" => Some(TypeBool),
+        "any" | "ANY" => Some(TypeAny),
+        "int" | "INT" => Some(TypeInt),
+        "float" | "FLOAT" => Some(TypeFloat),
+        "string" | "STRING" => Some(TypeStr),
+        "bool" | "BOOL" => Some(TypeBool),
 
         "and" => Some(And),
         "or" => Some(Or),

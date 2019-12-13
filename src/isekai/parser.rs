@@ -181,23 +181,25 @@ impl Parser {
 
     fn get_variable_type_and_identifier(&mut self) -> (Type, String) {
         let identity = { self.get_previous().lexeme.clone() };
-        self.consume(TokenType::Colon)
-            .expect("Expected Colon, Got Something Different");
+        self.consume(TokenType::Colon).expect("Expected Colon, Got Something Different");
+        let type_token = self.advance();
 
-        let declared_type = {
-            if TokenType::is_typekind(&self.get_current().tokentype) {
-                let mut _type = Type::from_tokentype(&self.advance().tokentype);
-                if self.is(TokenType::Question) {
-                    self.consume(TokenType::Question);
-                    _type.set_nullable();
-                }
-                _type
-            } else {
-                Type::Any
+        if TokenType::is_typekind(&type_token.tokentype) {
+            let mut dtype = Type::from_tokentype(&type_token.tokentype);
+            let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
+
+            if is_all_uppercase {
+                dtype.set_const();
             }
-        };
 
-        (declared_type, identity)
+            if self.consume(TokenType::Question).is_ok() {
+                dtype.set_nullable();
+            }
+
+            return (dtype, identity);
+        }
+        
+        (Type::Any, identity)
     }
 
     fn declare_argument(&mut self) -> Vec<DeclarationData> {
@@ -260,11 +262,8 @@ impl Parser {
 
         let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
         let mut state = Statement::Empty;
-        // println!("{:?}", self.get_current());
-
         // Initialization, Outside
-        if self.is(TokenType::Equal) {
-            self.current += 1;
+        if self.consume(TokenType::Equal).is_ok() {
             let item = self.expression();
             let data = builder.setexpr(item).build();
             self.consume(TokenType::SemiColon)
@@ -272,13 +271,16 @@ impl Parser {
             state = Statement::Decralation(data);
         }
         // Declaration, Outside
-        else if self.is(TokenType::SemiColon) {
-            self.current += 1;
-            if !_type.is_nullable() {
-                panic!("Uninitialized non-nullable variable: {}", iden);
+        else if self.consume(TokenType::SemiColon).is_ok() {
+            // return if nullable
+            if _type.is_nullable() {
+                let data = builder.build();
+                state = Statement::Decralation(data);
             }
-            let data = builder.build();
-            state = Statement::Decralation(data);
+            else
+            {
+                panic!("Attempt to initialize non-nullable variable with null.");
+            }
         }
         // This is a function.
         else if self.is(TokenType::OpenParen) {
@@ -291,19 +293,18 @@ impl Parser {
         }
     }
 
-    fn declare_function(&mut self, identity: &str, _ty: Type) -> Statement {
-        let mut _type = _ty;
-        _type.insert(Type::Func);
-        let builder = DeclarationDataBuilder::new()
+    fn declare_function(&mut self, identity: &str, mut dtype: Type) -> Statement {
+        dtype.insert(Type::Func);
+        let data = DeclarationDataBuilder::new()
             .setname(identity)
-            .settype(_type);
-
-        let data = builder.build();
+            .settype(dtype)
+            .build();
         let arguments = self.declare_argument();
 
         self.consume(TokenType::OpenBrace)
             .expect("Expected OpenBrace.");
         let inside_func = self.block();
+
         let data = FunctionData {
             it: data,
             args: arguments,
@@ -320,6 +321,7 @@ impl Parser {
 
     fn assignment(&mut self) -> Expr {
         let expr = self.logical_or();
+
         if self.is(TokenType::Equal) {
             self.advance();
             let value = self.assignment();
