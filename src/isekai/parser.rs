@@ -149,6 +149,7 @@ impl Parser {
         while !self.is_at_end() && !self.is(TokenType::CloseBrace) {
             vector.push(self.declaration());
         }
+
         let local_assign_count = self.assign_count;
         self.assign_count = previous_count;
         self.block_count -= 1;

@@ -30,12 +30,12 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
 
     let codegen = BytecodeGenerator::new();
     let codegen_time = Instant::now();
-    let (ep, code, table) = codegen.traverse_ast(result).unwrap();
+    let chunk = codegen.traverse_ast(result).unwrap();
     println!(
         "Codegen took: \x1b[32m{} micros\x1b[39m",
         codegen_time.elapsed().as_micros()
     );
-    let disassembled = disassemble_all(&code);
+    let disassembled = disassemble_all(&chunk.code);
 
     {
         let mut file = File::create("dump").expect("Dump File failed to create.");
@@ -49,13 +49,12 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
         "Total Time: \x1b[32m{} micros\x1b[39m",
         start.elapsed().as_micros()
     );
-    let mut vm = VirtualMachine::new(ep, code, table);
+    let mut vm = VirtualMachine::new(chunk);
     vm.run();
 
     /*
     let mut interpreter = Interpreter::new();
     let interp_time = Instant::now();
-    for i in &result
     {
         interpreter.visit(i);
     }

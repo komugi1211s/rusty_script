@@ -1,9 +1,8 @@
-use super::bytecode::{Code, ConstantTable, disassemble};
+use super::bytecode::{ByteChunk, disassemble};
 use super::types::{OpCode, Type, Value};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
-type GlobalMap = HashMap<u16, Value>;
 
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
@@ -11,10 +10,10 @@ const USIZE_LENGTH: usize = 4;
 #[cfg(target_pointer_width = "64")]
 const USIZE_LENGTH: usize = 8;
 
+type GlobalMap = HashMap<u16, Value>;
 #[derive(Debug)]
 pub struct VirtualMachine {
-    pub code: Code,
-    pub const_table: ConstantTable,
+    pub chunk: ByteChunk,
     pub stack: Vec<Value>,
     pub code_ip: usize,
     pub stack_pointer: usize,
@@ -23,13 +22,13 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    pub fn new(ep: usize, code: Code, const_table: ConstantTable) -> Self {
+    pub fn new(chunk: ByteChunk) -> Self {
+        let ep = chunk.entry_point;
         Self {
+            chunk: chunk,
             stack: Vec::new(),
             code_ip: ep,
             stack_pointer: 0,
-            code,
-            const_table,
             globals: GlobalMap::new(),
             last_op: OpCode::Interrupt,
         }
@@ -37,17 +36,18 @@ impl VirtualMachine {
 
     pub fn run(&mut self) {
         // Meta
-        let mut stack_pointer_stack: Vec<usize> = Vec::new();
-        let max: usize = self.code.current_length();
+        let mut stack_frame: Vec<usize> = Vec::new();
+        let mut call_frame: Vec<usize> = Vec::new();
+        let max: usize = self.chunk.code.current_length();
         while self.code_ip < max {
-            let current_operation = OpCode::from_u8(self.code.bytes[self.code_ip]);
+            let current_operation = OpCode::from_u8(self.chunk.code.bytes[self.code_ip]);
             if current_operation.is_none() {
                 panic!(
-                    "Received {:?}, which is not an actual opcode, at line {}",
-                    self.code.bytes[self.code_ip], self.code.line[self.code_ip]
+                    "Received {:04X} which is not an actual opcode, at line {}",
+                    self.chunk.code.bytes[self.code_ip], self.chunk.code.line[self.code_ip]
                 );
             }
-            let _current_line = self.code.line[self.code_ip];
+            let _current_line = self.chunk.code.line[self.code_ip];
             // println!("Current Stack: {:?}", self.stack);
             // println!("Current Environment: {:?}", self.globals);
             let current_operation = current_operation.unwrap();
@@ -115,7 +115,7 @@ impl VirtualMachine {
                 }
                 OpCode::Const8 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.const_table.read_data_8(index);
+                    let (value, _type) = self.chunk.constants.read_data_8(index);
                     self.stack.push((value != 0).into());
                     self.code_ip = new_end;
                 }
@@ -132,7 +132,7 @@ impl VirtualMachine {
                 }
                 OpCode::Const64 => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.const_table.read_data_64(index);
+                    let (value, _type) = self.chunk.constants.read_data_64(index);
                     // GET_TYPE
                     self.stack.push(match _type {
                         &Type::Int => i64::from_ne_bytes(value).into(),
@@ -143,7 +143,7 @@ impl VirtualMachine {
                 }
                 OpCode::ConstDyn => {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.const_table.read_data_dyn(index);
+                    let (value, _type) = self.chunk.constants.read_data_dyn(index);
 
                     self.stack.push(match _type {
                         &Type::Str => Value::Str(String::from_utf8(value).unwrap()),
@@ -164,19 +164,19 @@ impl VirtualMachine {
 
                 OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
                     self.code_ip += 1;
-                    let indone = self.code.bytes[self.code_ip];
-                    let indtwo = self.code.bytes[self.code_ip + 1];
+                    let indone = self.chunk.code.bytes[self.code_ip];
+                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
                     let index = u16::from_ne_bytes([indone, indtwo]) as usize;
                     let value = self.stack.last().unwrap().clone();
-                    self.stack[index] = value;
+                    self.stack[self.stack_pointer + index] = value;
                     self.code_ip += 2;
                 }
                 OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad => {
                     self.code_ip += 1;
-                    let indone = self.code.bytes[self.code_ip];
-                    let indtwo = self.code.bytes[self.code_ip + 1];
+                    let indone = self.chunk.code.bytes[self.code_ip];
+                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
                     let index = u16::from_ne_bytes([indone, indtwo]) as usize;
-                    let data = self.stack[index].clone();
+                    let data = self.stack[self.stack_pointer + index].clone();
                     self.stack.push(data);
                     self.code_ip += 2;
                 }
@@ -185,19 +185,19 @@ impl VirtualMachine {
                     self.code_ip = index;
                 }
                 OpCode::BlockIn => {
-                    stack_pointer_stack.push(self.stack_pointer);
+                    stack_frame.push(self.stack_pointer);
                     self.stack_pointer = self.stack.len();
                     self.code_ip += 1;
                 }
                 OpCode::BlockOut => {
                     self.stack.truncate(self.stack_pointer);
-                    let index = stack_pointer_stack.pop().unwrap();
+                    let index = stack_frame.pop().unwrap();
                     self.stack_pointer = index;
                     self.code_ip += 1;
                 }
                 OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad => {
-                    let operand_one = self.code.bytes[self.code_ip + 1];
-                    let operand_two = self.code.bytes[self.code_ip + 2];
+                    let operand_one = self.chunk.code.bytes[self.code_ip + 1];
+                    let operand_two = self.chunk.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let value = self.globals.get(&identifier).unwrap();
@@ -205,8 +205,8 @@ impl VirtualMachine {
                     self.code_ip += 3;
                 }
                 OpCode::GBStore | OpCode::GIStore | OpCode::GFStore | OpCode::GSStore => {
-                    let operand_one = self.code.bytes[self.code_ip + 1];
-                    let operand_two = self.code.bytes[self.code_ip + 2];
+                    let operand_one = self.chunk.code.bytes[self.code_ip + 1];
+                    let operand_two = self.chunk.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let data = self.stack.pop().unwrap();
@@ -219,29 +219,43 @@ impl VirtualMachine {
                     self.code_ip += 1;
                 }
                 OpCode::Call => {
-                    let operand_one = self.code.bytes[self.code_ip + 1];
-                    let operand_two = self.code.bytes[self.code_ip + 2];
+                    let operand_one = self.chunk.code.bytes[self.code_ip + 1];
+                    let operand_two = self.chunk.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
-                    stack_pointer_stack.push(self.stack_pointer);
-                    self.stack_pointer = self.stack.len();
+                    let func_info = self.chunk.functions.get(&identifier).expect("Undefined Function call.");
+
+                    stack_frame.push(self.stack_pointer);
+                    call_frame.push(self.code_ip + 2);
+                    self.stack_pointer = self.stack.len() - func_info.arg_count;
+                    self.code_ip = func_info.position;
                 }
                 OpCode::Return => {
                     let return_value = self.stack.pop().unwrap();
-                    let address = self.stack.pop().unwrap();
+                    if stack_frame.is_empty() || call_frame.is_empty() {
+                        break;
+                    }
+                    self.stack.truncate(self.stack_pointer);
+                    let recover_stack = stack_frame.pop().unwrap();
+                    self.stack_pointer = recover_stack;
                     self.stack.push(return_value);
+
+                    let recover_ep = call_frame.pop().unwrap();
+
+                    self.code_ip = recover_ep + 1;
+                    
                 }
                 _ => {
                     println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");
                     println!("OpCode Interrupt Detected at index {}", self.code_ip);
                     println!("Current Stack Data: {:?}", self.stack);
                     println!("Current Disassemble here");
-                    let max_len = if self.code.current_length() < self.code_ip + 5 {
-                        self.code.current_length()
+                    let max_len = if self.chunk.code.current_length() < self.code_ip + 5 {
+                        self.chunk.code.current_length()
                     } else {
                         self.code_ip + 5
                     };
-                    for message in disassemble(&self.code, self.code_ip - 5, max_len) {
+                    for message in disassemble(&self.chunk.code, self.code_ip - 5, max_len) {
                         println!("{}", message);
                     }
                     panic!();
@@ -259,7 +273,7 @@ impl VirtualMachine {
         let mut new_end = start;
         let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
         for i in 0..USIZE_LENGTH {
-            result[i] = self.code.bytes[start + i];
+            result[i] = self.chunk.code.bytes[start + i];
             new_end += 1;
         }
 

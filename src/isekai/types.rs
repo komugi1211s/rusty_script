@@ -148,6 +148,7 @@ bitflags! {
         const Null    = 0b1000_0000;
         const Any     = 0b0100_0000;
         const Func    = 0b0010_0000;
+        const Const   = 0b0001_0000;
         const Int     = 0b0000_0001;
         const Float   = 0b0000_0010;
         const Str     = 0b0000_0100;

@@ -148,11 +148,11 @@ impl ConstantTable {
 type Local = (Type, u16);
 
 #[derive(Debug, Clone)]
-struct FuncInfo {
-    position: usize,
-    arg_count: usize,
-    arg_types: Vec<Type>,
-    return_type: Type,
+pub struct FuncInfo {
+    pub position: usize,
+    pub arg_count: usize,
+    pub arg_types: Vec<Type>,
+    pub return_type: Type,
 }
 
 pub fn disassemble_all(code: &Code) -> Vec<String> {
@@ -273,6 +273,14 @@ struct ExpressionHandleResult {
     _type: Type,
 }
 
+#[derive(Debug)]
+pub struct ByteChunk {
+    pub entry_point: usize,
+    pub code: Code,
+    pub constants: ConstantTable,
+    pub functions: HashMap<u16, FuncInfo>,
+}
+
 impl BytecodeGenerator {
     pub fn new() -> Self {
         Self {
@@ -287,7 +295,7 @@ impl BytecodeGenerator {
         }
     }
 
-    pub fn traverse_ast(mut self, ast: ParsedResult) -> Result<(usize, Code, ConstantTable), ()> {
+    pub fn traverse_ast(mut self, ast: ParsedResult) -> Result<ByteChunk, ()> {
         for function in ast.functions {
             self.prepare_function(function);
         }
@@ -296,7 +304,13 @@ impl BytecodeGenerator {
             self.handle_stmt(i.value, i.line);
         }
         self.const_table.push_data(usize::max_value().to_vm_byte());
-        Ok((entry_point, self.code, self.const_table))
+
+        Ok(ByteChunk {
+            entry_point,
+            code: self.code,
+            constants: self.const_table,
+            functions: self.function_table,
+        })
     }
 
     fn prepare_function(
@@ -335,8 +349,8 @@ impl BytecodeGenerator {
         }
 
         // コードセクションも上記と同様に処理する
-        for i in body_block.statements {
-            self.handle_stmt(i, 0);
+        for statement in body_block.statements {
+            self.handle_stmt(statement, 0);
         }
         self.current_block -= 1;
 
@@ -430,13 +444,14 @@ impl BytecodeGenerator {
             }
 
             Statement::Block(block_data) => {
-                self.code.push_opcode(OpCode::BlockIn, line);
+                // self.code.push_opcode(OpCode::BlockIn, line);
                 self.current_block += 1;
                 for i in block_data.statements {
                     self.handle_stmt(i, line);
                 }
                 self.current_block -= 1;
-                handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
+                // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
+                handled_result.index = self.code.current_length();
                 handled_result
             }
 
@@ -517,6 +532,9 @@ impl BytecodeGenerator {
                 if let Some(expr) = opt_expr {
                     self.handle_expr(expr, line);
                 }
+                else {
+                    self.code.write_null(line);
+                }
                 handled_result.index = self.code.push_opcode(OpCode::Return, line);
                 handled_result
             }
@@ -549,7 +567,6 @@ impl BytecodeGenerator {
             if declared_type.is_any() {
                 panic!("You cannot initialize Any type with null");
             }
-
             if !declared_type.is_nullable() {
                 panic!("an attempt to initialize non-nullable variable with null");
             }
@@ -618,7 +635,7 @@ impl BytecodeGenerator {
             Type::Float   if !is_global && is_load  => OpCode::FLoad,
             Type::Boolean if !is_global && is_load  => OpCode::BLoad,
             Type::Str     if !is_global && is_load  => OpCode::SLoad,
-            _ => panic!("Unsupported opcode for here"),
+            _ => panic!("Unsupported opcode for here: opcode: {:?}, is_global: {}, is_load: {}", _type, is_global, is_load),
         }
     }
 
@@ -804,18 +821,21 @@ impl BytecodeGenerator {
                     {
                         panic!("Too Few / much arguments provided. require {}", func_info.arg_count);
                     }
-                    let ARR_END = func_info.arg_count;
-                    let function_address = func_info.position;
+                    let ARR_END = func_info.arg_count - 1;
                     arguments.reverse();
                     for (i, arg) in arguments.drain(..).enumerate() {
                         let handled_type = self.handle_expr(arg, line);
-                        if func_info.arg_types[ARR_END - i] != handled_type._type {
-                            panic!("Type Mismatch when calling a function!! at line {}", line);
+                        let current_type = func_info.arg_types[ARR_END - i];
+                        if !current_type.contains(handled_type._type) {
+                            panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type._type);
                         }
+                        println!("Added ({:?}) = ({:?})", current_type, handled_type._type);
                     }
                     self.code.push_opcode(OpCode::Call, line);
-                    let jump_here = self.code.push_operands(function_address.to_vm_byte(), line);
+                    let jump_here = self.code.push_operands(name.to_vm_byte(), line);
+                    println!("{:?}", &func_info);
                     handled_result._type = func_info.return_type; 
+                    handled_result._type.remove(Type::Func); 
                     handled_result.index = jump_here;
                 }
                 handled_result
