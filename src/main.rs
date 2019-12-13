@@ -32,20 +32,22 @@ fn run_file(path: String) -> bool {
         }
     };
 
-    f.read_to_string(&mut strings).expect("ファイルの読み込みに失敗しました。");
+    f.read_to_string(&mut strings)
+        .expect("ファイルの読み込みに失敗しました。");
     match isekai::core::start(strings.as_str()) {
         Ok(_) => true,
         Err(e) => {
             println!("エラーが発生しました。: {}", e.to_string());
             false
-        },
+        }
     }
 }
 
 fn main() {
     let arguments: Vec<String> = env::args().collect();
 
-    if arguments.len() <= 1 { // もし引数が無かったら
+    if arguments.len() <= 1 {
+        // もし引数が無かったら
         println!("usage: isekai [filename].kai");
         exit_process(true);
     }
@@ -58,7 +60,6 @@ fn main() {
     fntest();
 }
 */
-
 
 /*
 #[cfg(test)]

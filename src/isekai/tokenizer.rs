@@ -1,6 +1,6 @@
 use std::fmt;
 // use std::mem;
-use super::token::{ TokenType, Token, match_identity };
+use super::token::{match_identity, Token, TokenType};
 
 /*
  10 + 2 * 4
@@ -25,11 +25,7 @@ pub struct SyntaxError {
 
 impl SyntaxError {
     fn new(_type: ErrorType, line: usize, col: usize) -> Self {
-        Self {
-            _type,
-            line,
-            col,
-        }
+        Self { _type, line, col }
     }
 }
 
@@ -38,7 +34,6 @@ impl fmt::Display for SyntaxError {
         write!(f, "{:?} ({}行目 {}文字目)", self._type, self.line, self.col)
     }
 }
-
 
 pub struct Tokenizer {
     source: Vec<char>,
@@ -67,7 +62,8 @@ impl Tokenizer {
             self.scan_next_token()?;
         }
 
-        self.tokens.push(Token::new(TokenType::EOF, self.line, String::new()));
+        self.tokens
+            .push(Token::new(TokenType::EOF, self.line, String::new()));
         Ok(self.tokens.to_owned())
     }
 
@@ -108,14 +104,15 @@ impl Tokenizer {
                 match self.peek() {
                     // 次の文字列も '/' であれば、これはコメントである
                     '/' => {
-                        while self.peek() != '\n' { self.advance(); }
+                        while self.peek() != '\n' {
+                            self.advance();
+                        }
                         Ok(())
-                    },
+                    }
 
                     // 次の文字列がアスタリスクならブロックコメント
                     '*' => {
-                        while !(self.peek() == '*' && self.peek_shifted_to(1) == '/')
-                        {
+                        while !(self.peek() == '*' && self.peek_shifted_to(1) == '/') {
                             if self.peek() == '\n' {
                                 self.add_newline();
                             }
@@ -129,7 +126,7 @@ impl Tokenizer {
                         self.advance();
                         self.advance();
                         Ok(())
-                    },
+                    }
 
                     _ => self.add_token(TokenType::Slash),
                 }
@@ -150,13 +147,11 @@ impl Tokenizer {
             'A'..='z' => self.add_possible_iden(),
 
             // Default
-            def => {
-                Err(SyntaxError::new(
-                    ErrorType::UnexpectedToken(def),
-                    self.line,
-                    self.column,
-                ))
-            }
+            def => Err(SyntaxError::new(
+                ErrorType::UnexpectedToken(def),
+                self.line,
+                self.column,
+            )),
         }
     }
 
@@ -169,8 +164,7 @@ impl Tokenizer {
         true
     }
 
-    fn add_newline(&mut self) -> Result<(), SyntaxError>
-    {
+    fn add_newline(&mut self) -> Result<(), SyntaxError> {
         self.line += 1;
         self.column = 1;
         Ok(())
@@ -209,39 +203,35 @@ impl Tokenizer {
         z
     }
 
-    fn peek(&self) -> char
-    {
-        if self.is_at_end() { '\0' } else { self.source[self.current] }
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            '\0'
+        } else {
+            self.source[self.current]
+        }
     }
 
-    fn peek_shifted_to(&self, shift: usize) -> char
-    {
-        if self.is_at_end()  {  '\0'  }
-        else
-        {
-            if self.source.len() <= self.current + shift { '\0' }
-            else { self.source[self.current + shift] }
+    fn peek_shifted_to(&self, shift: usize) -> char {
+        if self.is_at_end() {
+            '\0'
+        } else if self.source.len() <= self.current + shift {
+            '\0'
+        } else {
+            self.source[self.current + shift]
         }
     }
 
     fn add_digit(&mut self) -> Result<(), SyntaxError> {
         // Advance while it's numeric
-        loop 
-        {
+        loop {
             let n = self.peek();
-            if n.is_ascii_digit()
-            {
-                self.advance(); 
-            }
-            else
-            {
+            if n.is_ascii_digit() {
+                self.advance();
+            } else {
                 let next_char = self.peek_shifted_to(1);
-                if n == '.' && (next_char == ';' || next_char.is_ascii_digit())
-                {
+                if n == '.' && (next_char == ';' || next_char.is_ascii_digit()) {
                     self.advance();
-                }
-                else
-                {
+                } else {
                     break;
                 }
             }
@@ -251,14 +241,15 @@ impl Tokenizer {
     }
 
     fn add_possible_iden(&mut self) -> Result<(), SyntaxError> {
-        while self.peek().is_ascii_alphanumeric() || self.peek() == '_' { self.advance(); }
+        while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
+            self.advance();
+        }
         let stri: String = self.source[self.start..self.current].iter().collect();
 
         let possible_result = match_identity(&stri);
         if possible_result.is_none() {
             self.add_token(TokenType::Iden)
-        }
-        else {
+        } else {
             self.add_token(possible_result.unwrap())
         }
     }
@@ -270,13 +261,11 @@ impl Tokenizer {
     }
 
     fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> {
-        self.tokens.push(
-            Token::new(
-                tokentype,
-                self.line,
-                self.source[self.start..self.current].iter().collect()
-            )
-        );
+        self.tokens.push(Token::new(
+            tokentype,
+            self.line,
+            self.source[self.start..self.current].iter().collect(),
+        ));
         Ok(())
     }
 
@@ -284,4 +273,3 @@ impl Tokenizer {
         self.source.len() <= self.current
     }
 }
-
