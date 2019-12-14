@@ -206,6 +206,11 @@ impl Parser {
         self.consume(TokenType::OpenParen).expect("Why it failed?");
         let mut arguments: Vec<DeclarationData> = Vec::new();
 
+        if self.is(TokenType::CloseParen) {
+            self.consume(TokenType::CloseParen).expect("How it failed...?");
+            return arguments;
+        }
+
         while self.is(TokenType::Iden) {
             self.current += 1;
             let (_type, iden) = self.get_variable_type_and_identifier();
