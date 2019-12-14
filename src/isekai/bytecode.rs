@@ -274,6 +274,84 @@ struct ExpressionHandleResult {
 }
 
 #[derive(Debug)]
+struct HandledResult {
+    index: usize,
+    line: usize.
+    info: ResultInfo.
+}
+
+impl HandledResult {
+    fn basic(index: usize, line: usize) -> Self {
+        Self {
+            index,
+            line,
+            info: ResultInfo::BasicResult,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct HandledResultBuilder {
+    index: Option<usize>,
+    line: Option<usize>,
+    info: ResultInfo,
+}
+
+impl HandledResultBuilder {
+    fn new() -> Self {
+        Self {
+            index: None,
+            line: None,
+            info: ResultInfo::BasicResult,
+        }
+    }
+
+    fn setindex(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
+    }
+
+    fn setline(mut self, line: usize) -> Self {
+        self.line = Some(line);
+        self
+    }
+
+    fn setinfo(mut self, info: ResultInfo) -> Self {
+        self.info = info;
+        self
+    }
+
+    fn setindex_ref(&mut self, index: usize) {
+        self.index = Some(index);
+    }
+
+    fn setline_ref(&mut self, line: usize) {
+        self.line = Some(line);
+    }
+
+    fn setinfo_ref(&mut self, info: ResultInfo) {
+        self.info = info;
+    }
+
+    fn build(self) -> HandledResult {
+        HandledResult {
+            index: self.index.unwrap(),
+            line: self.line.unwrap(),
+            info: self.info,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ResultInfo {
+    BasicResult,
+    ExpressionResult { dtype: Type },
+    BlockResult { breaks: Vec<usize>, continues: Vec<usize>, returns: Vec<Type> },
+    DeclarationResult { dtype: Type, is_constant: bool, is_global: bool },
+}
+
+
+#[derive(Debug)]
 pub struct ByteChunk {
     pub entry_point: usize,
     pub code: Code,
@@ -387,27 +465,19 @@ impl BytecodeGenerator {
         start_index
     }
 
-    fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
-        let mut handled_result = StatementHandleResult { line, index: 0 };
-
+    fn handle_stmt(&mut self, data: Statement, line: usize) -> HandledResult {
         match data {
-            Statement::Expression(expr) => {
-                handled_result.index = self.handle_expr(expr, line).index;
-                handled_result
-            }
-            Statement::Decralation(declaration_info) => {
-                self.handle_declaration_data(&mut handled_result, declaration_info);
-                handled_result
-            }
+            Statement::Expression(expr) => self.handle_expr(expr, line),
+            Statement::Decralation(declaration_info) => self.handle_declaration_data(declaration_info),
 
             Statement::Print(expr) => {
                 self.handle_expr(expr, line);
-                handled_result.index = self.code.push_opcode(OpCode::DebugPrint, line);
-                handled_result
+                let index = self.code.push_opcode(OpCode::DebugPrint, line);
+                HandledResult::basic(index, line);
             }
 
             Statement::If(expr, if_block, optional_else_block) => {
-                self.handle_expr(expr, line);
+                let result = self.handle_expr(expr, line);
 
                 // ジャンプ用のインデックスを作っておく
                 let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, line);
@@ -415,7 +485,7 @@ impl BytecodeGenerator {
                     .push_operands(usize::max_value().to_vm_byte(), line);
 
                 // Ifの終わりにまでJumpする為のIndexが要る
-                let end_of_if_block = self.handle_stmt(*if_block, line).index;
+                let end_of_if_block = self.handle_block_data(*if_block, line);
 
                 // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
                 self.code
@@ -483,7 +553,9 @@ impl BytecodeGenerator {
                 let previous_loop_start = self.last_loop_start;
                 self.last_loop_start = after_jump_conditional;
 
-                self.handle_stmt(*while_block, line);
+                if let Statement::Block(block_data) = while_block {
+                    self.handle_stmt(*while_block, line);
+                }
 
                 let before_expr = self.code.current_length();
                 self.handle_expr(expr, line);
@@ -542,7 +614,20 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, info: DeclarationData) {
+    fn handle_block_data(&mut self, data: BlockData) -> HandledResult {
+        // self.code.push_opcode(OpCode::BlockIn, line);
+        self.current_block += 1;
+        for i in block_data.statements {
+            self.handle_stmt(i, line);
+        }
+        self.current_block -= 1;
+        // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
+        handled_result.index = self.code.current_length();
+        handled_result
+    }
+
+    fn handle_declaration_data(&mut self, info: DeclarationData) -> HandledResult {
+        let mut builder = HandledResultBuilder::new();
         let mut value_index = 0;
         let mut actual_type = Type::Null;
 
@@ -563,7 +648,10 @@ impl BytecodeGenerator {
             }
         };
 
-        if actual_type == Type::Null && !info.is_argument {
+        if actual_type == Type::Null {
+            if !decl.is_argument {
+                panic!("You cannot initialize Any type with null");
+            }
             if declared_type.is_any() {
                 panic!("You cannot initialize Any type with null");
             }
@@ -580,6 +668,7 @@ impl BytecodeGenerator {
                 panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
             }
         }
+        let mut result_index = 0;
 
         // let index = self.code.write_const(name);
         if self.current_block > 0 {
@@ -594,16 +683,25 @@ impl BytecodeGenerator {
             declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, false);
             let operands = position as u16;
-
             self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
+            result_index = self.code.push_operands(operands.to_vm_byte(), out.line);
         } else {
             self.global_type.insert(name, declared_type);
             declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, true);
             self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(name.to_vm_byte(), out.line);
+            result_index = self.code.push_operands(name.to_vm_byte(), out.line);
         }
+
+        builder
+            .setindex(result_index)
+            .setline(line)
+            .setinfo(ResultInfo::DeclarationResult {
+                dtype: declared_type,
+                is_constant: dtype.contains(Type::Const),
+                is_global: self.current_block > 0,
+            })
+            .build()
     }
 
     fn get_load_opcode(&self, _type: Type, is_global: bool) -> OpCode
