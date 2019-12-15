@@ -260,18 +260,6 @@ pub struct BytecodeGenerator {
     pub break_call: Vec<usize>,
 }
 
-#[derive(Debug)]
-struct StatementHandleResult {
-    index: usize,
-    line: usize,
-}
-
-#[derive(Debug)]
-struct ExpressionHandleResult {
-    index: usize,
-    line: usize,
-    _type: Type,
-}
 
 #[derive(Debug)]
 struct HandledResult {
@@ -397,11 +385,6 @@ impl BytecodeGenerator {
     ) {
         let decl_info = function.it;
         let body_block = function.block;
-        // 実際に使うことはないが、特定の関数が必要とするため用意
-        let mut placeholder = StatementHandleResult {
-            line: 0,
-            index: 0,
-        };
 
         // 引数のデータをコピーして数を保存
         let _arguments = function.args;
@@ -423,14 +406,22 @@ impl BytecodeGenerator {
         for arg_decl_info in _arguments {
             let arg_type = arg_decl_info._type;
             argument_types.push(arg_type);
-            self.handle_declaration_data(&mut placeholder, arg_decl_info);
+            self.handle_declaration_data(arg_decl_info);
         }
 
         // コードセクションも上記と同様に処理する
-        for statement in body_block.statements {
-            self.handle_stmt(statement, 0);
+        let block_result = self.handle_block_data(body_block);
+        if let ResultInfo::BlockResult { breaks, continues, returns } = block_result {
+            if breaks.len() != 0 || continues.len() != 0 {
+                panic!("What the fuck");
+            }
+
+            for actual_type in returns {
+                if !return_type.contains(actual_type) {
+                    panic!("Nope");
+                }
+            }
         }
-        self.current_block -= 1;
 
         // 元のコードを復活させ、後付けでマージする
         let _function_code = mem::replace(&mut self.code, main_code);
@@ -739,14 +730,15 @@ impl BytecodeGenerator {
 
     fn handle_constant_data(
         &mut self,
-        out: &mut ExpressionHandleResult,
         constant: Constant,
         line: usize,
-    ) {
+    ) -> HandledResult {
         let _type = constant.ctype.clone();
         let opcode = constant.code;
         let value = constant.value;
         let length = value.len();
+
+        let mut builder = HandledResultBuilder::new();
 
         let start_index = if opcode == OpCode::ConstDyn {
             let x = self.const_table.push_data(length.to_vm_byte());
@@ -759,16 +751,14 @@ impl BytecodeGenerator {
         self.const_table.types.insert(start_index, _type);
         self.code.push_opcode(opcode, line);
         let index = self.code.push_operands(start_index.to_vm_byte(), line);
-        out._type = _type;
-        out.index = index;
+        builder.setindex(index).setline(line).setinfo(ResultInfo::ExpressionResult {
+            dtype: _type,
+        }).build()
     }
 
-    fn handle_expr(&mut self, expr: Expr, line: usize) -> ExpressionHandleResult {
-        let mut handled_result = ExpressionHandleResult {
-            line,
-            index: 0,
-            _type: Type::Null,
-        };
+    fn handle_expr(&mut self, expr: Expr, line: usize) -> HandledResult {
+        let mut builder = HandledResultBuilder::new().setline(line);
+        let mut expr_info = ResultInfo::ExpressionResult { dtype: Type::Null };
         match expr {
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
@@ -782,40 +772,39 @@ impl BytecodeGenerator {
                     }
 
                     let _type = self.global_type.get(&name).unwrap().clone();
+                    expr_info.dtype = _type;
                     let opcode = self.get_load_opcode(_type, true);
-                    handled_result._type = _type;
                     self.code.push_opcode(opcode, line);
-                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
-                    return handled_result;
+                    let index = self.code.push_operands(name.to_vm_byte(), line);
+                }  else {
+                    let mut index = 0;
+                    let (_type, _) = {
+                        index = is_exist.unwrap();
+                        self.current_define.get(index).unwrap().clone()
+                    };
+                    let index = index as u16;
+                    expr_info.dtype = _type;
+                    let opcode = self.get_load_opcode(_type, false);
+                    self.code.push_opcode(opcode, line);
+                    let index = self.code.push_operands(index.to_vm_byte(), line);
                 }
 
-                let mut index = 0;
-                let (_type, _) = {
-                    index = is_exist.unwrap();
-                    self.current_define.get(index).unwrap().clone()
-                };
-                let index = index as u16;
-                handled_result._type = _type;
-                let opcode = self.get_load_opcode(_type, false);
-                self.code.push_opcode(opcode, line);
-                handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
-                handled_result
+                builder.setindex(index).setinfo(expr_info).build()
             }
-            Expr::Literal(literal) => {
-                // TODO: handle it without making a clone.
-                // self.stack.push(literal);
-                self.handle_constant_data(&mut handled_result, literal, line);
-                handled_result
-            }
+            Expr::Literal(literal) => self.handle_constant_data(literal, line),
 
             Expr::Binary(left, right, operator) => {
                 let left = self.handle_expr(*left, line);
                 let right = self.handle_expr(*right, line);
 
-                handled_result._type =
-                    Type::type_after_binary(&left._type, &right._type, &operator.tokentype)
+                if let ResultInfo::ExpressionResult{ ltype } = left.info {
+                    if let ResultInfo::ExpressionResult{ rtype } = right.info {
+                        let type_after_expr = Type::type_after_binary(&left._type, &right._type, &operator.tokentype);
+                        expr_info.dtype = type_after_expr;
+                    }
+                }
                         .unwrap();
-                handled_result.index = match operator.tokentype {
+                let index = match operator.tokentype {
                     TokenType::Plus => self.code.push_opcode(OpCode::Add, line),
                     TokenType::Minus => self.code.push_opcode(OpCode::Sub, line),
                     TokenType::Asterisk => self.code.push_opcode(OpCode::Mul, line),
@@ -833,45 +822,50 @@ impl BytecodeGenerator {
                     TokenType::More => self.code.push_opcode(OpCode::More, line),
                     _ => unreachable!(),
                 };
-                handled_result
+                builder.setindex(index).setinfo(expr_info).build()
             }
             Expr::Logical(left, right, operator) => {
                 self.handle_expr(*left, line);
                 self.handle_expr(*right, line);
 
-                handled_result.index = match operator.tokentype {
+                let index = match operator.tokentype {
                     TokenType::And => self.code.push_opcode(OpCode::And, line),
                     TokenType::Or => self.code.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
                 };
-                handled_result._type = Type::Boolean;
-                handled_result
+                expr_info.dtype = Type::Boolean;
+                builder.setindex(index).setinfo(expr_info).build()
             }
             Expr::Unary(expr, operator) => {
                 let another_result = self.handle_expr(*expr, line);
-                handled_result._type =
-                    Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
-                handled_result.index = match operator.tokentype {
+                if let ResultInfo::ExpressionResult { dtype } = another_result.info {
+                    let type_after_expr = Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
+                    expr_info.dtype = type_after_expr;
+                }
+                let index = match operator.tokentype {
                     TokenType::Bang => self.code.push_opcode(OpCode::Not, line),
                     TokenType::Minus => self.code.push_opcode(OpCode::Neg, line),
                     _ => unreachable!(),
                 };
-                handled_result._type = another_result._type;
-                handled_result
+                builder.setindex(index).setinfo(expr_info).build()
             }
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) => {
                 let another_result = self.handle_expr(*expr, line);
                 let is_exist = self.current_define.iter().position(|&x| x.1 == name);
+                let actual_type = if ResultInfo::ExpressionResult { dtype } = another_result.info {
+                    dtype
+                } else {
+                    Type::Null
+                }
 
                 if is_exist.is_none() {
                     if !self.global_type.contains_key(&name) {
                         panic!("Undefined Variable");
                     }
 
-                    let _type = self.global_type.get(&name).unwrap().clone();
-                    let actual_type = &another_result._type;
-                    if &_type != actual_type {
+                    let _type = self.global_type.get(&name).unwrap();
+                    if _type != &actual_type {
                         panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
                     }
                     let opcode = match another_result._type {
@@ -882,8 +876,8 @@ impl BytecodeGenerator {
                         _ => unreachable!(),
                     };
                     self.code.push_opcode(opcode, line);
-                    handled_result._type = _type;
-                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
+                    expr_info.dtype = actual_type;
+                    let index = self.code.push_operands(name.to_vm_byte(), line);
                 } else {
                     let mut index = 0;
                     let (declared_type, _) = {
@@ -891,7 +885,7 @@ impl BytecodeGenerator {
                         self.current_define.get(index).unwrap()
                     }.clone();
 
-                    if !&declared_type.contains(another_result._type) {
+                    if !&declared_type.contains(actual_type) {
                         panic!(
                             "Type Mismatch when Assigning: {:?} != {:?}",
                             declared_type, another_result._type
