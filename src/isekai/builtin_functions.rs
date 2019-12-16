@@ -1,0 +1,28 @@
+use super::{ 
+    bytecode::{ BytecodeGenerator, FuncInfo },
+    vm::{ VirtualMachine },
+    types::{ Value, Type },
+    utils,
+};
+use std::time::{ SystemTime, UNIX_EPOCH };
+
+// ********************* INTERNAL STUFF ********************* //
+fn applyfunc(bc: &mut BytecodeGenerator, name: &str, args: Vec<Type>, rettype: Type, func: fn(&mut VirtualMachine)) {
+    let name = utils::str_to_u16(name);
+    let clock_funcinfo = FuncInfo::native(name, args.len(), args, rettype, func);
+    bc.global_type.insert(name, rettype);
+    bc.function_table.insert(name, clock_funcinfo);
+}
+
+pub fn apply_native_functions(bc: &mut BytecodeGenerator) {
+    applyfunc(bc, "clock", vec![], Type::Float, clock_adapter);
+}
+
+// ********************* BUILTIN STUFF ********************* //
+fn clock() -> f64 {
+    return SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as f64;
+}
+
+fn clock_adapter(vm: &mut VirtualMachine) {
+    vm.stack.push(clock().into());
+}

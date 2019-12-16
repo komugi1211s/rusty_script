@@ -7,6 +7,7 @@ use super::{
     },
     token::{Token, TokenType},
     types::{Constant, Type},
+    utils,
 };
 
 // TODO:
@@ -38,10 +39,6 @@ pub struct Parser {
     current_line: usize,
     assign_count: usize,
     block_count: usize,
-}
-
-fn util_string_to_u16(string: &str) -> u16 {
-    string.as_bytes().iter().map(|x| *x as u16).sum()
 }
 
 impl Parser {
@@ -552,7 +549,7 @@ impl Parser {
                         MAX_IDENTIFIER_LENGTH
                     );
                 }
-                Expr::Variable(util_string_to_u16(&inside.lexeme))
+                Expr::Variable(utils::str_to_u16(&inside.lexeme))
             }
             OpenParen => {
                 let inside_paren = self.expression();

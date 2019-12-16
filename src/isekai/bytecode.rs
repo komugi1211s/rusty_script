@@ -1,6 +1,7 @@
 use super::parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode};
 use super::token::TokenType;
-use super::types::{toVmByte, Constant, OpCode, Type};
+use super::types::{ toVmByte, Constant, OpCode, Type };
+use super::vm::{ VirtualMachine };
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 use std::mem;
@@ -147,14 +148,6 @@ impl ConstantTable {
 }
 type Local = (Type, u16);
 
-#[derive(Debug, Clone)]
-pub struct FuncInfo {
-    pub position: usize,
-    pub arg_count: usize,
-    pub arg_types: Vec<Type>,
-    pub return_type: Type,
-}
-
 pub fn disassemble_all(code: &Code) -> Vec<String> {
     disassemble(code, 0, code.bytes.len())
 }
@@ -230,15 +223,61 @@ fn disassemble_pad(opcode: OpCode) -> usize {
     }
 }
 
+pub struct FuncInfo {
+    pub name: u16,
+    pub position: usize,
+    pub arg_count: usize,
+    pub arg_types: Vec<Type>,
+    pub return_type: Type,
+    pub is_native: bool,
+    pub native_pointer: Option<fn(&mut VirtualMachine)>,
+}
+
 impl FuncInfo
 {
-    fn new(position: usize, arg_count: usize, arg_types: Vec<Type>, return_type: Type) -> Self
+    fn new(name: u16, position: usize, arg_count: usize, arg_types: Vec<Type>, return_type: Type, is_native: bool) -> Self
     {
         Self {
+            name,
             position,
             arg_count,
             arg_types,
-            return_type
+            return_type,
+            is_native,
+            native_pointer: None,
+        }
+    }
+
+    pub fn native(name: u16, arg_count: usize, arg_types: Vec<Type>, return_type: Type, nativefunc: fn(&mut VirtualMachine)) -> Self {
+        Self {
+            name,
+            position: 0,
+            arg_count,
+            arg_types,
+            return_type,
+            is_native: true,
+            native_pointer: Some(nativefunc),
+        }
+    }
+}
+
+use std::fmt;
+impl fmt::Debug for FuncInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_native {
+            write!(f, "<NativeFunc {:?}>", self.return_type)
+        } else {
+            write!(f, "<Func {:?}>", self.return_type)
+        }
+    }
+}
+
+impl fmt::Display for FuncInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_native {
+            write!(f, "<NativeFunc {:?}>", self.return_type)
+        } else {
+            write!(f, "<Func {:?}>", self.return_type)
         }
     }
 }
@@ -252,7 +291,7 @@ pub struct BytecodeGenerator {
     // To keep track of definitions
     pub current_define: Vec<Local>,
     pub global_type: HashMap<u16, Type>,
-    function_table: HashMap<u16, FuncInfo>,
+    pub function_table: HashMap<u16, FuncInfo>,
 
     // Keep track of block nesting
     pub last_loop_start: usize,
@@ -264,6 +303,15 @@ pub struct BytecodeGenerator {
 struct StatementHandleResult {
     index: usize,
     line: usize,
+    info: StatementInfo
+}
+
+#[derive(Debug)]
+enum StatementInfo {
+    Nothing,
+    Break(usize),
+    Continue(usize),
+    Return(Type),
 }
 
 #[derive(Debug)]
@@ -296,6 +344,9 @@ impl BytecodeGenerator {
     }
 
     pub fn traverse_ast(mut self, ast: ParsedResult) -> Result<ByteChunk, ()> {
+        use super::builtin_functions::apply_native_functions;
+        apply_native_functions(&mut self);
+
         for function in ast.functions {
             self.prepare_function(function);
         }
@@ -323,6 +374,7 @@ impl BytecodeGenerator {
         let mut placeholder = StatementHandleResult {
             line: 0,
             index: 0,
+            info: StatementInfo::Nothing,
         };
 
         // 引数のデータをコピーして数を保存
@@ -330,7 +382,6 @@ impl BytecodeGenerator {
         let arg_count = _arguments.len();
 
         // 関数自体の戻り値をグローバルに定義しておく
-        let return_type = decl_info._type;
         self.global_type.insert(decl_info.name_u16, decl_info._type);
         
         // 現在のコードセクションとローカルセクションを保存し、
@@ -348,9 +399,36 @@ impl BytecodeGenerator {
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
         }
 
+        let mut return_type = decl_info._type;
+        return_type.remove(Type::Func);
+
+        let mut actually_returned = false;
+        let mut first_return_type = Type::Any;
         // コードセクションも上記と同様に処理する
         for statement in body_block.statements {
-            self.handle_stmt(statement, 0);
+            let result = self.handle_stmt(statement, 0);
+            match result.info {
+                StatementInfo::Return(dtype) => {
+                    if !return_type.is_any() {
+                        if !return_type.contains(dtype) {
+                            panic!("Return type does not match! expected {:?}, got {:?}", return_type, dtype);
+                        }
+                        actually_returned = true;
+                    } else {
+                        if first_return_type == Type::Any {
+                            first_return_type = dtype.clone();
+                        } else if first_return_type != dtype {
+                            panic!("multiple return detected but the type is inconsistent: first return and what I expected was {:?}, then later got {:?}", first_return_type, dtype);
+                        }
+                        if !return_type.contains(Type::Null) {
+                            actually_returned = true;
+                        }
+                    }
+                }
+                StatementInfo::Continue(..) => panic!("You cannot use return within function scope."),
+                StatementInfo::Break(..) => panic!("You cannot use break within function scope."),
+                StatementInfo::Nothing => (),
+            }
         }
         self.current_block -= 1;
 
@@ -360,7 +438,7 @@ impl BytecodeGenerator {
         let function_index = self.code.merge(_function_code);
 
         // 関数に関する情報を保存してテーブルに保存
-        let func_info = FuncInfo::new(function_index, arg_count, argument_types, return_type);
+        let func_info = FuncInfo::new(decl_info.name_u16, function_index, arg_count, argument_types, return_type, false);
         self.function_table.insert(decl_info.name_u16, func_info);
         placeholder.index = self.code.current_length();
     }
@@ -388,7 +466,7 @@ impl BytecodeGenerator {
     }
 
     fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
-        let mut handled_result = StatementHandleResult { line, index: 0 };
+        let mut handled_result = StatementHandleResult { line, index: 0, info: StatementInfo::Nothing };
 
         match data {
             Statement::Expression(expr) => {
@@ -447,7 +525,14 @@ impl BytecodeGenerator {
                 // self.code.push_opcode(OpCode::BlockIn, line);
                 self.current_block += 1;
                 for i in block_data.statements {
-                    self.handle_stmt(i, line);
+                    match self.handle_stmt(i, line).info {
+                        StatementInfo::Break(usize) => {
+                            self.break_call.push(usize);
+                        },
+                        StatementInfo::Continue(..) => panic!("Continue does not supported"),
+                        StatementInfo::Return(..) => panic!("Return does not supported in this context"),
+                        _ => (),
+                    };
                 }
                 self.current_block -= 1;
                 // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
@@ -509,7 +594,7 @@ impl BytecodeGenerator {
                     let break_index = self.code.push_opcode(OpCode::Jump, line);
                     self.code
                         .push_operands(usize::max_value().to_vm_byte(), line);
-                    self.break_call.push(break_index);
+                    handled_result.info = StatementInfo::Break(break_index);
                 }
                 handled_result.index = self.code.current_length();
                 handled_result
@@ -517,9 +602,10 @@ impl BytecodeGenerator {
 
             Statement::Continue => {
                 if self.last_loop_start != usize::max_value() {
-                    let _break_index = self.code.push_opcode(OpCode::Jump, line);
+                    let continue_index = self.code.push_opcode(OpCode::Jump, line);
                     self.code
                         .push_operands(self.last_loop_start.to_vm_byte(), line);
+                    handled_result.info = StatementInfo::Continue(continue_index);
                 }
                 handled_result.index = self.code.current_length();
                 handled_result
@@ -529,13 +615,16 @@ impl BytecodeGenerator {
                 handled_result
             }
             Statement::Return(opt_expr) => {
-                if let Some(expr) = opt_expr {
-                    self.handle_expr(expr, line);
+                let result_type = if let Some(expr) = opt_expr {
+                    let result_expr = self.handle_expr(expr, line);
+                    result_expr._type
                 }
                 else {
                     self.code.write_null(line);
-                }
+                    Type::Null
+                };
                 handled_result.index = self.code.push_opcode(OpCode::Return, line);
+                handled_result.info = StatementInfo::Return(result_type);
                 handled_result
             }
             _ => unreachable!(),
@@ -559,7 +648,9 @@ impl BytecodeGenerator {
             }
             None => {
                 empty_expr = true;
-                value_index = self.code.write_null(out.line)
+                if !info.is_argument {
+                    value_index = self.code.write_null(out.line)
+                }
             }
         };
 
@@ -581,7 +672,6 @@ impl BytecodeGenerator {
             }
         }
 
-        // let index = self.code.write_const(name);
         if self.current_block > 0 {
             let is_exist = self.current_define.iter().position(|&x| x.1 == name);
 
@@ -590,13 +680,16 @@ impl BytecodeGenerator {
             }
 
             self.current_define.push((declared_type, name));
-            let position = self.current_define.len() - 1;
-            declared_type.remove(Type::Null);
-            let opcode = self.get_store_opcode(declared_type, false);
-            let operands = position as u16;
+            if info.is_argument {
+                out.index = self.code.current_length();
+            } else {
+                let position = self.current_define.len() - 1;
+                let opcode = self.get_store_opcode(declared_type, false);
+                let operands = position as u16;
 
-            self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
+                self.code.push_opcode(opcode, out.line);
+                out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
+            }
         } else {
             self.global_type.insert(name, declared_type);
             declared_type.remove(Type::Null);
@@ -816,25 +909,32 @@ impl BytecodeGenerator {
             }
             Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
                 if let Expr::Variable(name) = *func_name {
-                    let func_info = self.function_table.get(&name).expect("Undefined Function call.").clone();
-                    if func_info.arg_count != arguments.len()
-                    {
-                        panic!("Too Few / much arguments provided. require {}", func_info.arg_count);
+                    if !self.function_table.contains_key(&name) {
+                        panic!("Undefined Function.");
                     }
-                    let ARR_END = func_info.arg_count - 1;
-                    arguments.reverse();
-                    for (i, arg) in arguments.drain(..).enumerate() {
-                        let handled_type = self.handle_expr(arg, line);
-                        let current_type = func_info.arg_types[ARR_END - i];
-                        if !current_type.contains(handled_type._type) {
-                            panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type._type);
+
+                    let arg_count = self.function_table[&name].arg_count;
+                    let arg_types = self.function_table[&name].arg_types.clone();
+                    let return_type = self.function_table[&name].return_type;
+                    if arg_count != arguments.len()
+                    {
+                        panic!("Too Few / much arguments provided. require {} arg(s)", arg_count);
+                    }
+                    if 0 < arg_count {
+                        let ARR_END = arg_count - 1;
+                        arguments.reverse();
+                        for (i, arg) in arguments.drain(..).enumerate() {
+                            let handled_type = self.handle_expr(arg, line);
+                            let current_type = arg_types[ARR_END - i];
+                            if !current_type.contains(handled_type._type) {
+                                panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type._type);
+                            }
+                            println!("Added ({:?}) = ({:?})", current_type, handled_type._type);
                         }
-                        println!("Added ({:?}) = ({:?})", current_type, handled_type._type);
                     }
                     self.code.push_opcode(OpCode::Call, line);
                     let jump_here = self.code.push_operands(name.to_vm_byte(), line);
-                    println!("{:?}", &func_info);
-                    handled_result._type = func_info.return_type; 
+                    handled_result._type = return_type; 
                     handled_result._type.remove(Type::Func); 
                     handled_result.index = jump_here;
                 }

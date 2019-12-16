@@ -225,10 +225,15 @@ impl VirtualMachine {
 
                     let func_info = self.chunk.functions.get(&identifier).expect("Undefined Function call.");
 
-                    stack_frame.push(self.stack_pointer);
-                    call_frame.push(self.code_ip + 2);
-                    self.stack_pointer = self.stack.len() - func_info.arg_count;
-                    self.code_ip = func_info.position;
+                    if func_info.is_native {
+                        (func_info.native_pointer.unwrap())(self);
+                        self.code_ip += 3;
+                    } else {
+                        stack_frame.push(self.stack_pointer);
+                        call_frame.push(self.code_ip + 2);
+                        self.stack_pointer = self.stack.len() - func_info.arg_count;
+                        self.code_ip = func_info.position;
+                    }
                 }
                 OpCode::Return => {
                     let return_value = self.stack.pop().unwrap();
