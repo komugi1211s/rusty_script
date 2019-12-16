@@ -401,6 +401,9 @@ impl BytecodeGenerator {
 
         let mut return_type = decl_info._type;
         return_type.remove(Type::Func);
+        let function_index = self.code.current_length();
+        let func_info = FuncInfo::new(decl_info.name_u16, function_index, arg_count, argument_types, return_type, false);
+        self.function_table.insert(decl_info.name_u16, func_info);
 
         let mut actually_returned = false;
         let mut first_return_type = Type::Any;
@@ -438,8 +441,6 @@ impl BytecodeGenerator {
         let function_index = self.code.merge(_function_code);
 
         // 関数に関する情報を保存してテーブルに保存
-        let func_info = FuncInfo::new(decl_info.name_u16, function_index, arg_count, argument_types, return_type, false);
-        self.function_table.insert(decl_info.name_u16, func_info);
         placeholder.index = self.code.current_length();
     }
 
@@ -530,7 +531,6 @@ impl BytecodeGenerator {
                             self.break_call.push(usize);
                         },
                         StatementInfo::Continue(..) => panic!("Continue does not supported"),
-                        StatementInfo::Return(..) => panic!("Return does not supported in this context"),
                         _ => (),
                     };
                 }
