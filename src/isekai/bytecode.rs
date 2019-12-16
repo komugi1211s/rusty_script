@@ -260,84 +260,18 @@ pub struct BytecodeGenerator {
     pub break_call: Vec<usize>,
 }
 
-
 #[derive(Debug)]
-struct HandledResult {
+struct StatementHandleResult {
     index: usize,
-    line: usize.
-    info: ResultInfo.
-}
-
-impl HandledResult {
-    fn basic(index: usize, line: usize) -> Self {
-        Self {
-            index,
-            line,
-            info: ResultInfo::BasicResult,
-        }
-    }
+    line: usize,
 }
 
 #[derive(Debug)]
-struct HandledResultBuilder {
-    index: Option<usize>,
-    line: Option<usize>,
-    info: ResultInfo,
+struct ExpressionHandleResult {
+    index: usize,
+    line: usize,
+    _type: Type,
 }
-
-impl HandledResultBuilder {
-    fn new() -> Self {
-        Self {
-            index: None,
-            line: None,
-            info: ResultInfo::BasicResult,
-        }
-    }
-
-    fn setindex(mut self, index: usize) -> Self {
-        self.index = Some(index);
-        self
-    }
-
-    fn setline(mut self, line: usize) -> Self {
-        self.line = Some(line);
-        self
-    }
-
-    fn setinfo(mut self, info: ResultInfo) -> Self {
-        self.info = info;
-        self
-    }
-
-    fn setindex_ref(&mut self, index: usize) {
-        self.index = Some(index);
-    }
-
-    fn setline_ref(&mut self, line: usize) {
-        self.line = Some(line);
-    }
-
-    fn setinfo_ref(&mut self, info: ResultInfo) {
-        self.info = info;
-    }
-
-    fn build(self) -> HandledResult {
-        HandledResult {
-            index: self.index.unwrap(),
-            line: self.line.unwrap(),
-            info: self.info,
-        }
-    }
-}
-
-#[derive(Debug)]
-enum ResultInfo {
-    BasicResult,
-    ExpressionResult { dtype: Type },
-    BlockResult { breaks: Vec<usize>, continues: Vec<usize>, returns: Vec<Type> },
-    DeclarationResult { dtype: Type, is_constant: bool, is_global: bool },
-}
-
 
 #[derive(Debug)]
 pub struct ByteChunk {
@@ -385,6 +319,11 @@ impl BytecodeGenerator {
     ) {
         let decl_info = function.it;
         let body_block = function.block;
+        // 実際に使うことはないが、特定の関数が必要とするため用意
+        let mut placeholder = StatementHandleResult {
+            line: 0,
+            index: 0,
+        };
 
         // 引数のデータをコピーして数を保存
         let _arguments = function.args;
@@ -406,22 +345,14 @@ impl BytecodeGenerator {
         for arg_decl_info in _arguments {
             let arg_type = arg_decl_info._type;
             argument_types.push(arg_type);
-            self.handle_declaration_data(arg_decl_info);
+            self.handle_declaration_data(&mut placeholder, arg_decl_info);
         }
 
         // コードセクションも上記と同様に処理する
-        let block_result = self.handle_block_data(body_block);
-        if let ResultInfo::BlockResult { breaks, continues, returns } = block_result {
-            if breaks.len() != 0 || continues.len() != 0 {
-                panic!("What the fuck");
-            }
-
-            for actual_type in returns {
-                if !return_type.contains(actual_type) {
-                    panic!("Nope");
-                }
-            }
+        for statement in body_block.statements {
+            self.handle_stmt(statement, 0);
         }
+        self.current_block -= 1;
 
         // 元のコードを復活させ、後付けでマージする
         let _function_code = mem::replace(&mut self.code, main_code);
@@ -456,19 +387,27 @@ impl BytecodeGenerator {
         start_index
     }
 
-    fn handle_stmt(&mut self, data: Statement, line: usize) -> HandledResult {
+    fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
+        let mut handled_result = StatementHandleResult { line, index: 0 };
+
         match data {
-            Statement::Expression(expr) => self.handle_expr(expr, line),
-            Statement::Decralation(declaration_info) => self.handle_declaration_data(declaration_info),
+            Statement::Expression(expr) => {
+                handled_result.index = self.handle_expr(expr, line).index;
+                handled_result
+            }
+            Statement::Decralation(declaration_info) => {
+                self.handle_declaration_data(&mut handled_result, declaration_info);
+                handled_result
+            }
 
             Statement::Print(expr) => {
                 self.handle_expr(expr, line);
-                let index = self.code.push_opcode(OpCode::DebugPrint, line);
-                HandledResult::basic(index, line);
+                handled_result.index = self.code.push_opcode(OpCode::DebugPrint, line);
+                handled_result
             }
 
             Statement::If(expr, if_block, optional_else_block) => {
-                let result = self.handle_expr(expr, line);
+                self.handle_expr(expr, line);
 
                 // ジャンプ用のインデックスを作っておく
                 let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, line);
@@ -476,7 +415,7 @@ impl BytecodeGenerator {
                     .push_operands(usize::max_value().to_vm_byte(), line);
 
                 // Ifの終わりにまでJumpする為のIndexが要る
-                let end_of_if_block = self.handle_block_data(*if_block, line);
+                let end_of_if_block = self.handle_stmt(*if_block, line).index;
 
                 // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
                 self.code
@@ -544,9 +483,7 @@ impl BytecodeGenerator {
                 let previous_loop_start = self.last_loop_start;
                 self.last_loop_start = after_jump_conditional;
 
-                if let Statement::Block(block_data) = while_block {
-                    self.handle_stmt(*while_block, line);
-                }
+                self.handle_stmt(*while_block, line);
 
                 let before_expr = self.code.current_length();
                 self.handle_expr(expr, line);
@@ -605,20 +542,7 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_block_data(&mut self, data: BlockData) -> HandledResult {
-        // self.code.push_opcode(OpCode::BlockIn, line);
-        self.current_block += 1;
-        for i in block_data.statements {
-            self.handle_stmt(i, line);
-        }
-        self.current_block -= 1;
-        // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
-        handled_result.index = self.code.current_length();
-        handled_result
-    }
-
-    fn handle_declaration_data(&mut self, info: DeclarationData) -> HandledResult {
-        let mut builder = HandledResultBuilder::new();
+    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, info: DeclarationData) {
         let mut value_index = 0;
         let mut actual_type = Type::Null;
 
@@ -639,10 +563,7 @@ impl BytecodeGenerator {
             }
         };
 
-        if actual_type == Type::Null {
-            if !decl.is_argument {
-                panic!("You cannot initialize Any type with null");
-            }
+        if actual_type == Type::Null && !info.is_argument {
             if declared_type.is_any() {
                 panic!("You cannot initialize Any type with null");
             }
@@ -659,7 +580,6 @@ impl BytecodeGenerator {
                 panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
             }
         }
-        let mut result_index = 0;
 
         // let index = self.code.write_const(name);
         if self.current_block > 0 {
@@ -674,25 +594,16 @@ impl BytecodeGenerator {
             declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, false);
             let operands = position as u16;
+
             self.code.push_opcode(opcode, out.line);
-            result_index = self.code.push_operands(operands.to_vm_byte(), out.line);
+            out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
         } else {
             self.global_type.insert(name, declared_type);
             declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, true);
             self.code.push_opcode(opcode, out.line);
-            result_index = self.code.push_operands(name.to_vm_byte(), out.line);
+            out.index = self.code.push_operands(name.to_vm_byte(), out.line);
         }
-
-        builder
-            .setindex(result_index)
-            .setline(line)
-            .setinfo(ResultInfo::DeclarationResult {
-                dtype: declared_type,
-                is_constant: dtype.contains(Type::Const),
-                is_global: self.current_block > 0,
-            })
-            .build()
     }
 
     fn get_load_opcode(&self, _type: Type, is_global: bool) -> OpCode
@@ -730,15 +641,14 @@ impl BytecodeGenerator {
 
     fn handle_constant_data(
         &mut self,
+        out: &mut ExpressionHandleResult,
         constant: Constant,
         line: usize,
-    ) -> HandledResult {
+    ) {
         let _type = constant.ctype.clone();
         let opcode = constant.code;
         let value = constant.value;
         let length = value.len();
-
-        let mut builder = HandledResultBuilder::new();
 
         let start_index = if opcode == OpCode::ConstDyn {
             let x = self.const_table.push_data(length.to_vm_byte());
@@ -751,14 +661,16 @@ impl BytecodeGenerator {
         self.const_table.types.insert(start_index, _type);
         self.code.push_opcode(opcode, line);
         let index = self.code.push_operands(start_index.to_vm_byte(), line);
-        builder.setindex(index).setline(line).setinfo(ResultInfo::ExpressionResult {
-            dtype: _type,
-        }).build()
+        out._type = _type;
+        out.index = index;
     }
 
-    fn handle_expr(&mut self, expr: Expr, line: usize) -> HandledResult {
-        let mut builder = HandledResultBuilder::new().setline(line);
-        let mut expr_info = ResultInfo::ExpressionResult { dtype: Type::Null };
+    fn handle_expr(&mut self, expr: Expr, line: usize) -> ExpressionHandleResult {
+        let mut handled_result = ExpressionHandleResult {
+            line,
+            index: 0,
+            _type: Type::Null,
+        };
         match expr {
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
@@ -772,39 +684,40 @@ impl BytecodeGenerator {
                     }
 
                     let _type = self.global_type.get(&name).unwrap().clone();
-                    expr_info.dtype = _type;
                     let opcode = self.get_load_opcode(_type, true);
+                    handled_result._type = _type;
                     self.code.push_opcode(opcode, line);
-                    let index = self.code.push_operands(name.to_vm_byte(), line);
-                }  else {
-                    let mut index = 0;
-                    let (_type, _) = {
-                        index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap().clone()
-                    };
-                    let index = index as u16;
-                    expr_info.dtype = _type;
-                    let opcode = self.get_load_opcode(_type, false);
-                    self.code.push_opcode(opcode, line);
-                    let index = self.code.push_operands(index.to_vm_byte(), line);
+                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
+                    return handled_result;
                 }
 
-                builder.setindex(index).setinfo(expr_info).build()
+                let mut index = 0;
+                let (_type, _) = {
+                    index = is_exist.unwrap();
+                    self.current_define.get(index).unwrap().clone()
+                };
+                let index = index as u16;
+                handled_result._type = _type;
+                let opcode = self.get_load_opcode(_type, false);
+                self.code.push_opcode(opcode, line);
+                handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
+                handled_result
             }
-            Expr::Literal(literal) => self.handle_constant_data(literal, line),
+            Expr::Literal(literal) => {
+                // TODO: handle it without making a clone.
+                // self.stack.push(literal);
+                self.handle_constant_data(&mut handled_result, literal, line);
+                handled_result
+            }
 
             Expr::Binary(left, right, operator) => {
                 let left = self.handle_expr(*left, line);
                 let right = self.handle_expr(*right, line);
 
-                if let ResultInfo::ExpressionResult{ ltype } = left.info {
-                    if let ResultInfo::ExpressionResult{ rtype } = right.info {
-                        let type_after_expr = Type::type_after_binary(&left._type, &right._type, &operator.tokentype);
-                        expr_info.dtype = type_after_expr;
-                    }
-                }
+                handled_result._type =
+                    Type::type_after_binary(&left._type, &right._type, &operator.tokentype)
                         .unwrap();
-                let index = match operator.tokentype {
+                handled_result.index = match operator.tokentype {
                     TokenType::Plus => self.code.push_opcode(OpCode::Add, line),
                     TokenType::Minus => self.code.push_opcode(OpCode::Sub, line),
                     TokenType::Asterisk => self.code.push_opcode(OpCode::Mul, line),
@@ -822,50 +735,45 @@ impl BytecodeGenerator {
                     TokenType::More => self.code.push_opcode(OpCode::More, line),
                     _ => unreachable!(),
                 };
-                builder.setindex(index).setinfo(expr_info).build()
+                handled_result
             }
             Expr::Logical(left, right, operator) => {
                 self.handle_expr(*left, line);
                 self.handle_expr(*right, line);
 
-                let index = match operator.tokentype {
+                handled_result.index = match operator.tokentype {
                     TokenType::And => self.code.push_opcode(OpCode::And, line),
                     TokenType::Or => self.code.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
                 };
-                expr_info.dtype = Type::Boolean;
-                builder.setindex(index).setinfo(expr_info).build()
+                handled_result._type = Type::Boolean;
+                handled_result
             }
             Expr::Unary(expr, operator) => {
                 let another_result = self.handle_expr(*expr, line);
-                if let ResultInfo::ExpressionResult { dtype } = another_result.info {
-                    let type_after_expr = Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
-                    expr_info.dtype = type_after_expr;
-                }
-                let index = match operator.tokentype {
+                handled_result._type =
+                    Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
+                handled_result.index = match operator.tokentype {
                     TokenType::Bang => self.code.push_opcode(OpCode::Not, line),
                     TokenType::Minus => self.code.push_opcode(OpCode::Neg, line),
                     _ => unreachable!(),
                 };
-                builder.setindex(index).setinfo(expr_info).build()
+                handled_result._type = another_result._type;
+                handled_result
             }
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) => {
                 let another_result = self.handle_expr(*expr, line);
                 let is_exist = self.current_define.iter().position(|&x| x.1 == name);
-                let actual_type = if ResultInfo::ExpressionResult { dtype } = another_result.info {
-                    dtype
-                } else {
-                    Type::Null
-                }
 
                 if is_exist.is_none() {
                     if !self.global_type.contains_key(&name) {
                         panic!("Undefined Variable");
                     }
 
-                    let _type = self.global_type.get(&name).unwrap();
-                    if _type != &actual_type {
+                    let _type = self.global_type.get(&name).unwrap().clone();
+                    let actual_type = &another_result._type;
+                    if &_type != actual_type {
                         panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
                     }
                     let opcode = match another_result._type {
@@ -876,8 +784,8 @@ impl BytecodeGenerator {
                         _ => unreachable!(),
                     };
                     self.code.push_opcode(opcode, line);
-                    expr_info.dtype = actual_type;
-                    let index = self.code.push_operands(name.to_vm_byte(), line);
+                    handled_result._type = _type;
+                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
                 } else {
                     let mut index = 0;
                     let (declared_type, _) = {
@@ -885,7 +793,7 @@ impl BytecodeGenerator {
                         self.current_define.get(index).unwrap()
                     }.clone();
 
-                    if !&declared_type.contains(actual_type) {
+                    if !&declared_type.contains(another_result._type) {
                         panic!(
                             "Type Mismatch when Assigning: {:?} != {:?}",
                             declared_type, another_result._type
