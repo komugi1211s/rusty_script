@@ -228,12 +228,12 @@ impl Parser {
                     }
                 }
                 TokenType::Comma => {
-                    let data = builder.setexpr(Expr::Literal(Constant::null())).build();
+                    let data = builder.build();
                     arguments.push(data);
                     continue;
                 }
                 TokenType::CloseParen => {
-                    let data = builder.setexpr(Expr::Literal(Constant::null())).build();
+                    let data = builder.build();
                     arguments.push(data);
                     self.consume(TokenType::CloseParen);
                     return arguments;

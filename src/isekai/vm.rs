@@ -161,25 +161,6 @@ impl VirtualMachine {
                         index
                     };
                 }
-
-                OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
-                    self.code_ip += 1;
-                    let indone = self.chunk.code.bytes[self.code_ip];
-                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
-                    let value = self.stack.last().unwrap().clone();
-                    self.stack[self.stack_pointer + index] = value;
-                    self.code_ip += 2;
-                }
-                OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad => {
-                    self.code_ip += 1;
-                    let indone = self.chunk.code.bytes[self.code_ip];
-                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
-                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
-                    let data = self.stack[self.stack_pointer + index].clone();
-                    self.stack.push(data);
-                    self.code_ip += 2;
-                }
                 OpCode::Jump => {
                     let (index, _new_end): (usize, usize) = self.consume_const_index(self.code_ip);
                     self.code_ip = index;
@@ -194,6 +175,24 @@ impl VirtualMachine {
                     let index = stack_frame.pop().unwrap();
                     self.stack_pointer = index;
                     self.code_ip += 1;
+                }
+                OpCode::BLoad | OpCode::ILoad | OpCode::FLoad | OpCode::SLoad => {
+                    self.code_ip += 1;
+                    let indone = self.chunk.code.bytes[self.code_ip];
+                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
+                    let data = self.stack[self.stack_pointer + index].clone();
+                    self.stack.push(data);
+                    self.code_ip += 2;
+                }
+                OpCode::BStore | OpCode::IStore | OpCode::FStore | OpCode::SStore => {
+                    self.code_ip += 1;
+                    let indone = self.chunk.code.bytes[self.code_ip];
+                    let indtwo = self.chunk.code.bytes[self.code_ip + 1];
+                    let index = u16::from_ne_bytes([indone, indtwo]) as usize;
+                    let value = self.stack.last().unwrap().clone();
+                    self.stack[self.stack_pointer + index] = value;
+                    self.code_ip += 2;
                 }
                 OpCode::GBLoad | OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad => {
                     let operand_one = self.chunk.code.bytes[self.code_ip + 1];
@@ -224,7 +223,6 @@ impl VirtualMachine {
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]);
 
                     let func_info = self.chunk.functions.get(&identifier).expect("Undefined Function call.");
-
                     if func_info.is_native {
                         (func_info.native_pointer.unwrap())(self);
                         self.code_ip += 3;

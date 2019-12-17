@@ -264,8 +264,6 @@ pub enum Value {
     //  Struct(String, Vec<(Type, usize, Value)>),
 
     // TODO: この辺はCallableDataとかのStructとして纏めたほうが楽かも
-    Callable(Type, Vec<Statement>, Vec<Statement>),
-    NativeCallable(Type, Vec<(Type, Value)>, fn(Vec<Value>) -> Value),
     Null,
 }
 
@@ -362,8 +360,6 @@ impl Value {
             Value::Float(_) => Type::Float,
             Value::Str(_) => Type::Str,
             Value::Boolean(_) => Type::Boolean,
-            Value::Callable(t, _, _) => t.clone(),
-            Value::NativeCallable(t, _, _) => t.clone(),
             _ => Type::Any,
         }
     }
@@ -390,8 +386,6 @@ impl fmt::Display for Value {
             Value::Float(f_) => write!(f, "{}", f_),
             Value::Str(ref s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
-            Value::Callable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
-            Value::NativeCallable(t, a, _) => write!(f, "<CALLABLE> {:?} {:?}", t, a),
             Value::Null => write!(f, "null"),
             Value::Type(x) => write!(f, "{:?}", x),
             Value::Pointer(x) => write!(f, "Pointer{}", x),

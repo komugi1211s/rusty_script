@@ -355,6 +355,7 @@ impl BytecodeGenerator {
             self.handle_stmt(i.value, i.line);
         }
         self.const_table.push_data(usize::max_value().to_vm_byte());
+        println!("{:04X}", entry_point);
 
         Ok(ByteChunk {
             entry_point,
@@ -383,6 +384,7 @@ impl BytecodeGenerator {
 
         // 関数自体の戻り値をグローバルに定義しておく
         self.global_type.insert(decl_info.name_u16, decl_info._type);
+        let function_index = self.code.current_length();
         
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -394,6 +396,7 @@ impl BytecodeGenerator {
         self.current_block += 1;
         let mut argument_types = Vec::new();
         for arg_decl_info in _arguments {
+            println!("{:?}", &arg_decl_info);
             let arg_type = arg_decl_info._type;
             argument_types.push(arg_type);
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
@@ -401,7 +404,6 @@ impl BytecodeGenerator {
 
         let mut return_type = decl_info._type;
         return_type.remove(Type::Func);
-        let function_index = self.code.current_length();
         let func_info = FuncInfo::new(decl_info.name_u16, function_index, arg_count, argument_types, return_type, false);
         self.function_table.insert(decl_info.name_u16, func_info);
 
@@ -433,6 +435,15 @@ impl BytecodeGenerator {
                 StatementInfo::Nothing => (),
             }
         }
+
+        if !actually_returned {
+            if return_type.is_any() {
+                self.handle_stmt(Statement::Return(None), 0);
+            } else {
+                panic!("Return type specified but nothing returned");
+            }
+        }
+
         self.current_block -= 1;
 
         // 元のコードを復活させ、後付けでマージする
