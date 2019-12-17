@@ -34,13 +34,7 @@ fn run_file(path: String) -> bool {
 
     f.read_to_string(&mut strings)
         .expect("ファイルの読み込みに失敗しました。");
-    match isekai::core::start(strings.as_str()) {
-        Ok(_) => true,
-        Err(e) => {
-            println!("エラーが発生しました。: {}", e.to_string());
-            false
-        }
-    }
+    isekai::core::start(strings.as_str()).is_ok()
 }
 
 fn main() {

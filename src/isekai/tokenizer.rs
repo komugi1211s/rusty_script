@@ -1,6 +1,7 @@
 use std::fmt;
 // use std::mem;
 use super::token::{match_identity, Token, TokenType};
+use super::report::Error;
 
 /*
  10 + 2 * 4
@@ -8,32 +9,6 @@ use super::token::{match_identity, Token, TokenType};
  calcnum -> ;
  digit -> 0..9;
 */
-
-#[derive(Debug)]
-pub enum ErrorType {
-    UnexpectedToken(char),
-    ReservedWord,
-    UnterminatedString(String),
-}
-
-#[derive(Debug)]
-pub struct SyntaxError {
-    _type: ErrorType,
-    line: usize,
-    col: usize,
-}
-
-impl SyntaxError {
-    fn new(_type: ErrorType, line: usize, col: usize) -> Self {
-        Self { _type, line, col }
-    }
-}
-
-impl fmt::Display for SyntaxError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} ({}行目 {}文字目)", self._type, self.line, self.col)
-    }
-}
 
 pub struct Tokenizer {
     source: Vec<char>,
@@ -56,7 +31,7 @@ impl Tokenizer {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, Error> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_next_token()?;
@@ -67,7 +42,7 @@ impl Tokenizer {
         Ok(self.tokens.to_owned())
     }
 
-    fn scan_next_token(&mut self) -> Result<(), SyntaxError> {
+    fn scan_next_token(&mut self) -> Result<(), Error> {
         let c: char = self.advance();
         match c {
             '(' => self.add_token(TokenType::OpenParen),
@@ -147,10 +122,9 @@ impl Tokenizer {
             'A'..='z' => self.add_possible_iden(),
 
             // Default
-            def => Err(SyntaxError::new(
-                ErrorType::UnexpectedToken(def),
+            def => Err(Error::new_while_tokenizing(
+                format!("Unexpected Token: {}", def).as_str(),
                 self.line,
-                self.column,
             )),
         }
     }
@@ -164,13 +138,13 @@ impl Tokenizer {
         true
     }
 
-    fn add_newline(&mut self) -> Result<(), SyntaxError> {
+    fn add_newline(&mut self) -> Result<(), Error> {
         self.line += 1;
         self.column = 1;
         Ok(())
     }
 
-    fn add_string(&mut self) -> Result<(), SyntaxError> {
+    fn add_string(&mut self) -> Result<(), Error> {
         while !self.is_at_end() && self.peek() != '"' {
             if self.source[self.current] == '\n' {
                 self.add_newline()?;
@@ -183,10 +157,9 @@ impl Tokenizer {
             let given_string: String = (&self.source[(self.start + 1)..(self.current - 1)])
                 .iter()
                 .collect();
-            return Err(SyntaxError::new(
-                ErrorType::UnterminatedString(given_string),
+            return Err(Error::new_while_tokenizing(
+                "Unterminated String",
                 self.line,
-                self.column,
             ));
         }
 
@@ -221,7 +194,7 @@ impl Tokenizer {
         }
     }
 
-    fn add_digit(&mut self) -> Result<(), SyntaxError> {
+    fn add_digit(&mut self) -> Result<(), Error> {
         // Advance while it's numeric
         loop {
             let n = self.peek();
@@ -240,7 +213,7 @@ impl Tokenizer {
         self.add_token(TokenType::Digit)
     }
 
-    fn add_possible_iden(&mut self) -> Result<(), SyntaxError> {
+    fn add_possible_iden(&mut self) -> Result<(), Error> {
         while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
             self.advance();
         }
@@ -260,7 +233,7 @@ impl Tokenizer {
         self.source[self.current - 1]
     }
 
-    fn add_token(&mut self, tokentype: TokenType) -> Result<(), SyntaxError> {
+    fn add_token(&mut self, tokentype: TokenType) -> Result<(), Error> {
         self.tokens.push(Token::new(
             tokentype,
             self.line,

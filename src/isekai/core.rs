@@ -1,8 +1,9 @@
 use super::parser::Parser;
 use super::token::Token;
-use super::tokenizer::{SyntaxError, Tokenizer};
+use super::tokenizer::Tokenizer;
 // use super::evaluate::Interpreter;
 use super::bytecode::{ BytecodeGenerator, disassemble_all };
+use super::report::{ ErrorReporter };
 use super::vm::VirtualMachine;
 // use self::error::*;
 use std::time::Instant;
@@ -10,9 +11,13 @@ use std::io::prelude::*;
 use std::fs::File;
 
 
-pub fn start(code: &str) -> Result<(), SyntaxError> {
+pub fn start(code: &str) -> Result<(), ()> {
+    let reporter = ErrorReporter::from_lineiter(code.lines());
     let start = Instant::now();
-    let _tokens: Vec<Token> = Tokenizer::new(code).scan()?;
+    let _tokens: Vec<Token> = match Tokenizer::new(code).scan() {
+        Ok(n) => n,
+        Err(err) => { reporter.report_error(err); return Err(()); },
+    };
     println!(
         "Tokenizer took: \x1b[32m{} micros\x1b[39m",
         start.elapsed().as_micros()
@@ -21,7 +26,10 @@ pub fn start(code: &str) -> Result<(), SyntaxError> {
     let mut _parser: Parser = Parser::new(_tokens);
 
     let parser_time = Instant::now();
-    let result = _parser.parse();
+    let result = match _parser.parse() {
+        Ok(n) => n,
+        Err(err) => { reporter.report_error(err); return Err(()); },
+    };
     println!(
         "Parser took: \x1b[32m{} micros\x1b[39m",
         parser_time.elapsed().as_micros()

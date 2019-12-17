@@ -311,6 +311,7 @@ enum StatementInfo {
     Nothing,
     Break(usize),
     Continue(usize),
+    Declaration { is_initialized: bool, dtype: Type },
     Return(Type),
 }
 
@@ -384,7 +385,6 @@ impl BytecodeGenerator {
 
         // 関数自体の戻り値をグローバルに定義しておく
         self.global_type.insert(decl_info.name_u16, decl_info._type);
-        let function_index = self.code.current_length();
         
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -402,13 +402,19 @@ impl BytecodeGenerator {
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
         }
 
-        let mut return_type = decl_info._type;
-        return_type.remove(Type::Func);
-        let func_info = FuncInfo::new(decl_info.name_u16, function_index, arg_count, argument_types, return_type, false);
+        let return_type = { 
+            let mut x = decl_info._type;
+            x.remove(Type::Func);
+            x
+        };
+        
+        let function_starts_at = main_code.current_length();
+        let func_info = FuncInfo::new(decl_info.name_u16, function_starts_at, arg_count, argument_types, return_type, false);
         self.function_table.insert(decl_info.name_u16, func_info);
 
         let mut actually_returned = false;
         let mut first_return_type = Type::Any;
+
         // コードセクションも上記と同様に処理する
         for statement in body_block.statements {
             let result = self.handle_stmt(statement, 0);
@@ -432,7 +438,7 @@ impl BytecodeGenerator {
                 }
                 StatementInfo::Continue(..) => panic!("You cannot use return within function scope."),
                 StatementInfo::Break(..) => panic!("You cannot use break within function scope."),
-                StatementInfo::Nothing => (),
+                _ => (),
             }
         }
 
@@ -708,6 +714,7 @@ impl BytecodeGenerator {
             self.code.push_opcode(opcode, out.line);
             out.index = self.code.push_operands(name.to_vm_byte(), out.line);
         }
+        out.info = StatementInfo::Declaration { is_initialized: empty_expr, dtype: declared_type };
     }
 
     fn get_load_opcode(&self, _type: Type, is_global: bool) -> OpCode

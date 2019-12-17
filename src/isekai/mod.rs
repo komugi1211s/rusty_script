@@ -1,4 +1,5 @@
 pub mod core;
+pub mod report;
 pub mod types;
 // pub mod nativefunc;
 
