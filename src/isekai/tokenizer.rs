@@ -15,6 +15,7 @@ pub struct Tokenizer {
     tokens: Vec<Token>,
     start: usize,
     current: usize,
+    start_line: usize,
     line: usize,
     column: usize,
 }
@@ -26,6 +27,7 @@ impl Tokenizer {
             tokens: Vec::new(),
             start: 0,
             current: 0,
+            start_line: 0,
             line: 1,
             column: 1,
         }
@@ -34,6 +36,7 @@ impl Tokenizer {
     pub fn scan(&mut self) -> Result<Vec<Token>, Error> {
         while !self.is_at_end() {
             self.start = self.current;
+            self.start_line = self.line;
             self.scan_next_token()?;
         }
 
@@ -124,7 +127,7 @@ impl Tokenizer {
             // Default
             def => Err(Error::new_while_tokenizing(
                 format!("Unexpected Token: {}", def).as_str(),
-                self.line,
+                self.start_line,
             )),
         }
     }
@@ -159,7 +162,7 @@ impl Tokenizer {
                 .collect();
             return Err(Error::new_while_tokenizing(
                 "Unterminated String",
-                self.line,
+                self.start_line,
             ));
         }
 

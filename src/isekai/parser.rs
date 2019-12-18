@@ -37,6 +37,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     parsed_result: ParsedResult,
     current: usize,
+    start_line: usize,
     current_line: usize,
     assign_count: usize,
     block_count: usize,
@@ -48,6 +49,7 @@ impl Parser {
             tokens: _tok,
             parsed_result: ParsedResult { functions: vec![], statements: vec![] },
             current: 0,
+            start_line: 0,
             current_line: 0,
             assign_count: 0,
             block_count: 0,
@@ -56,8 +58,9 @@ impl Parser {
 
     pub fn parse(mut self) -> Result<ParsedResult, Error> {
         while !self.is_at_end() {
+            self.start_line = self.current_line;
             let declaration = self.declaration()?;
-            self.parsed_result.statements.push(StatementNode::new(declaration, self.current_line));
+            self.parsed_result.statements.push(StatementNode::new(declaration, self.start_line));
         }
         Ok(self.parsed_result)
     }
@@ -213,7 +216,7 @@ impl Parser {
             let builder = DeclarationDataBuilder::new().setargmode(true).setname(&iden);
 
             let bridge_token = self.advance();
-            let current_line = bridge_token.line;
+            let bridge_line = bridge_token.line;
             match bridge_token.tokentype {
                 TokenType::Equal => {
                     let item = self.expression()?;
@@ -225,7 +228,7 @@ impl Parser {
                     match self.advance().tokentype {
                         TokenType::Comma => continue,
                         TokenType::CloseParen => return Ok(arguments),
-                        _ => return Err(Error::new_while_parsing("Argument declaration must end with close paren", current_line)),
+                        _ => return Err(Error::new_while_parsing("Argument declaration must end with close paren", self.current_line)),
                     }
                 }
                 TokenType::Comma => {
@@ -238,7 +241,7 @@ impl Parser {
                     arguments.push(data);
                     return Ok(arguments);
                 }
-                _ => return Err(Error::new_while_parsing("Unknown Token detected while parsing arguments", current_line)),
+                _ => return Err(Error::new_while_parsing("Unknown Token detected while parsing arguments", bridge_line)),
             }
         }
         Ok(arguments)
@@ -279,8 +282,7 @@ impl Parser {
             }
             else
             {
-                let line = self.get_current().line;
-                return Err(Error::new_while_parsing("tried to initialize non-null variable with null value", line))
+                return Err(Error::new_while_parsing("tried to initialize non-null variable with null value", self.current_line))
             }
         }
         // This is a function.
@@ -290,7 +292,7 @@ impl Parser {
         }
 
         match state {
-            Statement::Empty => Err(Error::new_while_parsing("Failed to parse the declaration process.", self.get_current().line)),
+            Statement::Empty => Err(Error::new_while_parsing("Failed to parse the declaration process.", self.current_line)),
             _ => Ok(state),
         }
     }
@@ -325,14 +327,13 @@ impl Parser {
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
         if self.is(TokenType::Equal) {
-            self.advance();
+            let assign_line = self.advance().line;
             let value = self.assignment()?;
 
             if let Expr::Variable(s) = expr {
                 return Ok(Expr::Assign(s, Box::new(value)));
             } else {
-                let line = self.get_current().line;
-                return Err(Error::new_while_parsing("Invalid Assignment target", line));
+                return Err(Error::new_while_parsing("Invalid Assignment target", assign_line));
             }
         }
 
@@ -435,8 +436,7 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Expr, Error> {
         if self.is(TokenType::Bang) || self.is(TokenType::Minus) {
-            self.current += 1;
-            let unary_oper = self.tokens.get(self.current - 1).unwrap().clone();
+            let unary_oper = self.advance().clone();
             let right = self.unary()?;
             let unary = Expr::Unary(Box::new(right), unary_oper);
 
@@ -515,6 +515,7 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, Error> {
+        let previous_line = self.current_line;
         let inside = self.advance();
         use TokenType::*;
         let result = match &inside.tokentype {
@@ -531,7 +532,7 @@ impl Parser {
                     Ok(n) => Ok(Expr::Literal(n.into())),
                     Err(_) => match inside.lexeme.parse::<f64>() {
                         Ok(f) => Ok(Expr::Literal(f.into())),
-                        Err(x) => Err(Error::new_while_parsing("Digit does not match either int or float", inside.line)),
+                        Err(x) => Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line)),
                     }
                 }
             }
@@ -539,7 +540,7 @@ impl Parser {
             Iden => {
                 if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
                     let formatted = format!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);
-                    return Err(Error::new_while_parsing(formatted.as_str(), inside.line));
+                    return Err(Error::new_while_parsing(formatted.as_str(), self.current_line));
                 }
                 Ok(Expr::Variable(utils::str_to_u16(&inside.lexeme)))
             }
@@ -548,7 +549,7 @@ impl Parser {
                 let closed_paren = self.consume(CloseParen)?;
                 Ok(Expr::Grouping(Box::new(inside_paren)))
             }
-            _s => Err(Error::new_while_parsing("Got unknown Token while parsing code.", inside.line))
+            _s => Err(Error::new_while_parsing(format!("Received unknown token while parsing code: {:?}", _s).as_str(), previous_line))
         };
 
         result

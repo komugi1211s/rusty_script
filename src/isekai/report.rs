@@ -66,10 +66,10 @@ impl<'a> ErrorReporter<'a> {
     }
 
     pub fn report_error(&self, err: Error) {
-        println!("\x1b[30m{:?}\x1b[0m: {}\n", err.kind, err.msg);
-        println!("around line {}... :", err.line);
-        println!("{}", self.contexts[err.line - 1]);
-        println!("{}", self.contexts[err.line]);
-        println!("{}", self.contexts[err.line + 1]);
+        println!("\x1b[31m{:?}\x1b[0m - {}", err.kind, err.msg);
+        println!("around line {}:", err.line);
+        println!("\x1b[36m{}|{}\x1b[0m", err.line - 1, self.contexts[err.line - 1]);
+        println!("\x1b[31m{}|{}\x1b[0m", err.line,     self.contexts[err.line]);
+        println!("\x1b[36m{}|{}\x1b[0m", err.line + 1, self.contexts[err.line + 1]);
     }
 }

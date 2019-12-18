@@ -3,12 +3,13 @@
 @Broken
 @Cleanup
 
+Line error does not work correctly, you want to set start_line ~ end_line in Error struct, this way you'll know
+
 Refactor
 Arrays 
 optional argument for functions, and native functions
 nullable argument for functions, and native functions
 
-more refined line error for functions and blocks
 alloc / free
 defer
 
