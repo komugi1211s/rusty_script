@@ -357,8 +357,6 @@ impl BytecodeGenerator {
             self.handle_stmt(i.value, i.line);
         }
         self.const_table.push_data(usize::max_value().to_vm_byte());
-        println!("{:04X}", entry_point);
-        println!("{:?}", &self.global_define);
         let bytechunk = ByteChunk {
             entry_point,
             code: self.code,
@@ -409,7 +407,6 @@ impl BytecodeGenerator {
         self.current_block += 1;
         let mut argument_types = Vec::new();
         for arg_decl_info in _arguments {
-            println!("{:?}", &arg_decl_info);
             let arg_type = arg_decl_info._type;
             argument_types.push(arg_type);
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
@@ -975,7 +972,6 @@ impl BytecodeGenerator {
                             if !current_type.contains(handled_type._type) {
                                 panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type._type);
                             }
-                            println!("Added ({:?}) = ({:?})", current_type, handled_type._type);
                         }
                     }
                     self.code.push_opcode(OpCode::Call, line);

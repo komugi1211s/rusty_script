@@ -41,6 +41,11 @@ pub fn start(code: &str) -> Result<(), ()> {
         "Codegen took: \x1b[32m{} micros\x1b[39m",
         codegen_time.elapsed().as_micros()
     );
+    println!(
+        "Total Time: \x1b[32m{} micros\x1b[39m",
+        start.elapsed().as_micros()
+    );
+
     let disassembled = disassemble_all(&chunk.code);
 
     {
@@ -50,11 +55,6 @@ pub fn start(code: &str) -> Result<(), ()> {
         }
         file.flush().expect("File Flushing Failed.");
     }
-
-    println!(
-        "Total Time: \x1b[32m{} micros\x1b[39m",
-        start.elapsed().as_micros()
-    );
     let mut vm = VirtualMachine::new(chunk);
     vm.run();
 
