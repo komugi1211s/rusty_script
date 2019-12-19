@@ -694,7 +694,7 @@ impl BytecodeGenerator {
         // FIXME @Broken - this is error prone, function that returns int can be overwritten by single
         // primitive int value
         } else if !declared_type.contains(actual_type) {
-            if !info.is_argument && actual_type == Type::Null {
+            if !info.is_argument && actual_type != Type::Null {
                 panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
             }
         }
@@ -932,7 +932,7 @@ impl BytecodeGenerator {
                     let _type = self.global_define[position_global].0.clone();
                     let actual_type = &another_result._type;
                     if &_type != actual_type {
-                        panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
+                        panic!("Type Mismatch! {:?} != {:?}", _type, actual_type);
                     }
                     let opcode = match another_result._type {
                         Type::Boolean => OpCode::GBStore,
