@@ -33,8 +33,8 @@ use super::{
 */
 const MAX_IDENTIFIER_LENGTH: usize = 530;
 
-pub struct Parser {
-    tokens: Vec<Token>,
+pub struct Parser<'tok> {
+    tokens: &'tok Vec<Token>,
     parsed_result: ParsedResult,
     current: usize,
     start_line: usize,
@@ -43,8 +43,8 @@ pub struct Parser {
     block_count: usize,
 }
 
-impl Parser {
-    pub fn new(_tok: Vec<Token>) -> Self {
+impl<'tok> Parser<'tok> {
+    pub fn new(_tok: &'tok Vec<Token>) -> Self {
         Self {
             tokens: _tok,
             parsed_result: ParsedResult { functions: vec![], statements: vec![] },
@@ -542,7 +542,7 @@ impl Parser {
                     let formatted = format!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);
                     return Err(Error::new_while_parsing(formatted.as_str(), self.current_line));
                 }
-                Ok(Expr::Variable(utils::str_to_u16(&inside.lexeme)))
+                Ok(Expr::Variable(inside.lexeme.clone()))
             }
             OpenParen => {
                 let inside_paren = self.expression()?;

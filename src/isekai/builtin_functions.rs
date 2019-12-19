@@ -8,10 +8,10 @@ use std::time::{ SystemTime, UNIX_EPOCH };
 
 // ********************* INTERNAL STUFF ********************* //
 fn applyfunc(bc: &mut BytecodeGenerator, name: &str, args: Vec<Type>, rettype: Type, func: fn(&mut VirtualMachine)) {
-    let name = utils::str_to_u16(name);
     let clock_funcinfo = FuncInfo::native(name, args.len(), args, rettype, func);
-    bc.global_type.insert(name, rettype);
-    bc.function_table.insert(name, clock_funcinfo);
+    bc.global_define.push((rettype, name.to_string()));
+    let idx = bc.global_define.len() - 1;
+    bc.function_table.insert(idx, clock_funcinfo);
 }
 
 pub fn apply_native_functions(bc: &mut BytecodeGenerator) {

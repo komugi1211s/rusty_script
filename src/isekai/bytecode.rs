@@ -146,7 +146,6 @@ impl ConstantTable {
         (data, self.types.get(&index).unwrap())
     }
 }
-type Local = (Type, u16);
 
 pub fn disassemble_all(code: &Code) -> Vec<String> {
     disassemble(code, 0, code.bytes.len())
@@ -224,7 +223,7 @@ fn disassemble_pad(opcode: OpCode) -> usize {
 }
 
 pub struct FuncInfo {
-    pub name: u16,
+    pub name: String,
     pub position: usize,
     pub arg_count: usize,
     pub arg_types: Vec<Type>,
@@ -235,10 +234,10 @@ pub struct FuncInfo {
 
 impl FuncInfo
 {
-    fn new(name: u16, position: usize, arg_count: usize, arg_types: Vec<Type>, return_type: Type, is_native: bool) -> Self
+    fn new(name: &str, position: usize, arg_count: usize, arg_types: Vec<Type>, return_type: Type, is_native: bool) -> Self
     {
         Self {
-            name,
+            name: name.to_string(),
             position,
             arg_count,
             arg_types,
@@ -248,9 +247,9 @@ impl FuncInfo
         }
     }
 
-    pub fn native(name: u16, arg_count: usize, arg_types: Vec<Type>, return_type: Type, nativefunc: fn(&mut VirtualMachine)) -> Self {
+    pub fn native(name: &str, arg_count: usize, arg_types: Vec<Type>, return_type: Type, nativefunc: fn(&mut VirtualMachine)) -> Self {
         Self {
-            name,
+            name: name.to_string(),
             position: 0,
             arg_count,
             arg_types,
@@ -283,23 +282,6 @@ impl fmt::Display for FuncInfo {
 }
 
 #[derive(Debug)]
-pub struct BytecodeGenerator {
-    // Things that we return
-    pub code: Code,
-    pub const_table: ConstantTable,
-
-    // To keep track of definitions
-    pub current_define: Vec<Local>,
-    pub global_type: HashMap<u16, Type>,
-    pub function_table: HashMap<u16, FuncInfo>,
-
-    // Keep track of block nesting
-    pub last_loop_start: usize,
-    current_block: usize,
-    pub break_call: Vec<usize>,
-}
-
-#[derive(Debug)]
 struct StatementHandleResult {
     index: usize,
     line: usize,
@@ -327,18 +309,37 @@ pub struct ByteChunk {
     pub entry_point: usize,
     pub code: Code,
     pub constants: ConstantTable,
-    pub functions: HashMap<u16, FuncInfo>,
+    pub functions: HashMap<usize, FuncInfo>,
 }
+
+type Definition = (Type, String); 
+#[derive(Debug)]
+pub struct BytecodeGenerator {
+    // Things that we return
+    pub code: Code,
+    pub const_table: ConstantTable,
+
+    // To keep track of definitions
+    pub current_define: Vec<Definition>,
+    pub global_define : Vec<Definition>,
+    pub function_table: HashMap<usize, FuncInfo>,
+
+    // Keep track of block nesting
+    pub last_loop_start: usize,
+    current_block: usize,
+    pub break_call: Vec<usize>,
+}
+
 
 impl BytecodeGenerator {
     pub fn new() -> Self {
         Self {
             code: Code::default(),
             const_table: ConstantTable::default(),
-            global_type: HashMap::new(),
-            function_table: HashMap::new(),
-            current_define: Vec::new(),
             last_loop_start: usize::max_value(),
+            current_define: Vec::new(),
+            global_define : Vec::new(),
+            function_table: HashMap::new(),
             current_block: 0,
             break_call: Vec::new(),
         }
@@ -357,13 +358,24 @@ impl BytecodeGenerator {
         }
         self.const_table.push_data(usize::max_value().to_vm_byte());
         println!("{:04X}", entry_point);
-
-        Ok(ByteChunk {
+        println!("{:?}", &self.global_define);
+        let bytechunk = ByteChunk {
             entry_point,
             code: self.code,
             constants: self.const_table,
             functions: self.function_table,
-        })
+        };
+        Ok(bytechunk)
+    }
+
+    fn find_local(&self, name: &String) -> (bool, usize) {
+        let is_exist = self.current_define.iter().position(|x| &x.1 == name);
+        (is_exist.is_some(), is_exist.unwrap_or(0))
+    }
+
+    fn find_global(&self, name: &String) -> (bool, usize) {
+        let is_exist = self.global_define.iter().position(|x| &x.1 == name);
+        (is_exist.is_some(), is_exist.unwrap_or(0))
     }
 
     fn prepare_function(
@@ -384,7 +396,8 @@ impl BytecodeGenerator {
         let arg_count = _arguments.len();
 
         // 関数自体の戻り値をグローバルに定義しておく
-        self.global_type.insert(decl_info.name_u16, decl_info._type);
+        self.global_define.push((decl_info._type, decl_info.name.clone()));
+        let idx = self.global_define.len() - 1;
         
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -409,8 +422,8 @@ impl BytecodeGenerator {
         };
         
         let function_starts_at = main_code.current_length();
-        let func_info = FuncInfo::new(decl_info.name_u16, function_starts_at, arg_count, argument_types, return_type, false);
-        self.function_table.insert(decl_info.name_u16, func_info);
+        let func_info = FuncInfo::new(&decl_info.name, function_starts_at, arg_count, argument_types, return_type, false);
+        self.function_table.insert(idx, func_info);
 
         let mut actually_returned = false;
         let mut first_return_type = Type::Any;
@@ -652,7 +665,7 @@ impl BytecodeGenerator {
         let mut value_index = 0;
         let mut actual_type = Type::Null;
 
-        let name = info.name_u16;
+        let name = info.name.clone();
         let mut declared_type = info._type;
         let mut empty_expr = false;
 
@@ -689,10 +702,11 @@ impl BytecodeGenerator {
             }
         }
 
+        // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.current_block > 0 {
-            let is_exist = self.current_define.iter().position(|&x| x.1 == name);
+            let (exists, pos) = self.find_local(&name);
 
-            if is_exist.is_some() {
+            if exists {
                 panic!("Same Variable Declared TWICE.");
             }
 
@@ -701,6 +715,7 @@ impl BytecodeGenerator {
                 out.index = self.code.current_length();
             } else {
                 let position = self.current_define.len() - 1;
+                declared_type.remove(Type::Null);
                 let opcode = self.get_store_opcode(declared_type, false);
                 let operands = position as u16;
 
@@ -708,11 +723,21 @@ impl BytecodeGenerator {
                 out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
             }
         } else {
-            self.global_type.insert(name, declared_type);
+            let (exists, pos) = self.find_global(&name);
+
+            if exists {
+                panic!("Same Variable Declared TWICE.");
+            }
+
+            self.global_define.push((declared_type, name));
+            let position = self.global_define.len() - 1;
+
             declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, true);
+            let operands = position as u16;
+
             self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(name.to_vm_byte(), out.line);
+            out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
         }
         out.info = StatementInfo::Declaration { is_initialized: empty_expr, dtype: declared_type };
     }
@@ -786,31 +811,34 @@ impl BytecodeGenerator {
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
-                let is_exist = self.current_define.iter().position(|&x| x.1 == name);
+                let (exists, pos) = self.find_local(&name); 
 
-                if is_exist.is_none() {
+                // FIXME @DumbCode - up there you do "if exists {"
+                // and here you're doing "if !exists {"
+                // It's confusing, make it consistent
+                if !exists {
                     // it could be a global variable;
-                    if !self.global_type.contains_key(&name) {
+                    let (exists_global, pos_global) = self.find_global(&name);
+                    if !exists_global {
                         panic!("Undefined Variable");
                     }
 
-                    let _type = self.global_type.get(&name).unwrap().clone();
+                    let _type = self.global_define[pos_global].0.clone();
                     let opcode = self.get_load_opcode(_type, true);
                     handled_result._type = _type;
                     self.code.push_opcode(opcode, line);
-                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
+
+                    let index = pos_global as u16;
+                    handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
                     return handled_result;
                 }
 
-                let mut index = 0;
-                let (_type, _) = {
-                    index = is_exist.unwrap();
-                    self.current_define.get(index).unwrap().clone()
-                };
-                let index = index as u16;
-                handled_result._type = _type;
+                let _type = self.current_define[pos].0.clone();
                 let opcode = self.get_load_opcode(_type, false);
+                handled_result._type = _type;
                 self.code.push_opcode(opcode, line);
+
+                let index = pos as u16;
                 handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
                 handled_result
             }
@@ -875,34 +903,10 @@ impl BytecodeGenerator {
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) => {
                 let another_result = self.handle_expr(*expr, line);
-                let is_exist = self.current_define.iter().position(|&x| x.1 == name);
+                let (exists, position) = self.find_local(&name);
 
-                if is_exist.is_none() {
-                    if !self.global_type.contains_key(&name) {
-                        panic!("Undefined Variable");
-                    }
-
-                    let _type = self.global_type.get(&name).unwrap().clone();
-                    let actual_type = &another_result._type;
-                    if &_type != actual_type {
-                        panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
-                    }
-                    let opcode = match another_result._type {
-                        Type::Boolean => OpCode::GBStore,
-                        Type::Int => OpCode::GIStore,
-                        Type::Str => OpCode::GSStore,
-                        Type::Float => OpCode::GFStore,
-                        _ => unreachable!(),
-                    };
-                    self.code.push_opcode(opcode, line);
-                    handled_result._type = _type;
-                    handled_result.index = self.code.push_operands(name.to_vm_byte(), line);
-                } else {
-                    let mut index = 0;
-                    let (declared_type, _) = {
-                        index = is_exist.unwrap();
-                        self.current_define.get(index).unwrap()
-                    }.clone();
+                if exists {
+                    let declared_type = self.current_define[position].0.clone();
 
                     if !&declared_type.contains(another_result._type) {
                         panic!(
@@ -918,22 +922,46 @@ impl BytecodeGenerator {
                         Type::Float => OpCode::FStore,
                         _ => unreachable!(),
                     };
+                    let operands = position as u16;
                     self.code.push_opcode(opcode, line);
                     handled_result._type = declared_type.clone();
-                    handled_result.index =
-                        self.code.push_operands((index as u16).to_vm_byte(), line);
+                    handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
+                } else {
+                    let (exists_global, position_global) = self.find_global(&name);
+                    if !exists_global {
+                        panic!("Undefined Variable");
+                    }
+
+                    let _type = self.global_define[position_global].0.clone();
+                    let actual_type = &another_result._type;
+                    if &_type != actual_type {
+                        panic!("Type mismatch! {:?} != {:?}", _type, actual_type);
+                    }
+                    let opcode = match another_result._type {
+                        Type::Boolean => OpCode::GBStore,
+                        Type::Int => OpCode::GIStore,
+                        Type::Str => OpCode::GSStore,
+                        Type::Float => OpCode::GFStore,
+                        _ => unreachable!(),
+                    };
+                    let operands = position_global as u16;
+                    self.code.push_opcode(opcode, line);
+                    handled_result._type = _type;
+                    handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
                 }
                 handled_result
             }
             Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
                 if let Expr::Variable(name) = *func_name {
-                    if !self.function_table.contains_key(&name) {
+                    
+                    let (exists, position) = self.find_global(&name);
+                    if !exists {
                         panic!("Undefined Function.");
                     }
 
-                    let arg_count = self.function_table[&name].arg_count;
-                    let arg_types = self.function_table[&name].arg_types.clone();
-                    let return_type = self.function_table[&name].return_type;
+                    let arg_count = self.function_table[&position].arg_count;
+                    let arg_types = self.function_table[&position].arg_types.clone();
+                    let return_type = self.function_table[&position].return_type;
                     if arg_count != arguments.len()
                     {
                         panic!("Too Few / much arguments provided. require {} arg(s)", arg_count);
@@ -951,7 +979,7 @@ impl BytecodeGenerator {
                         }
                     }
                     self.code.push_opcode(OpCode::Call, line);
-                    let jump_here = self.code.push_operands(name.to_vm_byte(), line);
+                    let jump_here = self.code.push_operands((position as u16).to_vm_byte(), line);
                     handled_result._type = return_type; 
                     handled_result._type.remove(Type::Func); 
                     handled_result.index = jump_here;

@@ -14,6 +14,7 @@ use std::fs::File;
 pub fn start(code: &str) -> Result<(), ()> {
     let reporter = ErrorReporter::from_lineiter(code.lines());
     let start = Instant::now();
+
     let _tokens: Vec<Token> = match Tokenizer::new(code).scan() {
         Ok(n) => n,
         Err(err) => { reporter.report_error(err); return Err(()); },
@@ -22,9 +23,7 @@ pub fn start(code: &str) -> Result<(), ()> {
         "Tokenizer took: \x1b[32m{} micros\x1b[39m",
         start.elapsed().as_micros()
     );
-
-    let mut _parser: Parser = Parser::new(_tokens);
-
+    let mut _parser: Parser = Parser::new(&_tokens);
     let parser_time = Instant::now();
     let result = match _parser.parse() {
         Ok(n) => n,
@@ -34,7 +33,6 @@ pub fn start(code: &str) -> Result<(), ()> {
         "Parser took: \x1b[32m{} micros\x1b[39m",
         parser_time.elapsed().as_micros()
     );
-    // println!("parsed_result: \x1B{:#?}", result);
 
     let codegen = BytecodeGenerator::new();
     let codegen_time = Instant::now();

@@ -35,7 +35,6 @@ impl VirtualMachine {
     }
 
     pub fn run(&mut self) {
-        // Meta
         let mut stack_frame: Vec<usize> = Vec::new();
         let mut call_frame: Vec<usize> = Vec::new();
         let max: usize = self.chunk.code.current_length();
@@ -220,9 +219,10 @@ impl VirtualMachine {
                 OpCode::Call => {
                     let operand_one = self.chunk.code.bytes[self.code_ip + 1];
                     let operand_two = self.chunk.code.bytes[self.code_ip + 2];
-                    let identifier = u16::from_ne_bytes([operand_one, operand_two]);
+                    let identifier = u16::from_ne_bytes([operand_one, operand_two]) as usize;
+                    
 
-                    let func_info = self.chunk.functions.get(&identifier).expect("Undefined Function call.");
+                    let func_info = &self.chunk.functions[&identifier];
                     if func_info.is_native {
                         (func_info.native_pointer.unwrap())(self);
                         self.code_ip += 3;

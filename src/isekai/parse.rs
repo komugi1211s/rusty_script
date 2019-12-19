@@ -14,12 +14,12 @@ pub enum Expr {
     Binary(Box<Expr>, Box<Expr>, Token),
     Logical(Box<Expr>, Box<Expr>, Token),
     FunctionCall(Box<Expr>, Token, Vec<Expr>),
-    Assign(u16, Box<Expr>),
+    Assign(String, Box<Expr>),
 
     Literal(Constant),
     Grouping(Box<Expr>),
     Unary(Box<Expr>, Token),
-    Variable(u16),
+    Variable(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,7 +43,6 @@ pub enum Statement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData {
     pub name: String,
-    pub name_u16: u16,
     pub _type: Type,
     pub is_argument: bool,
     pub expr: Option<Expr>,
@@ -58,7 +57,6 @@ pub struct FunctionData {
 
 pub struct DeclarationDataBuilder {
     name: Option<String>,
-    name_u16: Option<u16>,
     is_argument: bool,
     _type: Option<Type>,
     expr: Option<Expr>,
@@ -68,7 +66,6 @@ impl DeclarationDataBuilder {
     pub fn new() -> Self {
         Self {
             name: None,
-            name_u16: None,
             is_argument: false,
             _type: None,
             expr: None,
@@ -77,7 +74,6 @@ impl DeclarationDataBuilder {
 
     pub fn setname(mut self, name: &str) -> Self {
         self.name = Some(name.to_string());
-        self.name_u16 = Some(name.as_bytes().iter().map(|x| *x as u16).sum());
         self
     }
 
@@ -100,7 +96,6 @@ impl DeclarationDataBuilder {
         DeclarationData {
             name: self.name.unwrap(),
             _type: self._type.unwrap(),
-            name_u16: self.name_u16.unwrap(),
             is_argument: self.is_argument,
             expr: self.expr,
         }
