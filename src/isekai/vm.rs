@@ -1,5 +1,5 @@
 use super::bytecode::{ByteChunk, disassemble};
-use super::types::{OpCode, Type, Value};
+use super::types::{OpCode, Type, Value, TypeKind, TypeOption};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 
@@ -133,9 +133,9 @@ impl VirtualMachine {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
                     let (value, _type) = self.chunk.constants.read_data_64(index);
                     // GET_TYPE
-                    self.stack.push(match _type {
-                        &Type::Int => i64::from_ne_bytes(value).into(),
-                        &Type::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
+                    self.stack.push(match _type.kind {
+                        TypeKind::Int => i64::from_ne_bytes(value).into(),
+                        TypeKind::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
                         _ => unreachable!(),
                     });
                     self.code_ip = new_end;
@@ -144,8 +144,8 @@ impl VirtualMachine {
                     let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
                     let (value, _type) = self.chunk.constants.read_data_dyn(index);
 
-                    self.stack.push(match _type {
-                        &Type::Str => Value::Str(String::from_utf8(value).unwrap()),
+                    self.stack.push(match _type.kind {
+                        TypeKind::Str => Value::Str(String::from_utf8(value).unwrap()),
                         _ => unreachable!(),
                     });
                     self.code_ip = new_end;

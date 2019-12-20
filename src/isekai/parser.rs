@@ -1,12 +1,12 @@
 use super::{
     parse::{
-        BlockData, DeclarationData, DeclarationDataBuilder, Expr, FunctionData,
+        BlockData, DeclarationData, Expr, FunctionData,
         StatementNode,
         ParsedResult, 
         Statement,
     },
     token::{Token, TokenType},
-    types::{Constant, Type},
+    types::{Constant, Type, TypeKind, TypeOption},
     report::Error,
     utils,
 };
@@ -178,27 +178,39 @@ impl<'tok> Parser<'tok> {
         self.statement()
     }
 
-    fn get_variable_type_and_identifier(&mut self) -> Result<(Type, String), Error> {
+    fn initialize_decl_data(&mut self) -> Result<DeclarationData, Error> {
         let identity = { self.get_previous().lexeme.clone() };
         let colon = self.consume(TokenType::Colon)?;
+
+        let mut decl_data = DeclarationData {
+            name: identity,
+            _type: Type::default(),
+            is_inferred: true,
+            is_const: false,
+            is_nullable: false,
+
+            is_argument: false,
+            expr: None,
+        };
 
         if TokenType::is_typekind(&self.get_current().tokentype) {
             let type_token = self.advance();
             let mut dtype = Type::from_tokentype(&type_token.tokentype);
             let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
 
+            decl_data._type = dtype;
+            decl_data.is_inferred = false;
+
             if is_all_uppercase {
-                dtype.set_const();
+                decl_data.is_const = true;
             }
 
             if self.consume(TokenType::Question).is_ok() {
-                dtype.set_nullable();
+                decl_data.is_nullable = true;
             }
 
-            return Ok((dtype, identity));
         }
-        
-        Ok((Type::Any, identity))
+        return Ok(decl_data);
     }
 
     fn declare_argument(&mut self) -> Result<Vec<DeclarationData>, Error> {
@@ -212,18 +224,16 @@ impl<'tok> Parser<'tok> {
 
         while self.is(TokenType::Iden) {
             self.current += 1;
-            let (mut _type, iden) = self.get_variable_type_and_identifier()?;
-            let builder = DeclarationDataBuilder::new().setargmode(true).setname(&iden);
+            let mut decl_info = self.initialize_decl_data()?;
+            decl_info.is_argument = true;
 
             let bridge_token = self.advance();
             let bridge_line = bridge_token.line;
             match bridge_token.tokentype {
                 TokenType::Equal => {
                     let item = self.expression()?;
-                    _type.remove(Type::Null);
-                    let data = builder.settype(_type).setexpr(item).build();
-
-                    arguments.push(data);
+                    decl_info.expr = Some(item);
+                    arguments.push(decl_info);
 
                     match self.advance().tokentype {
                         TokenType::Comma => continue,
@@ -232,13 +242,11 @@ impl<'tok> Parser<'tok> {
                     }
                 }
                 TokenType::Comma => {
-                    let data = builder.settype(_type).build();
-                    arguments.push(data);
+                    arguments.push(decl_info);
                     continue;
                 }
                 TokenType::CloseParen => {
-                    let data = builder.settype(_type).build();
-                    arguments.push(data);
+                    arguments.push(decl_info);
                     return Ok(arguments);
                 }
                 _ => return Err(Error::new_while_parsing("Unknown Token detected while parsing arguments", bridge_line)),
@@ -263,32 +271,27 @@ impl<'tok> Parser<'tok> {
          * */
         self.assign_count += 1;
         self.current += 1;
-        let (_type, iden) = self.get_variable_type_and_identifier()?;
+        let mut decl_info = self.initialize_decl_data()?;
 
-        let builder = DeclarationDataBuilder::new().setname(&iden).settype(_type);
         let mut state = Statement::Empty;
         // Initialization, Outside
         if self.consume(TokenType::Equal).is_ok() {
             let item = self.expression()?;
-            let data = builder.setexpr(item).build();
+            decl_info.expr = Some(item);
+
             self.consume(TokenType::SemiColon)?;
-            state = Statement::Decralation(data);
+            state = Statement::Decralation(decl_info);
         } else if self.consume(TokenType::SemiColon).is_ok() {
             // return if nullable
-            if _type.is_nullable()
-            {
-                let data = builder.build();
-                state = Statement::Decralation(data);
-            }
-            else
-            {
+            if decl_info.is_nullable {
+                state = Statement::Decralation(decl_info);
+            } else {
                 return Err(Error::new_while_parsing("tried to initialize non-null variable with null value", self.current_line))
             }
         }
         // This is a function.
-        else if self.is(TokenType::OpenParen)
-        {
-            return self.declare_function(&iden, _type);
+        else if self.is(TokenType::OpenParen) {
+            return self.declare_function(decl_info);
         }
 
         match state {
@@ -297,19 +300,16 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    fn declare_function(&mut self, identity: &str, mut dtype: Type) -> Result<Statement, Error> {
-        dtype.insert(Type::Func);
-        let data = DeclarationDataBuilder::new()
-            .setname(identity)
-            .settype(dtype)
-            .build();
+    fn declare_function(&mut self, mut info: DeclarationData) -> Result<Statement, Error> {
+
+        info._type.option.insert(TypeOption::Func);
         let arguments = self.declare_argument()?;
 
         self.consume(TokenType::OpenBrace)?;
         let inside_func = self.block()?;
 
         let data = FunctionData {
-            it: data,
+            it: info,
             args: arguments,
             block: inside_func,
         };
@@ -519,8 +519,8 @@ impl<'tok> Parser<'tok> {
         let inside = self.advance();
         use TokenType::*;
         let result = match &inside.tokentype {
-            False => Ok(Expr::Literal(false.into())),
-            True => Ok(Expr::Literal(true.into())),
+            False => Ok(Expr::Literal(Constant::from(&false))),
+            True => Ok(Expr::Literal(Constant::from(&true))),
             Null => {
                 // TODO:
                 // This is a bug.
@@ -529,14 +529,14 @@ impl<'tok> Parser<'tok> {
             }
             Digit => {
                 match inside.lexeme.parse::<i64>() {
-                    Ok(n) => Ok(Expr::Literal(n.into())),
+                    Ok(n) => Ok(Expr::Literal(Constant::from(&n))),
                     Err(_) => match inside.lexeme.parse::<f64>() {
-                        Ok(f) => Ok(Expr::Literal(f.into())),
+                        Ok(f) => Ok(Expr::Literal(Constant::from(&f))),
                         Err(x) => Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line)),
                     }
                 }
             }
-            Str => Ok(Expr::Literal(inside.lexeme.to_string().into())),
+            Str => Ok(Expr::Literal(Constant::from(&inside.lexeme))),
             Iden => {
                 if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
                     let formatted = format!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);

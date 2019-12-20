@@ -237,10 +237,13 @@ impl Tokenizer {
     }
 
     fn add_token(&mut self, tokentype: TokenType) -> Result<(), Error> {
+        let string: String = self.source[self.start..self.current].iter().collect();
+
+        use rustc_lexer::unescape;
         self.tokens.push(Token::new(
             tokentype,
             self.line,
-            self.source[self.start..self.current].iter().collect(),
+            string,
         ));
         Ok(())
     }

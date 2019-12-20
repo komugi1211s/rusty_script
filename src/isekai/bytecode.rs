@@ -1,6 +1,6 @@
 use super::parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode};
 use super::token::TokenType;
-use super::types::{ toVmByte, Constant, OpCode, Type };
+use super::types::{ toVmByte, Constant, OpCode, Type, TypeKind, TypeOption };
 use super::vm::{ VirtualMachine };
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -382,6 +382,11 @@ impl BytecodeGenerator {
     ) {
         let decl_info = function.it;
         let body_block = function.block;
+        let return_type = { 
+            let mut x = decl_info._type;
+            x.option.remove(TypeOption::Func);
+            x
+        };
         // 実際に使うことはないが、特定の関数が必要とするため用意
         let mut placeholder = StatementHandleResult {
             line: 0,
@@ -411,39 +416,32 @@ impl BytecodeGenerator {
             argument_types.push(arg_type);
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
         }
-
-        let return_type = { 
-            let mut x = decl_info._type;
-            x.remove(Type::Func);
-            x
-        };
         
         let function_starts_at = main_code.current_length();
         let func_info = FuncInfo::new(&decl_info.name, function_starts_at, arg_count, argument_types, return_type, false);
         self.function_table.insert(idx, func_info);
 
         let mut actually_returned = false;
-        let mut first_return_type = Type::Any;
+        let mut first_return_type = Type::default();
 
         // コードセクションも上記と同様に処理する
         for statement in body_block.statements {
             let result = self.handle_stmt(statement, 0);
             match result.info {
                 StatementInfo::Return(dtype) => {
-                    if !return_type.is_any() {
-                        if !return_type.contains(dtype) {
-                            panic!("Return type does not match! expected {:?}, got {:?}", return_type, dtype);
-                        }
-                        actually_returned = true;
-                    } else {
-                        if first_return_type == Type::Any {
-                            first_return_type = dtype.clone();
+                    if decl_info.is_inferred {
+                        if first_return_type == Type::default() {
+                            first_return_type = dtype;
+
                         } else if first_return_type != dtype {
                             panic!("multiple return detected but the type is inconsistent: first return and what I expected was {:?}, then later got {:?}", first_return_type, dtype);
                         }
-                        if !return_type.contains(Type::Null) {
-                            actually_returned = true;
+                        actually_returned = true;
+                    } else {
+                        if return_type != dtype {
+                            panic!("Return type does not match! expected {:?}, got {:?}", decl_info._type, dtype);
                         }
+                        actually_returned = true;
                     }
                 }
                 StatementInfo::Continue(..) => panic!("You cannot use return within function scope."),
@@ -453,7 +451,7 @@ impl BytecodeGenerator {
         }
 
         if !actually_returned {
-            if return_type.is_any() {
+            if decl_info.is_inferred {
                 self.handle_stmt(Statement::Return(None), 0);
             } else {
                 panic!("Return type specified but nothing returned");
@@ -648,7 +646,7 @@ impl BytecodeGenerator {
                 }
                 else {
                     self.code.write_null(line);
-                    Type::Null
+                    Type::default()
                 };
                 handled_result.index = self.code.push_opcode(OpCode::Return, line);
                 handled_result.info = StatementInfo::Return(result_type);
@@ -658,17 +656,18 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, info: DeclarationData) {
+    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, mut info: DeclarationData) {
         let mut value_index = 0;
-        let mut actual_type = Type::Null;
+        let mut actual_type = Type::default();
 
         let name = info.name.clone();
         let mut declared_type = info._type;
         let mut empty_expr = false;
+        let expression = info.expr.take();
 
-        match info.expr {
-            Some(expression) => {
-                let expr_handle_result = self.handle_expr(expression, out.line);
+        match expression {
+            Some(expr) => {
+                let expr_handle_result = self.handle_expr(expr, out.line);
                 // println!("Declaration_Expr: {:?}", &expr_handle_result);
                 value_index = expr_handle_result.index;
                 actual_type = expr_handle_result._type;
@@ -681,23 +680,43 @@ impl BytecodeGenerator {
             }
         };
 
-        if actual_type == Type::Null && !info.is_argument {
-            if declared_type.is_any() {
-                panic!("You cannot initialize Any type with null");
-            }
-            if !declared_type.is_nullable() {
-                panic!("an attempt to initialize non-nullable variable with null");
-            }
-        } else if declared_type.is_any() {
-            declared_type = actual_type
-        
-        // FIXME @Broken - this is error prone, function that returns int can be overwritten by single
-        // primitive int value
-        } else if !declared_type.contains(actual_type) {
-            if !info.is_argument && actual_type != Type::Null {
-                panic!("Type mismatch! {:?} != {:?}", declared_type, actual_type);
+        fn decide_actual_type(decl: &DeclarationData, given_type: &Type) -> Type {
+            let given_type: Type = given_type.clone();
+            let given_type_is_null = given_type == Type::default();
+            if decl.is_inferred {
+                if given_type_is_null {
+                    panic!("You cannot initialize Any type with null");
+                }
+
+                if decl.is_nullable {
+                    panic!("You cannot initialize Any type with null");
+                }
+
+                return given_type;
+            } else {
+                if given_type_is_null {
+                    if decl.is_nullable {
+                        // Initializing Nullable variable with null.
+                        // Fall Through.
+                    } else if decl.is_argument {
+                        // It's not really initializing it. not much of a problem.
+                        // Fall through.
+                    } else {
+                        panic!("an attempt to initialize non-nullable variable with null");
+                    }
+
+                    return decl._type;
+                } else {
+                    if decl._type != given_type {
+                        panic!("Type mismatch! {:?} != {:?}", decl._type, given_type);
+                    }
+
+                    return given_type;
+                }
             }
         }
+
+        declared_type = decide_actual_type(&info, &actual_type);
 
         // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.current_block > 0 {
@@ -712,7 +731,6 @@ impl BytecodeGenerator {
                 out.index = self.code.current_length();
             } else {
                 let position = self.current_define.len() - 1;
-                declared_type.remove(Type::Null);
                 let opcode = self.get_store_opcode(declared_type, false);
                 let operands = position as u16;
 
@@ -728,8 +746,6 @@ impl BytecodeGenerator {
 
             self.global_define.push((declared_type, name));
             let position = self.global_define.len() - 1;
-
-            declared_type.remove(Type::Null);
             let opcode = self.get_store_opcode(declared_type, true);
             let operands = position as u16;
 
@@ -750,24 +766,24 @@ impl BytecodeGenerator {
     }
 
     fn get_type_based_opcode(&self, _type: Type, is_global: bool, is_load: bool) -> OpCode {
-        match _type {
-            Type::Int     if is_global && !is_load  => OpCode::GIStore,
-            Type::Float   if is_global && !is_load  => OpCode::GFStore,
-            Type::Boolean if is_global && !is_load  => OpCode::GBStore,
-            Type::Str     if is_global && !is_load  => OpCode::GSStore,
-            Type::Int     if is_global && is_load   => OpCode::GILoad,
-            Type::Float   if is_global && is_load   => OpCode::GFLoad,
-            Type::Boolean if is_global && is_load   => OpCode::GBLoad,
-            Type::Str     if is_global && is_load   => OpCode::GSLoad,
+        match _type.kind {
+            TypeKind::Int     if is_global && !is_load  => OpCode::GIStore,
+            TypeKind::Float   if is_global && !is_load  => OpCode::GFStore,
+            TypeKind::Boolean if is_global && !is_load  => OpCode::GBStore,
+            TypeKind::Str     if is_global && !is_load  => OpCode::GSStore,
+            TypeKind::Int     if is_global && is_load   => OpCode::GILoad,
+            TypeKind::Float   if is_global && is_load   => OpCode::GFLoad,
+            TypeKind::Boolean if is_global && is_load   => OpCode::GBLoad,
+            TypeKind::Str     if is_global && is_load   => OpCode::GSLoad,
 
-            Type::Int     if !is_global && !is_load => OpCode::IStore,
-            Type::Float   if !is_global && !is_load => OpCode::FStore,
-            Type::Boolean if !is_global && !is_load => OpCode::BStore,
-            Type::Str     if !is_global && !is_load => OpCode::SStore,
-            Type::Int     if !is_global && is_load  => OpCode::ILoad,
-            Type::Float   if !is_global && is_load  => OpCode::FLoad,
-            Type::Boolean if !is_global && is_load  => OpCode::BLoad,
-            Type::Str     if !is_global && is_load  => OpCode::SLoad,
+            TypeKind::Int     if !is_global && !is_load => OpCode::IStore,
+            TypeKind::Float   if !is_global && !is_load => OpCode::FStore,
+            TypeKind::Boolean if !is_global && !is_load => OpCode::BStore,
+            TypeKind::Str     if !is_global && !is_load => OpCode::SStore,
+            TypeKind::Int     if !is_global && is_load  => OpCode::ILoad,
+            TypeKind::Float   if !is_global && is_load  => OpCode::FLoad,
+            TypeKind::Boolean if !is_global && is_load  => OpCode::BLoad,
+            TypeKind::Str     if !is_global && is_load  => OpCode::SLoad,
             _ => panic!("Unsupported opcode for here: opcode: {:?}, is_global: {}, is_load: {}", _type, is_global, is_load),
         }
     }
@@ -802,7 +818,7 @@ impl BytecodeGenerator {
         let mut handled_result = ExpressionHandleResult {
             line,
             index: 0,
-            _type: Type::Null,
+            _type: Type::default(),
         };
         match expr {
             Expr::Variable(name) => {
@@ -882,7 +898,7 @@ impl BytecodeGenerator {
                     TokenType::Or => self.code.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
                 };
-                handled_result._type = Type::Boolean;
+                handled_result._type = Type::boolean();
                 handled_result
             }
             Expr::Unary(expr, operator) => {
@@ -899,53 +915,47 @@ impl BytecodeGenerator {
             }
             Expr::Grouping(group) => self.handle_expr(*group, line),
             Expr::Assign(name, expr) => {
-                let another_result = self.handle_expr(*expr, line);
-                let (exists, position) = self.find_local(&name);
-
-                if exists {
-                    let declared_type = self.current_define[position].0.clone();
-
-                    if !&declared_type.contains(another_result._type) {
-                        panic!(
-                            "Type Mismatch when Assigning: {:?} != {:?}",
-                            declared_type, another_result._type
-                        );
+                let (exists, position, is_global) = {
+                    let (lexists, lpos) = self.find_local(&name);
+                    if lexists {
+                        (lexists, lpos, false)
+                    } else {
+                        let (gexists, gpos) = self.find_global(&name);
+                        if gexists {
+                            (gexists, gpos, true)
+                        } else {
+                            (false, 0, false)
+                        }
                     }
+                };
 
-                    let opcode = match another_result._type {
-                        Type::Boolean => OpCode::BStore,
-                        Type::Int => OpCode::IStore,
-                        Type::Str => OpCode::SStore,
-                        Type::Float => OpCode::FStore,
-                        _ => unreachable!(),
-                    };
-                    let operands = position as u16;
-                    self.code.push_opcode(opcode, line);
-                    handled_result._type = declared_type.clone();
-                    handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
-                } else {
-                    let (exists_global, position_global) = self.find_global(&name);
-                    if !exists_global {
-                        panic!("Undefined Variable");
-                    }
-
-                    let _type = self.global_define[position_global].0.clone();
-                    let actual_type = &another_result._type;
-                    if &_type != actual_type {
-                        panic!("Type Mismatch! {:?} != {:?}", _type, actual_type);
-                    }
-                    let opcode = match another_result._type {
-                        Type::Boolean => OpCode::GBStore,
-                        Type::Int => OpCode::GIStore,
-                        Type::Str => OpCode::GSStore,
-                        Type::Float => OpCode::GFStore,
-                        _ => unreachable!(),
-                    };
-                    let operands = position_global as u16;
-                    self.code.push_opcode(opcode, line);
-                    handled_result._type = _type;
-                    handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
+                if !exists {
+                    panic!("Undeclared / defined variable!");
                 }
+
+                let declared_type = {
+                    if is_global {
+                        self.global_define[position].0
+                    } else {
+                        self.current_define[position].0
+                    }
+                };
+
+                let expression_result = self.handle_expr(*expr, line);
+                let expression_type = expression_result._type;
+
+                if declared_type != expression_type {
+                    panic!(
+                        "Type Mismatch when Assigning: {:?} != {:?}",
+                        declared_type, expression_type 
+                    );
+                }
+
+                let opcode = self.get_store_opcode(expression_type, is_global);
+                let operands = position as u16;
+                self.code.push_opcode(opcode, line);
+                handled_result._type = expression_type;
+                handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
                 handled_result
             }
             Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
@@ -967,17 +977,16 @@ impl BytecodeGenerator {
                         let ARR_END = arg_count - 1;
                         arguments.reverse();
                         for (i, arg) in arguments.drain(..).enumerate() {
-                            let handled_type = self.handle_expr(arg, line);
+                            let handled_type = self.handle_expr(arg, line)._type;
                             let current_type = arg_types[ARR_END - i];
-                            if !current_type.contains(handled_type._type) {
-                                panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type._type);
+                            if current_type != handled_type {
+                                panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type);
                             }
                         }
                     }
                     self.code.push_opcode(OpCode::Call, line);
                     let jump_here = self.code.push_operands((position as u16).to_vm_byte(), line);
                     handled_result._type = return_type; 
-                    handled_result._type.remove(Type::Func); 
                     handled_result.index = jump_here;
                 }
                 handled_result

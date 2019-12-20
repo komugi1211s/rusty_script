@@ -1,5 +1,3 @@
-#[macro_use]
-use bitflags;
 
 use super::parse::Statement;
 use super::token::TokenType;
@@ -7,6 +5,7 @@ use super::token::TokenType;
 use std::fmt;
 use std::mem;
 use std::ops;
+use std::borrow::Borrow;
 
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
@@ -143,88 +142,123 @@ impl toVmByte for usize {
     }
 }
 
-bitflags! {
-    pub struct Type: u8 {
-        const Null    = 0b1000_0000;
-        const Any     = 0b0100_0000;
-        const Func    = 0b0010_0000;
-        const Const   = 0b0001_0000;
-        const Int     = 0b0000_0001;
-        const Float   = 0b0000_0010;
-        const Str     = 0b0000_0100;
-        const Boolean = 0b0000_1000;
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[repr(u8)]
+pub enum TypeKind {
+    Int     = 0b0000_0001,
+    Float   = 0b0000_0010,
+    Str     = 0b0000_0100,
+    Boolean = 0b0000_1000,
+    Null    = 0b0001_0000,
+}
+
+impl Default for TypeKind {
+    fn default() -> Self {
+        TypeKind::Null
     }
 }
 
+bitflags! {
+    #[derive(Default)]
+    pub struct TypeOption: u8 {
+        const Func    = 0b0000_0001;
+        const Array   = 0b0000_0010;
+    }
+}
+
+// NOTE: since this struct's size is only about 16 bits ( 2 bytes! ),
+// I just implement Copy + Clone and forget about it
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct Type {
+    pub kind: TypeKind,
+    pub option: TypeOption,
+}
+
 impl Type {
-    pub fn set_nullable(&mut self) {
-        self.insert(Type::Null);
-    }
-
-    pub fn set_const(&mut self) {
-        self.insert(Type::Const);
-    }
-
-    pub fn is_nullable(&self) -> bool {
-        self.contains(Type::Null)
-    }
-
-    pub fn is_any(&self) -> bool {
-        self.contains(Type::Any)
-    }
-
-    pub fn is_const(&self) -> bool {
-        self.contains(Type::Const)
+    pub fn new(kind: TypeKind, opt: TypeOption) -> Self {
+        Self {
+            kind,
+            option: opt
+        }
     }
 
     pub fn from_tokentype(t: &TokenType) -> Self {
         match t {
-            TokenType::TypeAny => Self::Any,
-            TokenType::TypeBool => Self::Boolean,
-            TokenType::TypeFloat => Self::Float,
-            TokenType::TypeInt => Self::Int,
-            TokenType::TypeStr => Self::Str,
+            TokenType::TypeAny => Self::default(),
+            TokenType::TypeBool => Self::boolean(),
+            TokenType::TypeFloat => Self::float(),
+            TokenType::TypeInt => Self::int(),
+            TokenType::TypeStr => Self::string(),
             // This SHould not work.
-            _ => Self::Null,
+            _ => Self::default(),
         }
     }
+
+    pub fn boolean() -> Self {
+        Self {
+            kind: TypeKind::Boolean,
+            option: TypeOption::default()
+        }
+    }
+
+    pub fn float() -> Self {
+        Self {
+            kind: TypeKind::Float,
+            option: TypeOption::default()
+        }
+    }
+
+    pub fn int() -> Self {
+        Self {
+            kind: TypeKind::Int,
+            option: TypeOption::default()
+        }
+    }
+
+    pub fn string() -> Self {
+        Self {
+            kind: TypeKind::Str,
+            option: TypeOption::default()
+        }
+    }
+
     pub fn is_compatible(self, v: &Value) -> bool {
         if v == &Value::Null {
             true
-        } else if self.contains(Self::Any) {
+        } else if self.kind == TypeKind::Null {
             true
         } else {
-            self.contains(v.to_type())
+            self.kind == v.to_type().kind
         }
     }
 
     pub fn type_after_binary(a: &Type, b: &Type, oper: &TokenType) -> Result<Type, ()> {
-        let a = a.clone();
-        let b = b.clone();
+        let a = a.kind;
+        let b = b.kind;
         match oper {
             TokenType::EqualEqual
             | TokenType::NotEqual
             | TokenType::More
             | TokenType::MoreEqual
             | TokenType::Less
-            | TokenType::LessEqual => Ok(Type::Boolean),
+            | TokenType::LessEqual => Ok(Type::boolean()),
 
-            TokenType::Slash => Ok(Type::Float),
-            TokenType::Percent => Ok(Type::Int),
+            TokenType::Slash => Ok(Type::float()),
+            TokenType::Percent => Ok(Type::int()),
             TokenType::Minus | TokenType::Asterisk => {
-                if a == Type::Float || b == Type::Float {
-                    Ok(Type::Float)
+                if a == TypeKind::Float || b == TypeKind::Float {
+                    Ok(Type::float())
                 } else {
-                    Ok(Type::Int)
+                    Ok(Type::int())
                 }
             }
             TokenType::Plus => {
-                if a == Type::Str && b == Type::Str {
-                    Ok(Type::Str)
-                } else if a == Type::Float || b == Type::Float {
-                    Ok(Type::Float)
+                if a == TypeKind::Str && b == TypeKind::Str {
+                    Ok(Type::string())
+                } else if a == TypeKind::Float || b == TypeKind::Float {
+                    Ok(Type::float())
                 } else {
-                    Ok(Type::Int)
+                    Ok(Type::int())
                 }
             }
             _ => Err(()),
@@ -232,15 +266,15 @@ impl Type {
     }
 
     pub fn type_after_unary(a: &Type, oper: &TokenType) -> Result<Type, ()> {
-        let a = a.clone();
+        let a_type = a.kind;
         match oper {
             TokenType::Minus => {
-                if a == Type::Float || a == Type::Int {
+                if a_type == TypeKind::Float || a_type == TypeKind::Int {
                     return Ok(a.clone());
                 }
                 Err(())
             }
-            TokenType::Bang => Ok(Type::Boolean),
+            TokenType::Bang => Ok(Type::boolean()),
             _ => Err(()),
         }
     }
@@ -262,35 +296,36 @@ pub enum Value {
     Pointer(usize),
     Type(Type),
     //  Struct(String, Vec<(Type, usize, Value)>),
-
-    // TODO: この辺はCallableDataとかのStructとして纏めたほうが楽かも
     Null,
 }
 
-impl From<i64> for Type {
-    fn from(_: i64) -> Self {
-        Type::Int
+impl From<&i64> for Type {
+    fn from(_: &i64) -> Self {
+        Type::int()
     }
 }
 
-impl From<f64> for Type {
-    fn from(_: f64) -> Self {
-        Type::Float
+impl From<&f64> for Type {
+    fn from(_: &f64) -> Self {
+        Type::float()
     }
 }
 
-impl From<String> for Type {
-    fn from(_: String) -> Self {
-        Type::Str
+impl From<&String> for Type {
+    fn from(_: &String) -> Self {
+        Type::string()
     }
 }
 
-impl From<bool> for Type {
-    fn from(_: bool) -> Self {
-        Type::Boolean
+impl From<&bool> for Type {
+    fn from(_: &bool) -> Self {
+        Type::boolean()
     }
 }
 
+
+
+// TODO @DumbCode - Isn't this Constant Redundant?
 #[derive(Debug, Clone, PartialEq)]
 pub struct Constant {
     pub ctype: Type,
@@ -301,20 +336,21 @@ pub struct Constant {
 impl Constant {
     pub fn null() -> Self {
         Self {
-            ctype: Type::Null,
+            ctype: Type::default(),
             value: vec![],
             code: OpCode::PushPtr,
         }
     }
 }
 
-impl<T> From<T> for Constant
+impl<'a, T> From<&'a T> for Constant
 where
-    T: toVmByte + Into<Type> + Clone,
+    T: toVmByte,
+    Type: From<&'a T>
 {
-    fn from(t: T) -> Self {
+    fn from(t: &'a T) -> Self {
         Self {
-            ctype: t.clone().into(),
+            ctype: t.into(),
             value: t.to_vm_byte(),
             code: t.sufficient_opcode(),
         }
@@ -354,13 +390,13 @@ impl Value {
     pub fn to_type(&self) -> Type {
         // Todo: Type Alias support
         match self {
-            Value::Null => Type::Null,
-            Value::Int(_) => Type::Int,
+            Value::Null => Type::default(),
+            Value::Int(_) => Type::int(),
             Value::Type(x) => x.clone(),
-            Value::Float(_) => Type::Float,
-            Value::Str(_) => Type::Str,
-            Value::Boolean(_) => Type::Boolean,
-            _ => Type::Any,
+            Value::Float(_) => Type::float(),
+            Value::Str(_) => Type::string(),
+            Value::Boolean(_) => Type::boolean(),
+            _ => Type::default(),
         }
     }
 
@@ -386,7 +422,7 @@ impl fmt::Display for Value {
             Value::Float(f_) => write!(f, "{}", f_),
             Value::Str(ref s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
-            Value::Null => write!(f, "null"),
+            Value::Null => write!(f, "<null>"),
             Value::Type(x) => write!(f, "{:?}", x),
             Value::Pointer(x) => write!(f, "Pointer{}", x),
         }

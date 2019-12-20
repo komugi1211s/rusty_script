@@ -40,10 +40,13 @@ pub enum Statement {
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DeclarationData {
     pub name: String,
     pub _type: Type,
+    pub is_const: bool,
+    pub is_nullable: bool,
+    pub is_inferred: bool,
     pub is_argument: bool,
     pub expr: Option<Expr>,
 }
@@ -53,53 +56,6 @@ pub struct FunctionData {
     pub it: DeclarationData,
     pub args: Vec<DeclarationData>,
     pub block: BlockData,
-}
-
-pub struct DeclarationDataBuilder {
-    name: Option<String>,
-    is_argument: bool,
-    _type: Option<Type>,
-    expr: Option<Expr>,
-}
-
-impl DeclarationDataBuilder {
-    pub fn new() -> Self {
-        Self {
-            name: None,
-            is_argument: false,
-            _type: None,
-            expr: None,
-        }
-    }
-
-    pub fn setname(mut self, name: &str) -> Self {
-        self.name = Some(name.to_string());
-        self
-    }
-
-    pub fn setargmode(mut self, mode: bool) -> Self {
-        self.is_argument = true;
-        self
-    }
-
-    pub fn settype(mut self, ty: Type) -> Self {
-        self._type = Some(ty);
-        self
-    }
-
-    pub fn setexpr(mut self, expr: Expr) -> Self {
-        self.expr = Some(expr);
-        self
-    }
-
-    pub fn build(self) -> DeclarationData {
-        DeclarationData {
-            name: self.name.unwrap(),
-            _type: self._type.unwrap(),
-            is_argument: self.is_argument,
-            expr: self.expr,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

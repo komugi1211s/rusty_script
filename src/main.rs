@@ -4,7 +4,6 @@
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-
 use isekai_language::isekai;
 
 #[cfg(target_os = "macos")]
@@ -22,7 +21,7 @@ fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0x0000 } else { 0x0100 });
 }
 
-fn run_file(path: String) -> bool {
+fn run_file(path: &String) -> bool {
     let mut strings = String::new();
     let mut f = match File::open(path) {
         Ok(n) => n,
@@ -45,7 +44,7 @@ fn main() {
         println!("usage: isekai [filename].kai");
         exit_process(true);
     }
-    exit_process(run_file(arguments[1].clone()))
+    exit_process(run_file(arguments.get(1).unwrap()))
 }
 
 /*

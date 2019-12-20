@@ -1,22 +1,25 @@
 use super::{ 
     bytecode::{ BytecodeGenerator, FuncInfo },
     vm::{ VirtualMachine },
-    types::{ Value, Type },
+    types::{ Value, Type, TypeKind, TypeOption },
     utils,
 };
 use std::time::{ SystemTime, UNIX_EPOCH };
 
 // ********************* INTERNAL STUFF ********************* //
 fn applyfunc(bc: &mut BytecodeGenerator, name: &str, args: Vec<Type>, rettype: Type, func: fn(&mut VirtualMachine)) {
-    let clock_funcinfo = FuncInfo::native(name, args.len(), args, rettype, func);
-    bc.global_define.push((rettype, name.to_string()));
+    let funcinfo = FuncInfo::native(name, args.len(), args, rettype, func);
+
+    let mut functype = rettype;
+    functype.option.insert(TypeOption::Func);
+    bc.global_define.push((functype, name.to_string()));
     let idx = bc.global_define.len() - 1;
-    bc.function_table.insert(idx, clock_funcinfo);
+    bc.function_table.insert(idx, funcinfo);
 }
 
 pub fn apply_native_functions(bc: &mut BytecodeGenerator) {
-    applyfunc(bc, "clock", vec![], Type::Float, clock_adapter);
-    applyfunc(bc, "assert", vec![Type::Boolean], Type::Null, assert_adapter);
+    applyfunc(bc, "clock", vec![], Type::float(), clock_adapter);
+    applyfunc(bc, "assert", vec![Type::boolean()], Type::default(), assert_adapter);
 }
 
 // ********************* BUILTIN STUFF ********************* //
