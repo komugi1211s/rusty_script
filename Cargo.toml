@@ -12,6 +12,14 @@ bitflags = "*"
 num-traits = "0.2"
 num-derive = "0.3"
 
+syntax_ast = { path = "./src/syntax_ast" }
+
+[workspace]
+members = [
+    "src/syntax_ast"
+]
+
+
 [[bin]]
 name = "isekai"
 path = "src/main.rs"

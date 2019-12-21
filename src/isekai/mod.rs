@@ -2,13 +2,6 @@ pub mod core;
 pub mod report;
 pub mod types;
 // pub mod nativefunc;
-
-pub mod token;
-pub mod tokenizer;
-
-pub mod parse;
-pub mod parser;
-
 // pub mod evaluate;
 pub mod builtin_functions;
 pub mod bytecode;

@@ -1,5 +1,8 @@
-use super::parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode};
-use super::token::TokenType;
+use super::syntax_ast::{
+    parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode},
+    token::TokenType,
+};
+
 use super::types::{ toVmByte, Constant, OpCode, Type, TypeKind, TypeOption };
 use super::vm::{ VirtualMachine };
 use num_traits::FromPrimitive;
