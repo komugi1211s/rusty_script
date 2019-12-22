@@ -1,6 +1,6 @@
 #[macro_use]
-use super::token::{Token};
-use super::types::{Constant, Type};
+use syntax_ast::token::{Token};
+use syntax_ast::types::{Constant, Type};
 use std::fmt;
 
 // TODO: REMOVE CLONE

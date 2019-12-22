@@ -1,4 +1,4 @@
-use super::syntax_ast::{
+use syntax_ast::{
     parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode},
     token::TokenType,
 };

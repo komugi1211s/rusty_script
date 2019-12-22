@@ -1,6 +1,6 @@
-use super::syntax_est::token::Token;
-use super::syntax_est::tokenizer::Tokenizer;
-use super::syntax_est::parser::Parser;
+use syntax_ast::token::Token;
+use syntax_ast::tokenizer::Tokenizer;
+use syntax_ast::parser::Parser;
 // use super::evaluate::Interpreter;
 use super::bytecode::{ BytecodeGenerator, disassemble_all };
 use super::report::{ ErrorReporter };
