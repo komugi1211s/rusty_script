@@ -1,3 +1,9 @@
+use crate::{
+    report::Error,
+    utils,
+};
+use types::{Constant, Type, TypeKind, TypeOption};
+
 use super::{
     parse::{
         BlockData, DeclarationData, Expr, FunctionData,
@@ -6,9 +12,6 @@ use super::{
         Statement,
     },
     token::{Token, TokenType},
-    types::{Constant, Type, TypeKind, TypeOption},
-    report::Error,
-    utils,
 };
 
 // TODO:
@@ -193,9 +196,21 @@ impl<'tok> Parser<'tok> {
             expr: None,
         };
 
+        fn from_tokentype(tty: &TokenType) -> Type {
+            match tty {
+                TokenType::TypeAny => Type::default(),
+                TokenType::TypeBool => Type::boolean(),
+                TokenType::TypeFloat => Type::float(),
+                TokenType::TypeInt => Type::int(),
+                TokenType::TypeStr => Type::string(),
+                // This SHould not work.
+                _ => Type::default(),
+            }
+        }
+
         if TokenType::is_typekind(&self.get_current().tokentype) {
             let type_token = self.advance();
-            let mut dtype = Type::from_tokentype(&type_token.tokentype);
+            let mut dtype = from_tokentype(&type_token.tokentype);
             let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
 
             decl_data._type = dtype;
