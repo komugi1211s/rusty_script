@@ -16,7 +16,7 @@ syntax_ast = { path = "./src/syntax_ast" }
 
 [workspace]
 members = [
-    "src/syntax_ast"
+    "src/syntax_ast",
 ]
 
 
