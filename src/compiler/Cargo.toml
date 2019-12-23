@@ -1,5 +1,5 @@
 [package]
-name = "types"
+name = "compiler"
 version = "0.1.0"
 authors = ["fuzzy@notepc <5960126+Clutetot@users.noreply.github.com>"]
 edition = "2018"
@@ -7,8 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 #
 [lib]
-name = "types"
+name = "compiler"
 path = "lib.rs"
 
 [dependencies]
 bitflags = "*"
+num-traits = "0.2"
+num-derive = "0.3"
+types = { path = "../types" }
+syntax_ast = { path = "../syntax_ast" }

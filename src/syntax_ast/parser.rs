@@ -2,17 +2,24 @@ use crate::{
     report::Error,
     utils,
 };
-use types::{Constant, Type, TypeKind, TypeOption};
 
 use super::{
-    parse::{
-        BlockData, DeclarationData, Expr, FunctionData,
+    ast_data::{
+        BlockData,
+        DeclarationData,
+        Expr,
+        FunctionData,
         StatementNode,
         ParsedResult, 
         Statement,
+        Operator,
+        Literal,
+        CodeSpan
     },
-    token::{Token, TokenType},
+    token::{ Token, TokenType },
 };
+
+use types::{ Type };
 
 // TODO:
 // All clone call to a lifetime management
@@ -63,7 +70,11 @@ impl<'tok> Parser<'tok> {
         while !self.is_at_end() {
             self.start_line = self.current_line;
             let declaration = self.declaration()?;
-            self.parsed_result.statements.push(StatementNode::new(declaration, self.start_line));
+            let codespan = CodeSpan {
+                start: self.start_line,
+                end: self.current_line,
+            };
+            self.parsed_result.statements.push(StatementNode::new(declaration, codespan));
         }
         Ok(self.parsed_result)
     }
@@ -359,9 +370,9 @@ impl<'tok> Parser<'tok> {
         let mut expr = self.logical_and()?;
 
         while self.is(TokenType::Or) {
-            let operator = self.advance().clone();
+            self.advance();
             let right = self.logical_and()?;
-            expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
+            expr = Expr::Logical(Box::new(expr), Box::new(right), Operator::Or);
         }
 
         Ok(expr)
@@ -370,10 +381,9 @@ impl<'tok> Parser<'tok> {
         let mut expr = self.equality()?;
 
         while self.is(TokenType::And) {
-            let operator = self.get_current().clone();
-            self.current += 1;
+            self.advance();
             let right = self.equality()?;
-            expr = Expr::Logical(Box::new(expr), Box::new(right), operator);
+            expr = Expr::Logical(Box::new(expr), Box::new(right), Operator::And);
         }
 
         Ok(expr)
@@ -381,15 +391,16 @@ impl<'tok> Parser<'tok> {
 
     fn equality(&mut self) -> Result<Expr, Error> {
         let mut expr = self.comparison()?;
-        while self.is(TokenType::EqualEqual) || self.is(TokenType::NotEqual) {
-            // TODO - @Cleanup: advance?
-            // 一歩進めてからオペレータを取る
-            self.current += 1;
-            let equal_oper = self.tokens.get(self.current - 1).unwrap().clone();
+        while !self.is_at_end() {
+            let operator = match self.get_current().tokentype {
+                TokenType::EqualEqual => Operator::EqEq,
+                TokenType::NotEqual => Operator::NotEq,
+                _ => break,
+            };
+            self.advance();
             let right = self.comparison()?;
-            expr = Expr::Binary(Box::new(expr), Box::new(right), equal_oper);
+            expr = Expr::Binary(Box::new(expr), Box::new(right), operator);
         }
-
         Ok(expr)
     }
 
@@ -397,21 +408,17 @@ impl<'tok> Parser<'tok> {
         let mut start = self.addition()?;
 
         use TokenType::*;
-        // 分かりづらッ！！
-        while !self.is_at_end()
-            && match self.get_current().tokentype {
-                LessEqual => true,
-                MoreEqual => true,
-                Less => true,
-                More => true,
-                _ => false,
-            }
-        {
-            // TODO - @Cleanup: advance?
-            self.current += 1;
-            let compare_operator = self.tokens.get(self.current - 1).unwrap().clone();
+        while !self.is_at_end() {
+            let operator = match self.get_current().tokentype {
+                LessEqual => Operator::LessEq,
+                MoreEqual => Operator::MoreEq,
+                Less => Operator::Less,
+                More => Operator::More,
+                _ => break,
+            };
+
             let right = self.addition()?;
-            start = Expr::Binary(Box::new(start), Box::new(right), compare_operator);
+            start = Expr::Binary(Box::new(start), Box::new(right), operator);
         }
 
         Ok(start)
@@ -420,13 +427,15 @@ impl<'tok> Parser<'tok> {
     fn addition(&mut self) -> Result<Expr, Error> {
         let mut start = self.multiplification()?;
 
-        while self.is(TokenType::Plus) || self.is(TokenType::Minus) {
-            // TODO - @Cleanup: advance?
-            self.current += 1;
-            let addition_oper = self.tokens.get(self.current - 1).unwrap().clone();
+        while !self.is_at_end() {
+            let operator = match self.get_current().tokentype {
+                TokenType::Plus => Operator::Add,
+                TokenType::Minus => Operator::Sub,
+                _ => break,
+            };
+            self.advance();
             let right = self.multiplification()?;
-
-            start = Expr::Binary(Box::new(start), Box::new(right), addition_oper);
+            start = Expr::Binary(Box::new(start), Box::new(right), operator);
         }
 
         Ok(start)
@@ -435,15 +444,17 @@ impl<'tok> Parser<'tok> {
     fn multiplification(&mut self) -> Result<Expr, Error> {
         let mut start = self.unary()?;
 
-        while self.is(TokenType::Slash)
-            || self.is(TokenType::Asterisk)
-            || self.is(TokenType::Percent)
-        {
-            self.current += 1;
-            let multiply_oper = self.tokens.get(self.current - 1).unwrap().clone();
+        while !self.is_at_end() {
+            let operator = match self.get_current().tokentype {
+                TokenType::Slash => Operator::Div,
+                TokenType::Asterisk => Operator::Mul,
+                TokenType::Percent => Operator::Mod,
+                _ => break,
+            };
+            self.advance();
             let right = self.unary()?;
 
-            start = Expr::Binary(Box::new(start), Box::new(right), multiply_oper);
+            start = Expr::Binary(Box::new(start), Box::new(right), operator);
         }
 
         Ok(start)
@@ -451,9 +462,13 @@ impl<'tok> Parser<'tok> {
 
     fn unary(&mut self) -> Result<Expr, Error> {
         if self.is(TokenType::Bang) || self.is(TokenType::Minus) {
-            let unary_oper = self.advance().clone();
+            let operator = match self.get_current().tokentype {
+                TokenType::Bang => Operator::Not,
+                TokenType::Minus => Operator::Neg,
+                _ => unreachable!(),
+            };
             let right = self.unary()?;
-            let unary = Expr::Unary(Box::new(right), unary_oper);
+            let unary = Expr::Unary(Box::new(right), operator);
 
             return Ok(unary);
         }
@@ -486,7 +501,7 @@ impl<'tok> Parser<'tok> {
             }
         }
         let paren = self.consume(TokenType::CloseParen)?;
-        Ok(Expr::FunctionCall(Box::new(_expr), paren.clone(), v))
+        Ok(Expr::FunctionCall(Box::new(_expr), v))
     }
 
     fn is(&mut self, _type: TokenType) -> bool {
@@ -534,24 +549,33 @@ impl<'tok> Parser<'tok> {
         let inside = self.advance();
         use TokenType::*;
         let result = match &inside.tokentype {
-            False => Ok(Expr::Literal(Constant::from(&false))),
-            True => Ok(Expr::Literal(Constant::from(&true))),
+            False | True => {
+                let lit = Literal::new_bool(inside);
+                Ok(Expr::Literal(lit))
+            }
             Null => {
-                // TODO:
-                // This is a bug.
-                // once something gets initialized with Null, that variable becomes "Any" type.
-                Ok(Expr::Literal(Constant::null()))
+                let lit = Literal::new_null(inside);
+                Ok(Expr::Literal(lit))
             }
             Digit => {
-                match inside.lexeme.parse::<i64>() {
-                    Ok(n) => Ok(Expr::Literal(Constant::from(&n))),
-                    Err(_) => match inside.lexeme.parse::<f64>() {
-                        Ok(f) => Ok(Expr::Literal(Constant::from(&f))),
-                        Err(x) => Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line)),
-                    }
+                let parsed_number = inside.lexeme.parse::<i64>();
+                if parsed_number.is_ok() {
+                    let lit = Literal::new_int(inside);
+                    return Ok(Expr::Literal(lit));
                 }
+
+                let parsed_float = inside.lexeme.parse::<f64>();
+                if parsed_float.is_ok() {
+                    let lit = Literal::new_float(inside);
+                    return Ok(Expr::Literal(lit));
+                }
+
+                Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
-            Str => Ok(Expr::Literal(Constant::from(&inside.lexeme))),
+            Str => {
+                let lit = Literal::new_str(inside);
+                Ok(Expr::Literal(lit))
+            }
             Iden => {
                 if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
                     let formatted = format!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);

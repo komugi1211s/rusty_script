@@ -1,15 +1,14 @@
 [package]
-name = "syntax_ast"
+name = "types"
 version = "0.1.0"
-authors = ["pantarou@home <pantarou@home.debian>"]
+authors = ["fuzzy@notepc <5960126+Clutetot@users.noreply.github.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "syntax_ast"
+name = "types"
 path = "lib.rs"
 
 [dependencies]
 bitflags = "*"
-types = { path = "../types" }

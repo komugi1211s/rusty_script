@@ -1,25 +1,7 @@
-[package]
-name = "isekai_language"
-version = "0.1.0"
-authors = ["fuzzy@notepc <fuzzy@notepc.jp>"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-# lazy_static = "1.4.0"
-bitflags = "*"
-num-traits = "0.2"
-num-derive = "0.3"
-
-syntax_ast = { path = "./src/syntax_ast" }
-
 [workspace]
 members = [
+    "src/isekai",
     "src/syntax_ast",
+    "src/compiler",
+    "src/types",
 ]
-
-
-[[bin]]
-name = "isekai"
-path = "src/main.rs"

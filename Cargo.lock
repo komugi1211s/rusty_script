@@ -11,13 +11,21 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "isekai_language"
+name = "compiler"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-derive 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "syntax_ast 0.1.0",
+ "types 0.1.0",
+]
+
+[[package]]
+name = "isekai"
+version = "0.1.0"
+dependencies = [
+ "compiler 0.1.0",
 ]
 
 [[package]]
@@ -66,6 +74,14 @@ dependencies = [
 
 [[package]]
 name = "syntax_ast"
+version = "0.1.0"
+dependencies = [
+ "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "types 0.1.0",
+]
+
+[[package]]
+name = "types"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
