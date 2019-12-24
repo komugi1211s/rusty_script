@@ -4,7 +4,8 @@ use syntax_ast::{
 };
 
 use types::{ toVmByte, Constant, Type, TypeKind, TypeOption };
-use super::vm::{ VirtualMachine };
+use crate::vm::{ VirtualMachine };
+use crate::typecheck::{ TypeChecker };
 
 use num_traits::FromPrimitive;
 use std::collections::HashMap;

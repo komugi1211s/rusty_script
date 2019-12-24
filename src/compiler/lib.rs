@@ -4,6 +4,7 @@ extern crate bitflags;
 pub mod report;
 pub mod builtin_functions;
 pub mod bytecode;
+pub mod typecheck;
 pub mod vm;
 
 pub mod utils {

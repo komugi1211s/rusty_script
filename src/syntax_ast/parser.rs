@@ -14,6 +14,8 @@ use super::{
         Statement,
         Operator,
         Literal,
+        DeclKind,
+        DeclTyping,
         CodeSpan
     },
     token::{ Token, TokenType },
@@ -197,13 +199,11 @@ impl<'tok> Parser<'tok> {
         let colon = self.consume(TokenType::Colon)?;
 
         let mut decl_data = DeclarationData {
+            kind: DeclKind::Variable,
             name: identity,
-            _type: Type::default(),
-            is_inferred: true,
+            dectype: DeclTyping::Inferred,
             is_const: false,
             is_nullable: false,
-
-            is_argument: false,
             expr: None,
         };
 
@@ -224,7 +224,7 @@ impl<'tok> Parser<'tok> {
             let mut dtype = from_tokentype(&type_token.tokentype);
             let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
 
-            decl_data._type = dtype;
+            decl_data._type = DeclTyping::Typed(dtype);
             decl_data.is_inferred = false;
 
             if is_all_uppercase {
@@ -251,7 +251,7 @@ impl<'tok> Parser<'tok> {
         while self.is(TokenType::Iden) {
             self.current += 1;
             let mut decl_info = self.initialize_decl_data()?;
-            decl_info.is_argument = true;
+            decl_info.kind = DeclKind::Argument;
 
             let bridge_token = self.advance();
             let bridge_line = bridge_token.line;

@@ -36,15 +36,28 @@ pub struct FunctionData {
     pub block: BlockData,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData {
+    pub kind: DeclKind,
     pub name: String,
-    pub _type: Type,
+    pub dectype: DeclTyping,
     pub is_const: bool,
     pub is_nullable: bool,
-    pub is_inferred: bool,
-    pub is_argument: bool,
     pub expr: Option<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeclKind {
+    Variable,
+    Argument,
+    Struct,
+    StructField,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeclTyping {
+    Inferred,
+    Typed(Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +118,36 @@ pub enum Operator {
     Or,
 
     Asgn,
+}
+
+impl Operator {
+    // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
+    pub fn is_arithmetic(&self) -> bool {
+        // NOTE - @Improvement: Unaryのマイナスって計算式に入る？
+        match self {
+            Add | Sub | Div | Mul | Mod => true,
+            EqEq| NotEq | LessEq | MoreEq
+            | Less | More | Neg | Not
+            | And | Or | Asgn => false
+        }
+    }
+
+    pub fn is_comparison(&self) -> bool {
+        match self {
+            EqEq | NotEq | LessEq | MoreEq | Less | More => true,
+            Add | Sub | Div | Mul | Mod
+            | Neg | Not | And | Or | Asgn => false,
+        }
+    }
+
+    pub fn is_logic(&self) -> bool {
+        match self {
+            And | Or  | Not => true,
+            EqEq | NotEq | LessEq | MoreEq | Less | More
+            | Add | Sub | Div | Mul | Mod
+            | Neg | Asgn => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

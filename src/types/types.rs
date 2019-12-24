@@ -1,5 +1,4 @@
 
-// use super::evaluate::{ Environment, Interpreter };
 use std::fmt;
 use std::mem;
 use std::ops;
@@ -20,6 +19,7 @@ pub enum TypeKind {
     Str     = 0b0000_0100,
     Boolean = 0b0000_1000,
     Null    = 0b0001_0000,
+    UserDef = 0b1000_0000,
 }
 
 impl Default for TypeKind {
