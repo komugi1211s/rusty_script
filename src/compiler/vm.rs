@@ -1,5 +1,5 @@
-use super::bytecode::{ByteChunk, disassemble};
-use types::{Type, Value, TypeKind, TypeOption};
+use super::bytecode::{ByteChunk, OpCode, disassemble};
+use types::types::{Type, Value, TypeKind, TypeOption};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 

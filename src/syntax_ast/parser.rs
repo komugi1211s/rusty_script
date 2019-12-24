@@ -1,7 +1,4 @@
-use crate::{
-    report::Error,
-    utils,
-};
+use report::Error;
 
 use super::{
     ast_data::{
@@ -15,13 +12,12 @@ use super::{
         Operator,
         Literal,
         DeclKind,
-        DeclTyping,
         CodeSpan
     },
     token::{ Token, TokenType },
 };
 
-use types::{ Type };
+use types::types::{ Type, TypeKind, TypeOption };
 
 // TODO:
 // All clone call to a lifetime management
@@ -201,9 +197,10 @@ impl<'tok> Parser<'tok> {
         let mut decl_data = DeclarationData {
             kind: DeclKind::Variable,
             name: identity,
-            dectype: DeclTyping::Inferred,
+            dectype: Type::default(),
             is_const: false,
             is_nullable: false,
+            is_inferred: false,
             expr: None,
         };
 
@@ -224,7 +221,7 @@ impl<'tok> Parser<'tok> {
             let mut dtype = from_tokentype(&type_token.tokentype);
             let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
 
-            decl_data._type = DeclTyping::Typed(dtype);
+            decl_data.dectype = dtype;
             decl_data.is_inferred = false;
 
             if is_all_uppercase {
@@ -328,7 +325,7 @@ impl<'tok> Parser<'tok> {
 
     fn declare_function(&mut self, mut info: DeclarationData) -> Result<Statement, Error> {
 
-        info._type.option.insert(TypeOption::Func);
+        info.dectype.option.insert(TypeOption::Func);
         let arguments = self.declare_argument()?;
 
         self.consume(TokenType::OpenBrace)?;

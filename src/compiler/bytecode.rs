@@ -1,11 +1,11 @@
 use syntax_ast::{
-    parse::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode},
+    ast_data::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind },
     token::TokenType,
 };
 
-use types::{ toVmByte, Constant, Type, TypeKind, TypeOption };
+use types::types::{ Type, TypeKind, TypeOption };
 use crate::vm::{ VirtualMachine };
-use crate::typecheck::{ TypeChecker };
+use crate::typecheck;
 
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -78,6 +78,39 @@ pub enum OpCode {
     DebugPrint = 0b1111_0001,
 }
 
+fn literal_to_builtin_value(lit: &Literal) -> Vec<u8> {
+    match lit.kind {
+        LiteralKind::Int => {
+            let item = lit.tok.lexeme.parse::<i64>().unwrap();
+            i64::to_ne_bytes(item).to_vec()
+        }
+        LiteralKind::Str => {
+            lit.tok.lexeme.as_bytes().collect::<Vec<u8>>()
+        }
+        LiteralKind::Float => {
+            let item = lit.tok.lexeme.parse::<f64>().unwrap();
+            u64::to_ne_bytes(f64::to_bits(item)).to_vec()
+        }
+        LiteralKind::Bool => {
+            match lit.tok {
+                "true" => vec![1],
+                "false" => vec![0],
+            }
+        }
+        LiteralKind::Null => vec![]
+    }
+}
+
+fn type_to_const_opcode(ty: &Type) -> OpCode {
+    match ty.kind {
+        TypeKind::Int | TypeKind::Float => OpCode::Const64,
+        TypeKind::Str => OpCode::ConstDyn,
+        TypeKind::Boolean => OpCode::Const8,
+        _ => unreachable!(),
+    }
+}
+
+
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
 
@@ -147,7 +180,7 @@ impl Code {
 
     pub fn write_null(&mut self, line: usize) -> usize {
         self.push_opcode(OpCode::PushPtr, line);
-        self.push_operands(0usize.to_vm_byte(), line);
+        self.push_operands(0usize.to_ne_bytes().to_vec(), line);
         self.bytes.len()
     }
 
@@ -428,7 +461,7 @@ impl BytecodeGenerator {
         for i in ast.statements {
             self.handle_stmt(i.value, i.line);
         }
-        self.const_table.push_data(usize::max_value().to_vm_byte());
+        self.const_table.push_data(usize::max_value().to_ne_bytes().to_vec());
         let bytechunk = ByteChunk {
             entry_point,
             code: self.code,
@@ -541,27 +574,6 @@ impl BytecodeGenerator {
         placeholder.index = self.code.current_length();
     }
 
-    pub fn write_const(&mut self, constant: Constant, line: usize) -> usize {
-        let opcode = constant.code;
-        let value = constant.value;
-        let length = value.len();
-
-        let start_index = if opcode == OpCode::ConstDyn {
-            let x = self.const_table.push_data(length.to_vm_byte());
-            self.const_table.push_data(value);
-            x
-        } else {
-            self.const_table.push_data(value)
-        };
-
-        self.const_table
-            .types
-            .insert(start_index, constant.ctype.clone());
-
-        self.code.push_opcode(opcode, line);
-        self.code.push_operands(start_index.to_vm_byte(), line);
-        start_index
-    }
 
     fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
         let mut handled_result = StatementHandleResult { line, index: 0, info: StatementInfo::Nothing };
@@ -588,14 +600,14 @@ impl BytecodeGenerator {
                 // ジャンプ用のインデックスを作っておく
                 let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, line);
                 self.code
-                    .push_operands(usize::max_value().to_vm_byte(), line);
+                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
 
                 // Ifの終わりにまでJumpする為のIndexが要る
                 let end_of_if_block = self.handle_stmt(*if_block, line).index;
 
                 // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
                 self.code
-                    .rewrite_operands(end_of_if_block.to_vm_byte(), jump_opcode_index);
+                    .rewrite_operands(end_of_if_block.to_ne_bytes().to_vec(), jump_opcode_index);
 
                 if let Some(else_block) = optional_else_block {
                     //
@@ -603,16 +615,16 @@ impl BytecodeGenerator {
                     let jump_block = self.code.push_opcode(OpCode::Jump, line);
                     let after_operand = self
                         .code
-                        .push_operands(usize::max_value().to_vm_byte(), line);
+                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
 
                     // Ifブロックの終了アドレスがあった部分を、Else避けJump分を加味して調整
                     self.code
-                        .rewrite_operands(after_operand.to_vm_byte(), jump_opcode_index);
+                        .rewrite_operands(after_operand.to_ne_bytes().to_vec(), jump_opcode_index);
 
                     // Ifブロックが丁度終わる位置のJumpオペランドを、Elseブロックの終了アドレスで上書き
                     let end_of_else_block = self.handle_stmt(*else_block, line).index;
                     self.code
-                        .rewrite_operands(end_of_else_block.to_vm_byte(), jump_block);
+                        .rewrite_operands(end_of_else_block.to_ne_bytes().to_vec(), jump_block);
                 }
 
                 handled_result.index = self.code.current_length();
@@ -659,7 +671,7 @@ impl BytecodeGenerator {
                 let jump_conditional = self.code.push_opcode(OpCode::Jump, line);
                 let after_jump_conditional = self
                     .code
-                    .push_operands(usize::max_value().to_vm_byte(), line);
+                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
 
                 // この時点でContinue命令は after_jump_conditional に飛ぶようになる
                 let previous_loop_start = self.last_loop_start;
@@ -674,13 +686,13 @@ impl BytecodeGenerator {
                 self.code.push_opcode(OpCode::JumpIfFalse, line);
                 let end_of_loop = self
                     .code
-                    .push_operands(after_jump_conditional.to_vm_byte(), line);
+                    .push_operands(after_jump_conditional.to_ne_bytes().to_vec(), line);
 
                 for i in self.break_call.drain(..) {
-                    self.code.rewrite_operands(end_of_loop.to_vm_byte(), i);
+                    self.code.rewrite_operands(end_of_loop.to_ne_bytes().to_vec(), i);
                 }
                 self.code
-                    .rewrite_operands(before_expr.to_vm_byte(), jump_conditional);
+                    .rewrite_operands(before_expr.to_ne_bytes().to_vec(), jump_conditional);
                 self.last_loop_start = previous_loop_start;
                 handled_result.index = end_of_loop;
                 handled_result
@@ -690,7 +702,7 @@ impl BytecodeGenerator {
                 if self.last_loop_start != usize::max_value() {
                     let break_index = self.code.push_opcode(OpCode::Jump, line);
                     self.code
-                        .push_operands(usize::max_value().to_vm_byte(), line);
+                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
                     handled_result.info = StatementInfo::Break(break_index);
                 }
                 handled_result.index = self.code.current_length();
@@ -701,7 +713,7 @@ impl BytecodeGenerator {
                 if self.last_loop_start != usize::max_value() {
                     let continue_index = self.code.push_opcode(OpCode::Jump, line);
                     self.code
-                        .push_operands(self.last_loop_start.to_vm_byte(), line);
+                        .push_operands(self.last_loop_start.to_ne_bytes().to_vec(), line);
                     handled_result.info = StatementInfo::Continue(continue_index);
                 }
                 handled_result.index = self.code.current_length();
@@ -807,7 +819,7 @@ impl BytecodeGenerator {
                 let operands = position as u16;
 
                 self.code.push_opcode(opcode, out.line);
-                out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
+                out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.line);
             }
         } else {
             let (exists, pos) = self.find_global(&name);
@@ -822,7 +834,7 @@ impl BytecodeGenerator {
             let operands = position as u16;
 
             self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(operands.to_vm_byte(), out.line);
+            out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.line);
         }
         out.info = StatementInfo::Declaration { is_initialized: empty_expr, dtype: declared_type };
     }
@@ -860,19 +872,19 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_constant_data(
+    fn handle_literal(
         &mut self,
         out: &mut ExpressionHandleResult,
-        constant: Constant,
+        lit: Literal,
         line: usize,
     ) {
-        let _type = constant.ctype.clone();
-        let opcode = constant.code;
-        let value = constant.value;
+        let _type = typecheck::literal_to_type(&lit);
+        let opcode = type_to_const_opcode(&_type);
+        let value = literal_to_builtin_value(&lit);
         let length = value.len();
 
         let start_index = if opcode == OpCode::ConstDyn {
-            let x = self.const_table.push_data(length.to_vm_byte());
+            let x = self.const_table.push_data(length.to_ne_bytes().to_vec());
             self.const_table.push_data(value);
             x
         } else {
@@ -881,7 +893,7 @@ impl BytecodeGenerator {
 
         self.const_table.types.insert(start_index, _type);
         self.code.push_opcode(opcode, line);
-        let index = self.code.push_operands(start_index.to_vm_byte(), line);
+        let index = self.code.push_operands(start_index.to_ne_bytes().to_vec(), line);
         out._type = _type;
         out.index = index;
     }
@@ -892,6 +904,7 @@ impl BytecodeGenerator {
             index: 0,
             _type: Type::default(),
         };
+
         match expr {
             Expr::Variable(name) => {
                 // let data = self.variable.get(name).unwrap();
@@ -914,7 +927,7 @@ impl BytecodeGenerator {
                     self.code.push_opcode(opcode, line);
 
                     let index = pos_global as u16;
-                    handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
+                    handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), line);
                     return handled_result;
                 }
 
@@ -924,13 +937,11 @@ impl BytecodeGenerator {
                 self.code.push_opcode(opcode, line);
 
                 let index = pos as u16;
-                handled_result.index = self.code.push_operands(index.to_vm_byte(), line);
+                handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), line);
                 handled_result
             }
             Expr::Literal(literal) => {
-                // TODO: handle it without making a clone.
-                // self.stack.push(literal);
-                self.handle_constant_data(&mut handled_result, literal, line);
+                self.handle_literal(&mut handled_result, literal, line);
                 handled_result
             }
 
@@ -939,7 +950,7 @@ impl BytecodeGenerator {
                 let right = self.handle_expr(*right, line);
 
                 handled_result._type =
-                    Type::type_after_binary(&left._type, &right._type, &operator.tokentype)
+                    typecheck::type_after_binary(&left._type, &right._type, &operator.tokentype)
                         .unwrap();
                 handled_result.index = match operator.tokentype {
                     TokenType::Plus => self.code.push_opcode(OpCode::Add, line),
@@ -976,7 +987,7 @@ impl BytecodeGenerator {
             Expr::Unary(expr, operator) => {
                 let another_result = self.handle_expr(*expr, line);
                 handled_result._type =
-                    Type::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
+                    typecheck::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
                 handled_result.index = match operator.tokentype {
                     TokenType::Bang => self.code.push_opcode(OpCode::Not, line),
                     TokenType::Minus => self.code.push_opcode(OpCode::Neg, line),
@@ -1027,7 +1038,7 @@ impl BytecodeGenerator {
                 let operands = position as u16;
                 self.code.push_opcode(opcode, line);
                 handled_result._type = expression_type;
-                handled_result.index = self.code.push_operands(operands.to_vm_byte(), line);
+                handled_result.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), line);
                 handled_result
             }
             Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
@@ -1057,7 +1068,7 @@ impl BytecodeGenerator {
                         }
                     }
                     self.code.push_opcode(OpCode::Call, line);
-                    let jump_here = self.code.push_operands((position as u16).to_vm_byte(), line);
+                    let jump_here = self.code.push_operands((position as u16).to_ne_bytes().to_vec(), line);
                     handled_result._type = return_type; 
                     handled_result.index = jump_here;
                 }

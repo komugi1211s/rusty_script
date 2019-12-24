@@ -1,9 +1,9 @@
 use super::{ 
     bytecode::{ BytecodeGenerator, FuncInfo },
     vm::{ VirtualMachine },
-    types::{ Value, Type, TypeKind, TypeOption },
     utils,
 };
+use types::types::{ Value, Type, TypeKind, TypeOption };
 use std::time::{ SystemTime, UNIX_EPOCH };
 
 // ********************* INTERNAL STUFF ********************* //
@@ -39,3 +39,15 @@ fn assert_adapter(vm: &mut VirtualMachine) {
     let is_true = vm.stack.pop().unwrap();
     assert(is_true.is_truthy());
 }
+
+
+/*
+    build in func APIs
+
+    let func_builder = Buildin::Function;
+    func_builder.set_returntype(Type { kind: Struct("hello"), option: TypeOption::empty() });
+    func_builder.add_args("foo", Type::int());
+    func_builder.add_second_args("foo", Type::int());
+
+    func_builder.body(create_body
+ */

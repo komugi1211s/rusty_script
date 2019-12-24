@@ -3,7 +3,7 @@ use types::{ Type, TypeKind, TypeOption };
 use syntax_ast::ast_data::*;
 
 
-fn literal_to_type(lit: &Literal) -> Type {
+pub fn literal_to_type(lit: &Literal) -> Type {
     match lit.kind {
         LiteralKind::Int => Type::int(),
         LiteralKind::Float => Type::float(),
@@ -13,25 +13,52 @@ fn literal_to_type(lit: &Literal) -> Type {
     }
 }
 
-fn check_binary_op(lhs: &Expr, rhs: &Expr, oper: Operator) -> Result<Type, ()> {
-    // "and" と "or" は確定でbool
-    let lhs_type = match lhs {
-        Expr::Literal(ref lit ) => literal_to_type(lit),
-        Expr::Binary(lhe, rhe, op) => check_binary_op(&**lhe, &**rhe, *op)
+
+pub fn type_after_binary(a: &Type, b: &Type, oper: Oper) -> Result<Type, ()> {
+    let a = a.kind;
+    let b = b.kind;
+    match oper {
+        Operator::EqEq
+        | Operator::NotEq
+        | Operator::More
+        | Operator::MoreEq
+        | Operator::Less
+        | Operator::LessEq => Ok(Type::boolean()),
+
+        Operator::Div => Ok(Type::float()),
+        Operator::Mod => Ok(Type::int()),
+        Operator::Sub | Operator::Mul => {
+            if a == TypeKind::Float || b == TypeKind::Float {
+                Ok(Type::float())
+            } else {
+                Ok(Type::int())
+            }
+        }
+        Operator::Add => {
+            if a == TypeKind::Str && b == TypeKind::Str {
+                Ok(Type::string())
+            } else if a == TypeKind::Float || b == TypeKind::Float {
+                Ok(Type::float())
+            } else {
+                Ok(Type::int())
+            }
+        }
+        _ => Err(()),
     }
-    Err(())
 }
 
-
-fn check_arithmetic_binary_op(lhs: &Literal, rhs: &Literal, oper: Operator) -> Result<Type, ()> {
-}
-
-
-fn check_unary_op(lhs: &Literal, oper: Operator) -> Type {
-}
-
-
-fn lookup_elevation(lhs: Type, rhs: Type, oper: Operator) -> Option<Type> {
+pub fn type_after_unary(a: &Type, oper: Operator) -> Result<Type, ()> {
+    let a_type = a.kind;
+    match oper {
+        Operator::Neg => {
+            if a_type == TypeKind::Float || a_type == TypeKind::Int {
+                return Ok(a.clone());
+            }
+            Err(())
+        }
+        Operator::Not => Ok(Type::boolean()),
+        _ => Err(()),
+    }
 }
 
 

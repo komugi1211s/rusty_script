@@ -1,16 +1,12 @@
 [package]
-name = "syntax_ast"
+name = "report"
 version = "0.1.0"
-authors = ["pantarou@home <pantarou@home.debian>"]
+authors = ["fuzzyperson@home <5960126+Clutetot@users.noreply.github.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-name = "syntax_ast"
+name = "report"
 path = "lib.rs"
 
 [dependencies]
-bitflags = "*"
-types = { path = "../types" }
-report = { path = "../report" }

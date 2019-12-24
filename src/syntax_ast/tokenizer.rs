@@ -1,7 +1,7 @@
 use std::fmt;
 // use std::mem;
 use super::token::{match_identity, Token, TokenType};
-use super::report::Error;
+use report::Error;
 
 /*
  10 + 2 * 4
@@ -239,7 +239,6 @@ impl Tokenizer {
     fn add_token(&mut self, tokentype: TokenType) -> Result<(), Error> {
         let string: String = self.source[self.start..self.current].iter().collect();
 
-        use rustc_lexer::unescape;
         self.tokens.push(Token::new(
             tokentype,
             self.line,

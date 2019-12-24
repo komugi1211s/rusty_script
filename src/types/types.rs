@@ -90,52 +90,7 @@ impl Type {
         }
     }
 
-    pub fn type_after_binary(a: &Type, b: &Type, oper: &TokenType) -> Result<Type, ()> {
-        let a = a.kind;
-        let b = b.kind;
-        match oper {
-            TokenType::EqualEqual
-            | TokenType::NotEqual
-            | TokenType::More
-            | TokenType::MoreEqual
-            | TokenType::Less
-            | TokenType::LessEqual => Ok(Type::boolean()),
 
-            TokenType::Slash => Ok(Type::float()),
-            TokenType::Percent => Ok(Type::int()),
-            TokenType::Minus | TokenType::Asterisk => {
-                if a == TypeKind::Float || b == TypeKind::Float {
-                    Ok(Type::float())
-                } else {
-                    Ok(Type::int())
-                }
-            }
-            TokenType::Plus => {
-                if a == TypeKind::Str && b == TypeKind::Str {
-                    Ok(Type::string())
-                } else if a == TypeKind::Float || b == TypeKind::Float {
-                    Ok(Type::float())
-                } else {
-                    Ok(Type::int())
-                }
-            }
-            _ => Err(()),
-        }
-    }
-
-    pub fn type_after_unary(a: &Type, oper: &TokenType) -> Result<Type, ()> {
-        let a_type = a.kind;
-        match oper {
-            TokenType::Minus => {
-                if a_type == TypeKind::Float || a_type == TypeKind::Int {
-                    return Ok(a.clone());
-                }
-                Err(())
-            }
-            TokenType::Bang => Ok(Type::boolean()),
-            _ => Err(()),
-        }
-    }
 }
 
 
@@ -172,40 +127,6 @@ impl From<&String> for Type {
 impl From<&bool> for Type {
     fn from(_: &bool) -> Self {
         Type::boolean()
-    }
-}
-
-
-
-// TODO @DumbCode - Isn't this Constant Redundant?
-#[derive(Debug, Clone, PartialEq)]
-pub struct Constant {
-    pub ctype: Type,
-    pub value: Vec<u8>,
-    pub code: OpCode,
-}
-
-impl Constant {
-    pub fn null() -> Self {
-        Self {
-            ctype: Type::default(),
-            value: vec![],
-            code: OpCode::PushPtr,
-        }
-    }
-}
-
-impl<'a, T> From<&'a T> for Constant
-where
-    T: toVmByte,
-    Type: From<&'a T>
-{
-    fn from(t: &'a T) -> Self {
-        Self {
-            ctype: t.into(),
-            value: t.to_vm_byte(),
-            code: t.sufficient_opcode(),
-        }
     }
 }
 

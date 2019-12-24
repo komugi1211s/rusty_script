@@ -43,6 +43,14 @@ assert((10 + 5) == 15);
 assert((1.0 + 5.3) == 6.3);
 assert(("hello" + "world") == "helloworld");
 
+bar: struct {
+}
+
+foo: struct {
+}
+
+assert(bar{} != foo{});
+
 
 test_start: () {
     print "\n";

@@ -1,4 +1,3 @@
-
 use std::str::Lines;
 
 pub struct Error {

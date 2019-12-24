@@ -63,6 +63,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "report"
+version = "0.1.0"
+
+[[package]]
 name = "syn"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -77,6 +81,7 @@ name = "syntax_ast"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "report 0.1.0",
  "types 0.1.0",
 ]
 

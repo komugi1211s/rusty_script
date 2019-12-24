@@ -1,6 +1,6 @@
 use std::fmt;
 use crate::token::{ Token };
-use types::{ Type };
+use types::types::{ Type };
 
 #[derive(Debug)]
 pub struct ParsedResult {
@@ -40,9 +40,10 @@ pub struct FunctionData {
 pub struct DeclarationData {
     pub kind: DeclKind,
     pub name: String,
-    pub dectype: DeclTyping,
+    pub dectype: Type,
     pub is_const: bool,
     pub is_nullable: bool,
+    pub is_inferred: bool,
     pub expr: Option<Expr>,
 }
 
@@ -52,12 +53,6 @@ pub enum DeclKind {
     Argument,
     Struct,
     StructField,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DeclTyping {
-    Inferred,
-    Typed(Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -124,6 +119,7 @@ impl Operator {
     // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
     pub fn is_arithmetic(&self) -> bool {
         // NOTE - @Improvement: Unaryのマイナスって計算式に入る？
+        use Operator::*;
         match self {
             Add | Sub | Div | Mul | Mod => true,
             EqEq| NotEq | LessEq | MoreEq
@@ -133,6 +129,7 @@ impl Operator {
     }
 
     pub fn is_comparison(&self) -> bool {
+        use Operator::*;
         match self {
             EqEq | NotEq | LessEq | MoreEq | Less | More => true,
             Add | Sub | Div | Mul | Mod
@@ -141,6 +138,7 @@ impl Operator {
     }
 
     pub fn is_logic(&self) -> bool {
+        use Operator::*;
         match self {
             And | Or  | Not => true,
             EqEq | NotEq | LessEq | MoreEq | Less | More
@@ -207,6 +205,10 @@ impl Literal {
 
     pub fn is_bool(&self) -> bool {
         self.kind == LiteralKind::Bool
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.kind == LiteralKind::Null
     }
 
     pub fn is_numeric(&self) -> bool {
