@@ -52,6 +52,8 @@ impl Tokenizer {
             ')' => self.add_token(TokenType::CloseParen),
             '{' => self.add_token(TokenType::OpenBrace),
             '}' => self.add_token(TokenType::CloseBrace),
+            '[' => self.add_token(TokenType::OpenSquareBracket),
+            ']' => self.add_token(TokenType::CloseSquareBracket),
             '@' => self.add_token(TokenType::AtMark),
             ':' => self.add_token(TokenType::Colon),
             ';' => self.add_token(TokenType::SemiColon),

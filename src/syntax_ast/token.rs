@@ -21,6 +21,7 @@ pub enum TokenType {
     TypeFloat, // a: float =
     TypeStr,   // a: string =
     TypeBool,  // a: bool =
+    TypeStruct,  // a: struct { 
     Null,      // null
 
     // 括弧とか文字とか
@@ -30,6 +31,8 @@ pub enum TokenType {
     CloseParen,  // )
     OpenBrace,   // {
     CloseBrace,  // }
+    OpenSquareBracket,    // [
+    CloseSquareBracket,   // ]
     AtMark,      // @
     Colon,       // :
     SemiColon,   // ;
@@ -97,6 +100,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "float" | "FLOAT" => Some(TypeFloat),
         "string" | "STRING" => Some(TypeStr),
         "bool" | "BOOL" => Some(TypeBool),
+        "struct" => Some(TypeStruct),
 
         "and" => Some(And),
         "or" => Some(Or),
