@@ -26,6 +26,8 @@ name = "isekai"
 version = "0.1.0"
 dependencies = [
  "compiler 0.1.0",
+ "report 0.1.0",
+ "syntax_ast 0.1.0",
 ]
 
 [[package]]

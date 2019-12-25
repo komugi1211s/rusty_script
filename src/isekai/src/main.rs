@@ -4,17 +4,14 @@
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-
 use syntax_ast::tokenizer::Tokenizer;
 use syntax_ast::parser::Parser;
 // use super::evaluate::Interpreter;
-use super::bytecode::{ BytecodeGenerator, disassemble_all };
-use super::report::{ ErrorReporter };
-use super::vm::VirtualMachine;
+use compiler::bytecode::{ BytecodeGenerator, disassemble_all };
+use compiler::vm::VirtualMachine;
+use report::{ ErrorReporter };
 // use self::error::*;
 use std::time::Instant;
-use std::io::prelude::*;
-use std::fs::File;
 
 #[cfg(target_os = "macos")]
 fn exit_process(success: bool) -> ! {

@@ -1,23 +1,27 @@
 // Declaration
 
+print "Declaration Testing.";
 a: int = 10;
 b: float = 1.5;
 c: string = "hello";
 d: bool = true;
 
 // Nullables
+print "Nullable Empty Declaration Testing.";
 an: int?;
 bn: float?;
 cn: string?;
 dn: bool?;
 
 // Inferred
+print "Inferred Declaration Testing.";
 ai := 10;
 bi := 1.5;
 ci := "hall";
 di := false;
 
 // Ordering / Eq
+print "Comparison Testing.";
 assert(true);
 assert(!false);
 assert(10 == 10);
@@ -25,6 +29,7 @@ assert(1.5 == 1.5);
 assert("hello" == "hello");
 assert(true == true);
 
+print "Ordering Comparison Testing.";
 assert(1 < 2);
 assert(-5 < 0);
 assert(1.3 < 2);
@@ -39,22 +44,69 @@ assert(1 >= 1);
 assert(1 <= 1);
 
 // Addition
+print "Arithmetic Testing.";
 assert((10 + 5) == 15);
 assert((1.0 + 5.3) == 6.3);
 assert(("hello" + "world") == "helloworld");
 
-bar: struct {
+test_func_noreturn_inferred_to_null:() {
 }
 
-foo: struct {
+test_func_emptyreturn_inferred_to_null: () {
+    return;
 }
 
-assert(bar{} != foo{});
-
-
-test_start: () {
-    print "\n";
+test_func_explicit_return_null: () {
+    return null;
 }
 
-test_start();
+returns_integer: int() {
+    return 10;
+}
 
+infer_return_integer: () {
+    return 5;
+}
+
+returns_float: float() {
+    return 10.5;
+}
+
+infer_return_float: () {
+    return 5.5;
+}
+
+returns_string: string() {
+    return "hello";
+}
+
+infer_return_string: () {
+    return "world";
+}
+
+returns_bool: bool() {
+    return true;
+}
+
+infer_return_bool: () {
+    return true;
+}
+
+
+print "empty return testing.";
+assert(test_func_noreturn_inferred_to_null() == null);
+assert(test_func_emptyreturn_inferred_to_null() == null);
+assert(test_func_explicit_return_null() == null);
+
+print "value return testing.";
+assert(returns_integer() == 10);
+assert(infer_return_integer() == 5);
+
+assert(returns_float() == 10.5);
+assert(infer_return_float() == 5.5);
+
+assert(returns_string() == "hello");
+assert(infer_return_string() == "world");
+
+assert(returns_bool() == true);
+assert(infer_return_bool() != false);

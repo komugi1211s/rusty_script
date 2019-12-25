@@ -1,5 +1,5 @@
 use syntax_ast::{
-    ast_data::{DeclarationData, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind },
+    ast_data::{DeclarationData, DeclKind, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind, Operator},
     token::TokenType,
 };
 
@@ -78,29 +78,31 @@ pub enum OpCode {
     DebugPrint = 0b1111_0001,
 }
 
-fn literal_to_builtin_value(lit: &Literal) -> Vec<u8> {
+fn literal_to_byte_array(lit: &Literal) -> Option<Vec<u8>> {
     match lit.kind {
         LiteralKind::Int => {
             let item = lit.tok.lexeme.parse::<i64>().unwrap();
-            i64::to_ne_bytes(item).to_vec()
+            Some(i64::to_ne_bytes(item).to_vec())
         }
         LiteralKind::Str => {
-            lit.tok.lexeme.as_bytes().collect::<Vec<u8>>()
+            Some(lit.tok.lexeme.as_bytes().to_vec())
         }
         LiteralKind::Float => {
             let item = lit.tok.lexeme.parse::<f64>().unwrap();
-            u64::to_ne_bytes(f64::to_bits(item)).to_vec()
+            Some(u64::to_ne_bytes(f64::to_bits(item)).to_vec())
         }
         LiteralKind::Bool => {
-            match lit.tok {
-                "true" => vec![1],
-                "false" => vec![0],
+            match lit.tok.lexeme.as_str() {
+                "true" => Some(vec![1]),
+                "false" => Some(vec![0]),
+                _=> unreachable!(),
             }
         }
-        LiteralKind::Null => vec![]
+        LiteralKind::Null => None
     }
 }
 
+// TODO - @DumbCode: なんでConst系統じゃないといけないのにNullが入っているのか
 fn type_to_const_opcode(ty: &Type) -> OpCode {
     match ty.kind {
         TypeKind::Int | TypeKind::Float => OpCode::Const64,
@@ -459,7 +461,7 @@ impl BytecodeGenerator {
         }
         let entry_point = self.code.current_length();
         for i in ast.statements {
-            self.handle_stmt(i.value, i.line);
+            self.handle_stmt(i.value, i.span.start);
         }
         self.const_table.push_data(usize::max_value().to_ne_bytes().to_vec());
         let bytechunk = ByteChunk {
@@ -470,6 +472,7 @@ impl BytecodeGenerator {
         };
         Ok(bytechunk)
     }
+
 
     fn find_local(&self, name: &String) -> (bool, usize) {
         let is_exist = self.current_define.iter().position(|x| &x.1 == name);
@@ -488,7 +491,7 @@ impl BytecodeGenerator {
         let decl_info = function.it;
         let body_block = function.block;
         let return_type = { 
-            let mut x = decl_info._type;
+            let mut x = decl_info.dectype;
             x.option.remove(TypeOption::Func);
             x
         };
@@ -504,7 +507,7 @@ impl BytecodeGenerator {
         let arg_count = _arguments.len();
 
         // 関数自体の戻り値をグローバルに定義しておく
-        self.global_define.push((decl_info._type, decl_info.name.clone()));
+        self.global_define.push((decl_info.dectype, decl_info.name.clone()));
         let idx = self.global_define.len() - 1;
         
         // 現在のコードセクションとローカルセクションを保存し、
@@ -517,7 +520,7 @@ impl BytecodeGenerator {
         self.current_block += 1;
         let mut argument_types = Vec::new();
         for arg_decl_info in _arguments {
-            let arg_type = arg_decl_info._type;
+            let arg_type = arg_decl_info.dectype;
             argument_types.push(arg_type);
             self.handle_declaration_data(&mut placeholder, arg_decl_info);
         }
@@ -544,7 +547,7 @@ impl BytecodeGenerator {
                         actually_returned = true;
                     } else {
                         if return_type != dtype {
-                            panic!("Return type does not match! expected {:?}, got {:?}", decl_info._type, dtype);
+                            panic!("Return type does not match! expected {:?}, got {:?}", decl_info.dectype, dtype);
                         }
                         actually_returned = true;
                     }
@@ -740,14 +743,14 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, mut info: DeclarationData) {
+    fn handle_declaration_data(&mut self, out: &mut StatementHandleResult, mut decl: DeclarationData) {
         let mut value_index = 0;
         let mut actual_type = Type::default();
 
-        let name = info.name.clone();
-        let mut declared_type = info._type;
+        let name = decl.name.clone();
+        let mut declared_type = decl.dectype;
         let mut empty_expr = false;
-        let expression = info.expr.take();
+        let expression = decl.expr.take();
 
         match expression {
             Some(expr) => {
@@ -758,7 +761,7 @@ impl BytecodeGenerator {
             }
             None => {
                 empty_expr = true;
-                if !info.is_argument {
+                if decl.kind != DeclKind::Argument {
                     value_index = self.code.write_null(out.line)
                 }
             }
@@ -782,17 +785,17 @@ impl BytecodeGenerator {
                     if decl.is_nullable {
                         // Initializing Nullable variable with null.
                         // Fall Through.
-                    } else if decl.is_argument {
+                    } else if decl.kind == DeclKind::Argument {
                         // It's not really initializing it. not much of a problem.
                         // Fall through.
                     } else {
                         panic!("an attempt to initialize non-nullable variable with null");
                     }
 
-                    return decl._type;
+                    return decl.dectype;
                 } else {
-                    if decl._type != given_type {
-                        panic!("Type mismatch! {:?} != {:?}", decl._type, given_type);
+                    if decl.dectype != given_type {
+                        panic!("Type mismatch! {:?} != {:?}", decl.dectype, given_type);
                     }
 
                     return given_type;
@@ -800,7 +803,7 @@ impl BytecodeGenerator {
             }
         }
 
-        declared_type = decide_actual_type(&info, &actual_type);
+        declared_type = decide_actual_type(&decl, &actual_type);
 
         // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.current_block > 0 {
@@ -811,7 +814,7 @@ impl BytecodeGenerator {
             }
 
             self.current_define.push((declared_type, name));
-            if info.is_argument {
+            if decl.kind == DeclKind::Argument {
                 out.index = self.code.current_length();
             } else {
                 let position = self.current_define.len() - 1;
@@ -878,9 +881,15 @@ impl BytecodeGenerator {
         lit: Literal,
         line: usize,
     ) {
+        println!("{:?}", &lit);
         let _type = typecheck::literal_to_type(&lit);
+        if _type.kind == TypeKind::Null {
+            out._type = _type;
+            out.index = self.code.write_null(line);
+            return;
+        }
         let opcode = type_to_const_opcode(&_type);
-        let value = literal_to_builtin_value(&lit);
+        let value = literal_to_byte_array(&lit).unwrap();
         let length = value.len();
 
         let start_index = if opcode == OpCode::ConstDyn {
@@ -950,24 +959,24 @@ impl BytecodeGenerator {
                 let right = self.handle_expr(*right, line);
 
                 handled_result._type =
-                    typecheck::type_after_binary(&left._type, &right._type, &operator.tokentype)
+                    typecheck::type_after_binary(&left._type, &right._type, operator)
                         .unwrap();
-                handled_result.index = match operator.tokentype {
-                    TokenType::Plus => self.code.push_opcode(OpCode::Add, line),
-                    TokenType::Minus => self.code.push_opcode(OpCode::Sub, line),
-                    TokenType::Asterisk => self.code.push_opcode(OpCode::Mul, line),
-                    TokenType::Slash => self.code.push_opcode(OpCode::Div, line),
-                    TokenType::Percent => self.code.push_opcode(OpCode::Mod, line),
+                handled_result.index = match operator {
+                    Operator::Add => self.code.push_opcode(OpCode::Add, line),
+                    Operator::Sub => self.code.push_opcode(OpCode::Sub, line),
+                    Operator::Mul => self.code.push_opcode(OpCode::Mul, line),
+                    Operator::Div => self.code.push_opcode(OpCode::Div, line),
+                    Operator::Mod => self.code.push_opcode(OpCode::Mod, line),
 
                     // PartialEq Series
-                    TokenType::NotEqual => self.code.push_opcode(OpCode::NotEq, line),
-                    TokenType::EqualEqual => self.code.push_opcode(OpCode::EqEq, line),
+                    Operator::NotEq => self.code.push_opcode(OpCode::NotEq, line),
+                    Operator::EqEq => self.code.push_opcode(OpCode::EqEq, line),
 
                     // PartialOrd Series
-                    TokenType::LessEqual => self.code.push_opcode(OpCode::LessEq, line),
-                    TokenType::MoreEqual => self.code.push_opcode(OpCode::MoreEq, line),
-                    TokenType::Less => self.code.push_opcode(OpCode::Less, line),
-                    TokenType::More => self.code.push_opcode(OpCode::More, line),
+                    Operator::LessEq => self.code.push_opcode(OpCode::LessEq, line),
+                    Operator::MoreEq => self.code.push_opcode(OpCode::MoreEq, line),
+                    Operator::Less => self.code.push_opcode(OpCode::Less, line),
+                    Operator::More => self.code.push_opcode(OpCode::More, line),
                     _ => unreachable!(),
                 };
                 handled_result
@@ -976,9 +985,9 @@ impl BytecodeGenerator {
                 self.handle_expr(*left, line);
                 self.handle_expr(*right, line);
 
-                handled_result.index = match operator.tokentype {
-                    TokenType::And => self.code.push_opcode(OpCode::And, line),
-                    TokenType::Or => self.code.push_opcode(OpCode::Or, line),
+                handled_result.index = match operator {
+                    Operator::And => self.code.push_opcode(OpCode::And, line),
+                    Operator::Or => self.code.push_opcode(OpCode::Or, line),
                     _ => unreachable!(),
                 };
                 handled_result._type = Type::boolean();
@@ -987,10 +996,10 @@ impl BytecodeGenerator {
             Expr::Unary(expr, operator) => {
                 let another_result = self.handle_expr(*expr, line);
                 handled_result._type =
-                    typecheck::type_after_unary(&another_result._type, &operator.tokentype).unwrap();
-                handled_result.index = match operator.tokentype {
-                    TokenType::Bang => self.code.push_opcode(OpCode::Not, line),
-                    TokenType::Minus => self.code.push_opcode(OpCode::Neg, line),
+                    typecheck::type_after_unary(&another_result._type, operator).unwrap();
+                handled_result.index = match operator {
+                    Operator::Not => self.code.push_opcode(OpCode::Not, line),
+                    Operator::Neg => self.code.push_opcode(OpCode::Neg, line),
                     _ => unreachable!(),
                 };
                 handled_result._type = another_result._type;
@@ -1041,7 +1050,7 @@ impl BytecodeGenerator {
                 handled_result.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), line);
                 handled_result
             }
-            Expr::FunctionCall(func_name, _open_paren, mut arguments) => {
+            Expr::FunctionCall(func_name, mut arguments) => {
                 if let Expr::Variable(name) = *func_name {
                     
                     let (exists, position) = self.find_global(&name);

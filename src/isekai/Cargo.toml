@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 compiler = { path = "../compiler" }
+syntax_ast = { path = "../syntax_ast" }
+report = { path = "../report" }

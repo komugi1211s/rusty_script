@@ -1,5 +1,5 @@
 
-use types::{ Type, TypeKind, TypeOption };
+use types::types::{ Type, TypeKind, TypeOption };
 use syntax_ast::ast_data::*;
 
 
@@ -14,7 +14,7 @@ pub fn literal_to_type(lit: &Literal) -> Type {
 }
 
 
-pub fn type_after_binary(a: &Type, b: &Type, oper: Oper) -> Result<Type, ()> {
+pub fn type_after_binary(a: &Type, b: &Type, oper: Operator) -> Result<Type, ()> {
     let a = a.kind;
     let b = b.kind;
     match oper {

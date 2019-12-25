@@ -200,7 +200,7 @@ impl<'tok> Parser<'tok> {
             dectype: Type::default(),
             is_const: false,
             is_nullable: false,
-            is_inferred: false,
+            is_inferred: true,
             expr: None,
         };
 
@@ -413,6 +413,7 @@ impl<'tok> Parser<'tok> {
                 More => Operator::More,
                 _ => break,
             };
+            self.advance();
 
             let right = self.addition()?;
             start = Expr::Binary(Box::new(start), Box::new(right), operator);
@@ -464,6 +465,7 @@ impl<'tok> Parser<'tok> {
                 TokenType::Minus => Operator::Neg,
                 _ => unreachable!(),
             };
+            self.advance();
             let right = self.unary()?;
             let unary = Expr::Unary(Box::new(right), operator);
 

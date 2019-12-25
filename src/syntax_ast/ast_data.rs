@@ -140,7 +140,7 @@ impl Operator {
     pub fn is_logic(&self) -> bool {
         use Operator::*;
         match self {
-            And | Or  | Not => true,
+            And | Or | Not => true,
             EqEq | NotEq | LessEq | MoreEq | Less | More
             | Add | Sub | Div | Mul | Mod
             | Neg | Asgn => false,
