@@ -1,4 +1,4 @@
-use report::Error;
+use trace::Error;
 
 use super::{
     ast_data::{

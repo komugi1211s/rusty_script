@@ -42,8 +42,8 @@ name = "isekai"
 version = "0.1.0"
 dependencies = [
  "compiler 0.1.0",
- "report 0.1.0",
  "syntax_ast 0.1.0",
+ "trace 0.1.0",
 ]
 
 [[package]]
@@ -81,10 +81,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "report"
-version = "0.1.0"
-
-[[package]]
 name = "serde"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -117,9 +113,13 @@ name = "syntax_ast"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "report 0.1.0",
+ "trace 0.1.0",
  "types 0.1.0",
 ]
+
+[[package]]
+name = "trace"
+version = "0.1.0"
 
 [[package]]
 name = "types"

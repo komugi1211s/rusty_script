@@ -9,7 +9,7 @@ use syntax_ast::parser::Parser;
 // use super::evaluate::Interpreter;
 use compiler::bytecode::{ BytecodeGenerator, disassemble_all };
 use compiler::vm::VirtualMachine;
-use report::{ ErrorReporter };
+use trace::{ ErrorReporter };
 // use self::error::*;
 use std::time::Instant;
 

@@ -13,4 +13,4 @@ path = "lib.rs"
 [dependencies]
 bitflags = "*"
 types = { path = "../types" }
-report = { path = "../report" }
+trace = { path = "../trace" }

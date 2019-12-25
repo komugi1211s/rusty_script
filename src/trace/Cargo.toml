@@ -1,12 +1,12 @@
 [package]
-name = "report"
+name = "trace"
 version = "0.1.0"
 authors = ["fuzzyperson@home <5960126+Clutetot@users.noreply.github.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "report"
+name = "trace"
 path = "lib.rs"
 
 [dependencies]
