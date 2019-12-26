@@ -41,6 +41,9 @@ pub struct DeclarationData {
     pub kind: DeclKind,
     pub name: String,
     pub dectype: Type,
+
+    // TODO - @Improvement: const, nullable, inferred は共存できない（どれか１つだけ有効化出来る）
+    // 専用のフラグかステータスを作るべきだと思う
     pub is_const: bool,
     pub is_nullable: bool,
     pub is_inferred: bool,

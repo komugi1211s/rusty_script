@@ -1,4 +1,44 @@
 use std::str::Lines;
+/*
+
+    Tokenizer
+    make...
+
+    self.current_line = 15;
+    self.end_line = 16;
+    Token {
+        span: CodeSpan::new(self.current_line, self.end_line);
+    }
+
+    then when error happens...
+    if err {
+        TraceBuilder::error(ErrorKind::TokenizerError)
+            .message("Tokenizer knows what's up")
+            .caused_at(span)
+            .related_info(error)
+            .build()?;
+    }
+
+    this would result to...
+    TokenizerError: Tokenizer knows what's up.
+    14  | ...
+    15!!| ... .., ...
+    16!!| ... ...... .. .. . . . ...
+    17  | .. .. . . ...
+
+    Error related info provided:
+    XXXXX...
+
+    XX  |
+    XX  |
+    XX!!|
+    XX  |
+
+*/
+
+pub struct TraceBuilder {
+
+}
 
 pub struct Error {
     pub kind: ErrorKind,
