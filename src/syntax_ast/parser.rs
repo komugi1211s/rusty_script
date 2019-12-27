@@ -204,24 +204,11 @@ impl<'tok> Parser<'tok> {
             expr: None,
         };
 
-        fn from_tokentype(tty: &TokenType) -> Type {
-            match tty {
-                TokenType::TypeAny => Type::default(),
-                TokenType::TypeBool => Type::boolean(),
-                TokenType::TypeFloat => Type::float(),
-                TokenType::TypeInt => Type::int(),
-                TokenType::TypeStr => Type::string(),
-                // This SHould not work.
-                _ => Type::default(),
-            }
-        }
+        let type_candidate = self.get_current().lexeme.as_str();
+        if let Some(primitive) = Type::primitive_from_str(type_candidate) {
+            let is_all_uppercase = type_candidate.to_ascii_uppercase() == String::from(type_candidate);
 
-        if TokenType::is_typekind(&self.get_current().tokentype) {
-            let type_token = self.advance();
-            let mut dtype = from_tokentype(&type_token.tokentype);
-            let is_all_uppercase = type_token.lexeme.as_str().to_ascii_uppercase() == type_token.lexeme;
-
-            decl_data.dectype = dtype;
+            decl_data.dectype = primitive;
             decl_data.is_inferred = false;
 
             if is_all_uppercase {
@@ -231,7 +218,6 @@ impl<'tok> Parser<'tok> {
             if self.consume(TokenType::Question).is_ok() {
                 decl_data.is_nullable = true;
             }
-
         }
         return Ok(decl_data);
     }

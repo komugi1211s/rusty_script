@@ -80,6 +80,7 @@ impl Type {
         }
     }
 
+    // TODO - @Cleanup: Obsolete
     pub fn is_compatible(self, v: &Value) -> bool {
         if v == &Value::Null {
             true
@@ -90,7 +91,15 @@ impl Type {
         }
     }
 
-
+    pub fn primitive_from_str(cand: &str) -> Option<Self> {
+        match cand {
+            "int"    | "INT"    => Some(Self::int()),
+            "float"  | "FLOAT"  => Some(Self::float()),
+            "string" | "STRING" => Some(Self::string()),
+            "bool"   | "BOOL"   => Some(Self::boolean()),
+            _ => None
+        }
+    }
 }
 
 

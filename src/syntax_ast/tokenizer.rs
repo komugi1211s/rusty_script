@@ -172,7 +172,7 @@ impl Tokenizer {
         // start + 1 & current - 1 は "" ←これを削る
         self.start += 1;
         self.current -= 1;
-        let z = self.add_token(TokenType::Str);
+        let z = self.add_lexed(TokenType::Str);
         // もとに戻す
         self.start -= 1;
         self.current += 1;
@@ -215,7 +215,7 @@ impl Tokenizer {
             }
         }
 
-        self.add_token(TokenType::Digit)
+        self.add_lexed(TokenType::Digit)
     }
 
     fn add_possible_iden(&mut self) -> Result<(), Error> {
@@ -226,9 +226,9 @@ impl Tokenizer {
 
         let possible_result = match_identity(&stri);
         if possible_result.is_none() {
-            self.add_token(TokenType::Iden)
+            self.add_lexed(TokenType::Iden)
         } else {
-            self.add_token(possible_result.unwrap())
+            self.add_simple(possible_result.unwrap())
         }
     }
 
@@ -238,18 +238,108 @@ impl Tokenizer {
         self.source[self.current - 1]
     }
 
-    fn add_token(&mut self, tokentype: TokenType) -> Result<(), Error> {
-        let string: String = self.source[self.start..self.current].iter().collect();
-
-        self.tokens.push(Token::new(
+    fn add_simple(&mut self, tokentype: TokenType) -> Result<(), Error> {
+        self.tokens.push(Token::simple(
             tokentype,
             self.line,
-            string,
+        ));
+        Ok(())
+    }
+
+    fn add_lexed(&mut self, tokentype: TokenType) -> Result<(), Error> {
+        let string: String = self.source[self.start..self.current].iter().collect();
+
+        self.tokens.push(Token::lexed(
+            tokentype,
+            self.line,
+            lexeme: Some(string),
         ));
         Ok(())
     }
 
     fn is_at_end(&self) -> bool {
         self.source.len() <= self.current
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    fn assert_lexed_token(token: &Token, requiretype: TokenType, requirelex: &str) {
+        assert_eq!(token.tokentype, requiretype);
+        assert!(token.lexeme.is_some());
+        assert_eq!(token.lexeme.unwrap().as_str(), requirelex);
+    }
+
+    fn assert_simple_token(token: &Token, requiretype: TokenType) {
+        assert_eq!(token.tokentype, requiretype);
+        assert!(token.lexeme.is_none());
+    }
+
+    #[test]
+    fn tokenizer_arithmetic() {
+        let code = "10 + 2 - 5.2 * 10 / 12 % 9";
+        let result = Tokenizer::new(code).scan();
+
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+
+        assert_eq!(tokens.len(), 9);
+
+        assert_lexed_token(&tokens[0], TokenType::Digit, "10");
+        assert_simple_token(&tokens[1], TokenType::Plus);
+        assert_lexed_token(&tokens[0], TokenType::Digit, "2");
+        assert_simple_token(&tokens[0], TokenType::Minus);
+        assert_lexed_token(&tokens[0], TokenType::Digit, "5.2");
+        assert_simple_token(&tokens[0], TokenType::Asterisk);
+        assert_lexed_token(&tokens[0], TokenType::Digit, "10");
+        assert_simple_token(&tokens[0], TokenType::Slash);
+        assert_lexed_token(&tokens[0], TokenType::Digit, "12");
+        assert_simple_token(&tokens[0], TokenType::Percent);
+        assert_lexed_token(&tokens[0], TokenType::Digit, "9");
+    }
+
+    #[test]
+    fn tokenize_string() {
+        let correct = r#" "Hello World." "#;
+
+        let correct_result = Tokenizer::new(correct).scan();
+        assert!(correct_result.is_ok());
+
+        let correct_vec = correct_result.unwrap();
+        assert_eq!(correct_vec.len(), 1);
+        assert_lexed_token(&correct_vec[0], TokenType::Str, "Hello World.");
+    }
+
+    #[test]
+    fn ignore_comments() {
+        let only_comment = "// Oh Hey mark.";
+        let result = Tokenizer::new(only_comment).scan();
+        assert!(invalid_result.is_ok());
+        assert_eq!(invalid_result.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn ignore_block_comments() {
+        let only_comment = "/* Hello there */ /* general reposti */";
+        let result = Tokenizer::new(only_comment).scan();
+        assert!(invalid_result.is_ok());
+        assert_eq!(invalid_result.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn reject_unterminated_string() {
+        let invalid = r#" "This string is unterminated "#;
+        let invalid_result = Tokenizer::new(invalid).scan();
+        assert!(invalid_result.is_err());
+    }
+
+    #[test]
+    fn reject_unknown_char() {
+        let unknown = "🌔";
+        let invalid_result = Tokenizer::new(unknown).scan();
+        assert!(invalid_result.is_err());
     }
 }

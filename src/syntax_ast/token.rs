@@ -15,7 +15,7 @@ pub enum TokenType {
     Print,  // print "message"
     Return, // return "";
 
-    // TODO: Remove TypeVoid
+    // TODO - @Cleanup: Obsolete
     TypeAny,   // a: any = ...
     TypeInt,   // a: int =
     TypeFloat, // a: float =
@@ -59,7 +59,7 @@ pub enum TokenType {
     // Slash, <- 既に上の方で定義済み
     Percent, // %
 
-    // 概念
+    // 概念 ( 基本Lexedじゃないと駄目 )
     Str,
     Iden,
     Digit,
@@ -67,6 +67,7 @@ pub enum TokenType {
 }
 
 impl TokenType {
+    // TODO - @Cleanup: Obsolete
     pub fn is_typekind(given: &TokenType) -> bool {
         match given {
             TokenType::TypeAny => true,
@@ -95,6 +96,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "false" => Some(False),
         "null" => Some(Null),
 
+        // TODO - @Cleanup: Obsolete, These are an identity
         "any" | "ANY" => Some(TypeAny),
         "int" | "INT" => Some(TypeInt),
         "float" | "FLOAT" => Some(TypeFloat),
@@ -111,18 +113,29 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub tokentype: TokenType,
+    // TODO - @Improvement: Replace it with trace::CodeSpan
     pub line: usize,
-    pub lexeme: String,
+    pub lexeme: Option<String>,
 }
 
 impl Token {
-    pub fn new(tokentype: TokenType, line: usize, lexeme: String) -> Self {
-        let lexeme = lexeme;
+    pub fn simple(tokentype: TokenType, line: usize) -> Self {
         Token {
             tokentype,
             line,
-            lexeme,
+            lexeme: None,
         }
+    }
+    pub fn lexed(tokentype: TokenType, line: usize, lexeme: String) -> Self {
+        Token {
+            tokentype,
+            line,
+            lexeme: Some(lexeme),
+        }
+    }
+
+    pub fn is_simple(&self) -> bool {
+        self.lexeme.is_none()
     }
 }
 

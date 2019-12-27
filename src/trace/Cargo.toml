@@ -10,3 +10,4 @@ name = "trace"
 path = "lib.rs"
 
 [dependencies]
+log = "0.4"

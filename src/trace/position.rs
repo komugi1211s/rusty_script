@@ -2,9 +2,9 @@
 use std::cmp;
 use std::mem;
 
-pub struct SpanMap {
 
-}
+// 意図的にInvalidなスパンを作ってそれをEmptyとして使う
+const EMTPY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
 
 
 // ソースコード内で特定の範囲を指定するStruct
@@ -16,8 +16,10 @@ pub struct CodeSpan {
     pub end: u32,
 }
 
+
 impl CodeSpan {
     pub fn new(mut st: usize, mut en: usize) -> Self {
+        // NOTE - @Improvement: 意図的な挙動でないので危険かも知れないのでは
         if st > en {
             mem::swap(&mut st, &mut en);
         }
@@ -63,6 +65,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_force_swap() {
+        let start: usize = 5;
+        let end: usize = 15;
+        let invalid = CodeSpan::new(end, start);
+
+        assert_eq!(invalid.start, start);
+        assert_eq!(invalid.end, end);
+    }
+
+    #[test]
     fn test_contains() {
         let parent = CodeSpan::new(0, 10);
         let child = CodeSpan::new(1, 9);
@@ -82,6 +94,16 @@ mod tests {
         let faraway = CodeSpan::new(0, 5);
         let independent = CodeSpan::new(50, 90);
         assert_eq!(faraway.intersects(&independent), false);
+    }
+
+    #[test]
+    fn test_combine() {
+        let a = CodeSpan::new(0, 10);
+        let b = CodeSpan::new(5, 15);
+
+        let combined = CodeSpan::combine(&a, &b);
+        assert_eq!(combined.start, a.start);
+        assert_eq!(combined.end, b.end);
     }
 }
 

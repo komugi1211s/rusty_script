@@ -1,4 +1,8 @@
+
+pub use log::{info, trace, warn};
+use log;
 use std::str::Lines;
+
 /*
 
     Tokenizer
@@ -35,10 +39,6 @@ use std::str::Lines;
     XX  |
 
 */
-
-pub struct TraceBuilder {
-
-}
 
 pub struct Error {
     pub kind: ErrorKind,
@@ -112,3 +112,16 @@ impl<'a> ErrorReporter<'a> {
         println!("\x1b[36m{}|{}\x1b[0m", err.line + 1, self.contexts[err.line + 1]);
     }
 }
+
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, meta: &log::Metadata) -> bool {
+        meta.level() <= log::Level::Trace
+    }
+
+    fn log(&self, record: &log::Record) {
+    }
+}
+
+
