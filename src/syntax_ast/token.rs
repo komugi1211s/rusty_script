@@ -61,8 +61,8 @@ pub enum TokenType {
 
     // 概念 ( 基本Lexedじゃないと駄目 )
     Str,
-    Iden,
-    Digit,
+    Iden { is_reserved: bool },
+    Digit { has_decimal_point: bool },
     EOF,
 }
 

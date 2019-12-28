@@ -219,6 +219,7 @@ impl<'tok> Parser<'tok> {
             }
             return Ok(decl_data);
         } else {
+            println!("Token {:?}", self.get_current());
             unreachable!();
         }
     }

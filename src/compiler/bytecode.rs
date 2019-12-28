@@ -79,20 +79,21 @@ pub enum OpCode {
 }
 
 fn literal_to_byte_array(lit: &Literal) -> Option<Vec<u8>> {
+    let string_ = lit.tok.lexeme.as_ref().unwrap();
     match lit.kind {
         LiteralKind::Int => {
-            let item = lit.tok.lexeme.parse::<i64>().unwrap();
+            let item = string_.parse::<i64>().unwrap();
             Some(i64::to_ne_bytes(item).to_vec())
         }
         LiteralKind::Str => {
-            Some(lit.tok.lexeme.as_bytes().to_vec())
+            Some(string_.as_bytes().to_vec())
         }
         LiteralKind::Float => {
-            let item = lit.tok.lexeme.parse::<f64>().unwrap();
+            let item = string_.parse::<f64>().unwrap();
             Some(u64::to_ne_bytes(f64::to_bits(item)).to_vec())
         }
         LiteralKind::Bool => {
-            match lit.tok.lexeme.as_str() {
+            match string_.as_str() {
                 "true" => Some(vec![1]),
                 "false" => Some(vec![0]),
                 _=> unreachable!(),

@@ -270,7 +270,7 @@ mod tests {
     fn assert_lexed_token(token: &Token, requiretype: TokenType, requirelex: &str) {
         assert_eq!(token.tokentype, requiretype);
         assert!(token.lexeme.is_some());
-        assert_eq!(token.lexeme.unwrap().as_str(), requirelex);
+        assert_eq!(token.lexeme.as_ref().unwrap().as_str(), requirelex);
     }
 
     fn assert_simple_token(token: &Token, requiretype: TokenType) {
@@ -286,7 +286,7 @@ mod tests {
         assert!(result.is_ok());
         let tokens = result.unwrap();
 
-        assert_eq!(tokens.len(), 9);
+        assert_eq!(tokens.len(), 10);
 
         assert_lexed_token(&tokens[0], TokenType::Digit, "10");
         assert_simple_token(&tokens[1], TokenType::Plus);
@@ -309,24 +309,23 @@ mod tests {
         assert!(correct_result.is_ok());
 
         let correct_vec = correct_result.unwrap();
-        assert_eq!(correct_vec.len(), 1);
+        assert_eq!(correct_vec.len(), 2);
         assert_lexed_token(&correct_vec[0], TokenType::Str, "Hello World.");
     }
 
     #[test]
     fn ignore_comments() {
-        let only_comment = "// Oh Hey mark.";
-        let result = Tokenizer::new(only_comment).scan();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 0);
+        let only_comment = r"// Oh Hey mark.";
+        let result = Tokenizer::new(only_comment).scan().unwrap();
+        println!("{:?}", result);
+        assert_eq!(result.len(), 1);
     }
 
     #[test]
     fn ignore_block_comments() {
-        let only_comment = "/* Hello there */ /* general reposti */";
-        let result = Tokenizer::new(only_comment).scan();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 0);
+        let only_comment = r"/* Hello there */ /* general reposti */";
+        let result = Tokenizer::new(only_comment).scan().unwrap();
+        assert_eq!(result.len(), 1);
     }
 
     #[test]
