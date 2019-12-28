@@ -200,28 +200,27 @@ impl<'tok> Parser<'tok> {
             expr: None,
         };
 
-        if let Some(ref lexeme) = self.get_current().lexeme {
-            let type_candidate = lexeme.as_str();
-            if let Some(primitive) = Type::primitive_from_str(type_candidate) {
+        let Token { tokentype, line, lexeme } = self.get_current().clone();
+        match tokentype {
+            TokenType::Iden => {
+                self.advance();
+                let type_candidate = lexeme.unwrap();
                 let is_all_uppercase =
-                    type_candidate.to_ascii_uppercase() == String::from(type_candidate);
+                    type_candidate.as_str().to_ascii_uppercase() == type_candidate;
 
-                decl_data.dectype = primitive;
+                decl_data.is_const = is_all_uppercase;
+                decl_data.is_nullable = self.consume(TokenType::Question).is_ok();
                 decl_data.is_inferred = false;
-
-                if is_all_uppercase {
-                    decl_data.is_const = true;
-                }
-
-                if self.consume(TokenType::Question).is_ok() {
-                    decl_data.is_nullable = true;
+                decl_data.dectype = if let Some(primitive) = Type::primitive_from_str(&type_candidate) {
+                    primitive
+                } else {
+                    Type { kind: TypeKind::UserDef, option: Default::default() }
                 }
             }
-            return Ok(decl_data);
-        } else {
-            println!("Token {:?}", self.get_current());
-            unreachable!();
-        }
+            _ => (), // Inferred;
+        };
+
+        Ok(decl_data)
     }
 
     fn declare_argument(&mut self) -> Result<Vec<DeclarationData>, Error> {
@@ -554,19 +553,9 @@ impl<'tok> Parser<'tok> {
         let inside = self.advance();
         use TokenType::*;
         let result = match &inside.tokentype {
-            False | True => {
-                let lit = Literal::new_bool(inside);
-                Ok(Expr::Literal(lit))
-            }
-            Null => {
-                let lit = Literal::new_null(inside);
-                Ok(Expr::Literal(lit))
-            }
             Digit => {
                 let inside_lexeme = inside.lexeme.clone().unwrap();
-
                 let contain_dot = inside_lexeme.contains(".");
-
                 let literal = if contain_dot {
                     Literal::new_float(inside)
                 } else {
@@ -581,18 +570,30 @@ impl<'tok> Parser<'tok> {
             }
             Iden => {
                 if let Some(ref inside_lexeme) = inside.lexeme {
-                    if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
-                        let formatted = format!(
-                            "Identifier maximum length exceeded: {}, max length is {}",
-                            inside_lexeme.len(),
-                            MAX_IDENTIFIER_LENGTH
-                        );
-                        return Err(Error::new_while_parsing(
-                            formatted.as_str(),
-                            self.current_line,
-                        ));
+                    match inside_lexeme.as_str() {
+                        "true" | "false" => {
+                            let lit = Literal::new_bool(inside);
+                            Ok(Expr::Literal(lit))
+                        }
+                        "null" => {
+                            let lit = Literal::new_null(inside);
+                            Ok(Expr::Literal(lit))
+                        }
+                        _ => {
+                            if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
+                                let formatted = format!(
+                                    "Identifier maximum length exceeded: {}, max length is {}",
+                                    inside_lexeme.len(),
+                                    MAX_IDENTIFIER_LENGTH
+                                );
+                                return Err(Error::new_while_parsing(
+                                    formatted.as_str(),
+                                    self.current_line,
+                                ));
+                            }
+                            Ok(Expr::Variable(inside_lexeme.to_owned()))
+                        }
                     }
-                    Ok(Expr::Variable(inside_lexeme.to_owned()))
                 } else {
                     unreachable!();
                 }

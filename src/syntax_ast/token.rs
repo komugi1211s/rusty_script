@@ -10,19 +10,19 @@ pub enum TokenType {
     Break,    // break;
     Continue, // continue;
 
-    True,   // true
-    False,  // false
     Print,  // print "message"
     Return, // return "";
+    // True,   // true
+    // False,  // false
 
     // TODO - @Cleanup: Obsolete
-    TypeAny,   // a: any = ...
-    TypeInt,   // a: int =
-    TypeFloat, // a: float =
-    TypeStr,   // a: string =
-    TypeBool,  // a: bool =
-    TypeStruct,  // a: struct { 
-    Null,      // null
+    // TypeAny,   // a: any = ...
+    // TypeInt,   // a: int =
+    // TypeFloat, // a: float =
+    // TypeStr,   // a: string =
+    // TypeBool,  // a: bool =
+    // TypeStruct,  // a: struct {
+    // Null,      // null
 
     // 括弧とか文字とか
     DoubleQuote, // ""
@@ -61,24 +61,11 @@ pub enum TokenType {
 
     // 概念 ( 基本Lexedじゃないと駄目 )
     Str,
-    Iden { is_reserved: bool },
-    Digit { has_decimal_point: bool },
+    Iden,
+    Digit,
     EOF,
 }
 
-impl TokenType {
-    // TODO - @Cleanup: Obsolete
-    pub fn is_typekind(given: &TokenType) -> bool {
-        match given {
-            TokenType::TypeAny => true,
-            TokenType::TypeInt => true,
-            TokenType::TypeFloat => true,
-            TokenType::TypeBool => true,
-            TokenType::TypeStr => true,
-            _ => false,
-        }
-    }
-}
 
 pub fn match_identity(keywords: &str) -> Option<TokenType> {
     use TokenType::*;
@@ -92,17 +79,17 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "continue" => Some(Continue),
         "return" => Some(Return),
 
-        "true" => Some(True),
-        "false" => Some(False),
-        "null" => Some(Null),
+        // "true" => Some(True),
+        // "false" => Some(False),
+        // "null" => Some(Null),
 
         // TODO - @Cleanup: Obsolete, These are an identity
-        "any" | "ANY" => Some(TypeAny),
-        "int" | "INT" => Some(TypeInt),
-        "float" | "FLOAT" => Some(TypeFloat),
-        "string" | "STRING" => Some(TypeStr),
-        "bool" | "BOOL" => Some(TypeBool),
-        "struct" => Some(TypeStruct),
+        // "any" | "ANY" => Some(TypeAny),
+        // "int" | "INT" => Some(TypeInt),
+        // "float" | "FLOAT" => Some(TypeFloat),
+        // "string" | "STRING" => Some(TypeStr),
+        // "bool" | "BOOL" => Some(TypeBool),
+        // "struct" => Some(TypeStruct),
 
         "and" => Some(And),
         "or" => Some(Or),

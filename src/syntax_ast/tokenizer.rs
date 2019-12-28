@@ -317,7 +317,6 @@ mod tests {
     fn ignore_comments() {
         let only_comment = r"// Oh Hey mark.";
         let result = Tokenizer::new(only_comment).scan().unwrap();
-        println!("{:?}", result);
         assert_eq!(result.len(), 1);
     }
 

@@ -882,7 +882,6 @@ impl BytecodeGenerator {
         lit: Literal,
         line: usize,
     ) {
-        println!("{:?}", &lit);
         let _type = typecheck::literal_to_type(&lit);
         if _type.kind == TypeKind::Null {
             out._type = _type;
