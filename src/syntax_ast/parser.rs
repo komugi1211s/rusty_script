@@ -2,22 +2,13 @@ use trace::Error;
 
 use super::{
     ast_data::{
-        BlockData,
-        DeclarationData,
-        Expr,
-        FunctionData,
-        StatementNode,
-        ParsedResult, 
-        Statement,
-        Operator,
-        Literal,
-        DeclKind,
-        CodeSpan
+        BlockData, CodeSpan, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
+        ParsedResult, Statement, StatementNode,
     },
-    token::{ Token, TokenType },
+    token::{Token, TokenType},
 };
 
-use types::types::{ Type, TypeKind, TypeOption };
+use types::types::{Type, TypeKind, TypeOption};
 
 // TODO:
 // All clone call to a lifetime management
@@ -55,7 +46,10 @@ impl<'tok> Parser<'tok> {
     pub fn new(_tok: &'tok Vec<Token>) -> Self {
         Self {
             tokens: _tok,
-            parsed_result: ParsedResult { functions: vec![], statements: vec![] },
+            parsed_result: ParsedResult {
+                functions: vec![],
+                statements: vec![],
+            },
             current: 0,
             start_line: 0,
             current_line: 0,
@@ -72,7 +66,9 @@ impl<'tok> Parser<'tok> {
                 start: self.start_line,
                 end: self.current_line,
             };
-            self.parsed_result.statements.push(StatementNode::new(declaration, codespan));
+            self.parsed_result
+                .statements
+                .push(StatementNode::new(declaration, codespan));
         }
         Ok(self.parsed_result)
     }
@@ -126,7 +122,7 @@ impl<'tok> Parser<'tok> {
             _ => Ok(Statement::Expression(self.expression()?)),
         };
 
-        self.consume(TokenType::SemiColon)?; 
+        self.consume(TokenType::SemiColon)?;
         result
     }
 
@@ -191,7 +187,7 @@ impl<'tok> Parser<'tok> {
     }
 
     fn initialize_decl_data(&mut self) -> Result<DeclarationData, Error> {
-        let identity = { self.get_previous().lexeme.clone() };
+        let identity = { self.get_previous().lexeme.to_owned().unwrap() };
         let colon = self.consume(TokenType::Colon)?;
 
         let mut decl_data = DeclarationData {
@@ -204,22 +200,27 @@ impl<'tok> Parser<'tok> {
             expr: None,
         };
 
-        let type_candidate = self.get_current().lexeme.as_str();
-        if let Some(primitive) = Type::primitive_from_str(type_candidate) {
-            let is_all_uppercase = type_candidate.to_ascii_uppercase() == String::from(type_candidate);
+        if let Some(ref lexeme) = self.get_current().lexeme {
+            let type_candidate = lexeme.as_str();
+            if let Some(primitive) = Type::primitive_from_str(type_candidate) {
+                let is_all_uppercase =
+                    type_candidate.to_ascii_uppercase() == String::from(type_candidate);
 
-            decl_data.dectype = primitive;
-            decl_data.is_inferred = false;
+                decl_data.dectype = primitive;
+                decl_data.is_inferred = false;
 
-            if is_all_uppercase {
-                decl_data.is_const = true;
+                if is_all_uppercase {
+                    decl_data.is_const = true;
+                }
+
+                if self.consume(TokenType::Question).is_ok() {
+                    decl_data.is_nullable = true;
+                }
             }
-
-            if self.consume(TokenType::Question).is_ok() {
-                decl_data.is_nullable = true;
-            }
+            return Ok(decl_data);
+        } else {
+            unreachable!();
         }
-        return Ok(decl_data);
     }
 
     fn declare_argument(&mut self) -> Result<Vec<DeclarationData>, Error> {
@@ -247,7 +248,12 @@ impl<'tok> Parser<'tok> {
                     match self.advance().tokentype {
                         TokenType::Comma => continue,
                         TokenType::CloseParen => return Ok(arguments),
-                        _ => return Err(Error::new_while_parsing("Argument declaration must end with close paren", self.current_line)),
+                        _ => {
+                            return Err(Error::new_while_parsing(
+                                "Argument declaration must end with close paren",
+                                self.current_line,
+                            ))
+                        }
                     }
                 }
                 TokenType::Comma => {
@@ -258,7 +264,12 @@ impl<'tok> Parser<'tok> {
                     arguments.push(decl_info);
                     return Ok(arguments);
                 }
-                _ => return Err(Error::new_while_parsing("Unknown Token detected while parsing arguments", bridge_line)),
+                _ => {
+                    return Err(Error::new_while_parsing(
+                        "Unknown Token detected while parsing arguments",
+                        bridge_line,
+                    ))
+                }
             }
         }
         Ok(arguments)
@@ -295,7 +306,10 @@ impl<'tok> Parser<'tok> {
             if decl_info.is_nullable {
                 state = Statement::Decralation(decl_info);
             } else {
-                return Err(Error::new_while_parsing("tried to initialize non-null variable with null value", self.current_line))
+                return Err(Error::new_while_parsing(
+                    "tried to initialize non-null variable with null value",
+                    self.current_line,
+                ));
             }
         }
         // This is a function.
@@ -304,13 +318,15 @@ impl<'tok> Parser<'tok> {
         }
 
         match state {
-            Statement::Empty => Err(Error::new_while_parsing("Failed to parse the declaration process.", self.current_line)),
+            Statement::Empty => Err(Error::new_while_parsing(
+                "Failed to parse the declaration process.",
+                self.current_line,
+            )),
             _ => Ok(state),
         }
     }
 
     fn declare_function(&mut self, mut info: DeclarationData) -> Result<Statement, Error> {
-
         info.dectype.option.insert(TypeOption::Func);
         let arguments = self.declare_argument()?;
 
@@ -342,7 +358,10 @@ impl<'tok> Parser<'tok> {
             if let Expr::Variable(s) = expr {
                 return Ok(Expr::Assign(s, Box::new(value)));
             } else {
-                return Err(Error::new_while_parsing("Invalid Assignment target", assign_line));
+                return Err(Error::new_while_parsing(
+                    "Invalid Assignment target",
+                    assign_line,
+                ));
             }
         }
 
@@ -543,37 +562,49 @@ impl<'tok> Parser<'tok> {
                 Ok(Expr::Literal(lit))
             }
             Digit => {
-                let parsed_number = inside.lexeme.parse::<i64>();
-                if parsed_number.is_ok() {
-                    let lit = Literal::new_int(inside);
-                    return Ok(Expr::Literal(lit));
-                }
+                let inside_lexeme = inside.lexeme.clone().unwrap();
 
-                let parsed_float = inside.lexeme.parse::<f64>();
-                if parsed_float.is_ok() {
-                    let lit = Literal::new_float(inside);
-                    return Ok(Expr::Literal(lit));
-                }
+                let contain_dot = inside_lexeme.contains(".");
 
-                Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
+                let literal = if contain_dot {
+                    Literal::new_float(inside)
+                } else {
+                    Literal::new_int(inside)
+                };
+                Ok(Expr::Literal(literal))
+                // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
             Str => {
                 let lit = Literal::new_str(inside);
                 Ok(Expr::Literal(lit))
             }
             Iden => {
-                if inside.lexeme.len() > MAX_IDENTIFIER_LENGTH {
-                    let formatted = format!("Identifier maximum length exceeded: {}, max length is {}", inside.lexeme.len(), MAX_IDENTIFIER_LENGTH);
-                    return Err(Error::new_while_parsing(formatted.as_str(), self.current_line));
+                if let Some(ref inside_lexeme) = inside.lexeme {
+                    if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
+                        let formatted = format!(
+                            "Identifier maximum length exceeded: {}, max length is {}",
+                            inside_lexeme.len(),
+                            MAX_IDENTIFIER_LENGTH
+                        );
+                        return Err(Error::new_while_parsing(
+                            formatted.as_str(),
+                            self.current_line,
+                        ));
+                    }
+                    Ok(Expr::Variable(inside_lexeme.to_owned()))
+                } else {
+                    unreachable!();
                 }
-                Ok(Expr::Variable(inside.lexeme.clone()))
             }
             OpenParen => {
                 let inside_paren = self.expression()?;
                 let closed_paren = self.consume(CloseParen)?;
                 Ok(Expr::Grouping(Box::new(inside_paren)))
             }
-            _s => Err(Error::new_while_parsing(format!("Received unknown token while parsing code: {:?}", _s).as_str(), previous_line))
+            _s => Err(Error::new_while_parsing(
+                format!("Received unknown token while parsing code: {:?}", _s).as_str(),
+                previous_line,
+            )),
         };
 
         result
@@ -588,7 +619,10 @@ impl<'tok> Parser<'tok> {
         }
 
         let current = self.get_current();
-        let formatted = format!("Tried to consume {:?}, got {:?} at line {}", x, current.tokentype, current.line);
+        let formatted = format!(
+            "Tried to consume {:?}, got {:?} at line {}",
+            x, current.tokentype, current.line
+        );
         Err(Error::new_while_parsing(formatted.as_str(), current.line))
     }
 }

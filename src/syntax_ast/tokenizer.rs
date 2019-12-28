@@ -41,44 +41,44 @@ impl Tokenizer {
         }
 
         self.tokens
-            .push(Token::new(TokenType::EOF, self.line, String::new()));
+            .push(Token::simple(TokenType::EOF, self.line));
         Ok(self.tokens.to_owned())
     }
 
     fn scan_next_token(&mut self) -> Result<(), Error> {
         let c: char = self.advance();
         match c {
-            '(' => self.add_token(TokenType::OpenParen),
-            ')' => self.add_token(TokenType::CloseParen),
-            '{' => self.add_token(TokenType::OpenBrace),
-            '}' => self.add_token(TokenType::CloseBrace),
-            '[' => self.add_token(TokenType::OpenSquareBracket),
-            ']' => self.add_token(TokenType::CloseSquareBracket),
-            '@' => self.add_token(TokenType::AtMark),
-            ':' => self.add_token(TokenType::Colon),
-            ';' => self.add_token(TokenType::SemiColon),
-            '.' => self.add_token(TokenType::Dot),
-            ',' => self.add_token(TokenType::Comma),
-            '+' => self.add_token(TokenType::Plus),
-            '-' => self.add_token(TokenType::Minus),
-            '*' => self.add_token(TokenType::Asterisk),
-            '%' => self.add_token(TokenType::Percent),
-            '?' => self.add_token(TokenType::Question),
+            '(' => self.add_simple(TokenType::OpenParen),
+            ')' => self.add_simple(TokenType::CloseParen),
+            '{' => self.add_simple(TokenType::OpenBrace),
+            '}' => self.add_simple(TokenType::CloseBrace),
+            '[' => self.add_simple(TokenType::OpenSquareBracket),
+            ']' => self.add_simple(TokenType::CloseSquareBracket),
+            '@' => self.add_simple(TokenType::AtMark),
+            ':' => self.add_simple(TokenType::Colon),
+            ';' => self.add_simple(TokenType::SemiColon),
+            '.' => self.add_simple(TokenType::Dot),
+            ',' => self.add_simple(TokenType::Comma),
+            '+' => self.add_simple(TokenType::Plus),
+            '-' => self.add_simple(TokenType::Minus),
+            '*' => self.add_simple(TokenType::Asterisk),
+            '%' => self.add_simple(TokenType::Percent),
+            '?' => self.add_simple(TokenType::Question),
             '=' => match self.next_is('=') {
-                true => self.add_token(TokenType::EqualEqual),
-                false => self.add_token(TokenType::Equal),
+                true => self.add_simple(TokenType::EqualEqual),
+                false => self.add_simple(TokenType::Equal),
             },
             '>' => match self.next_is('=') {
-                true => self.add_token(TokenType::MoreEqual),
-                false => self.add_token(TokenType::More),
+                true => self.add_simple(TokenType::MoreEqual),
+                false => self.add_simple(TokenType::More),
             },
             '<' => match self.next_is('=') {
-                true => self.add_token(TokenType::LessEqual),
-                false => self.add_token(TokenType::Less),
+                true => self.add_simple(TokenType::LessEqual),
+                false => self.add_simple(TokenType::Less),
             },
             '!' => match self.next_is('=') {
-                true => self.add_token(TokenType::NotEqual),
-                false => self.add_token(TokenType::Bang),
+                true => self.add_simple(TokenType::NotEqual),
+                false => self.add_simple(TokenType::Bang),
             },
             '/' => {
                 match self.peek() {
@@ -108,7 +108,7 @@ impl Tokenizer {
                         Ok(())
                     }
 
-                    _ => self.add_token(TokenType::Slash),
+                    _ => self.add_simple(TokenType::Slash),
                 }
             }
 
@@ -252,7 +252,7 @@ impl Tokenizer {
         self.tokens.push(Token::lexed(
             tokentype,
             self.line,
-            lexeme: Some(string),
+            string,
         ));
         Ok(())
     }
@@ -317,16 +317,16 @@ mod tests {
     fn ignore_comments() {
         let only_comment = "// Oh Hey mark.";
         let result = Tokenizer::new(only_comment).scan();
-        assert!(invalid_result.is_ok());
-        assert_eq!(invalid_result.unwrap().len(), 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
     }
 
     #[test]
     fn ignore_block_comments() {
         let only_comment = "/* Hello there */ /* general reposti */";
         let result = Tokenizer::new(only_comment).scan();
-        assert!(invalid_result.is_ok());
-        assert_eq!(invalid_result.unwrap().len(), 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
     }
 
     #[test]
@@ -341,5 +341,19 @@ mod tests {
         let unknown = "🌔";
         let invalid_result = Tokenizer::new(unknown).scan();
         assert!(invalid_result.is_err());
+    }
+
+    #[test]
+    fn different_line_break() {
+        let windows_style = "100\r\n";
+        let unix_style = "100\n";
+        let windows_result = Tokenizer::new(windows_style).scan();
+        let unix_result = Tokenizer::new(unix_style).scan();
+        assert!(windows_result.is_ok());
+        assert!(unix_result.is_ok());
+
+        let win_vec = windows_result.unwrap();
+        let unix_vec = unix_result.unwrap();
+        assert_eq!(win_vec[0], unix_vec[0]);
     }
 }

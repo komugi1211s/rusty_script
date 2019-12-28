@@ -40,6 +40,7 @@ use std::str::Lines;
 
 */
 
+#[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
     pub msg: String,
@@ -122,6 +123,8 @@ impl log::Log for Logger {
 
     fn log(&self, record: &log::Record) {
     }
+
+    fn flush(&self) {}
 }
 
 
