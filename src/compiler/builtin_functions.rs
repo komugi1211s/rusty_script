@@ -12,7 +12,7 @@ fn applyfunc(bc: &mut BytecodeGenerator, name: &str, args: Vec<Type>, rettype: T
 
     let mut functype = rettype;
     functype.option.insert(TypeOption::Func);
-    bc.global_define.push((functype, name.to_string()));
+    bc.add_global(functype, name);
     let idx = bc.global_define.len() - 1;
     bc.function_table.insert(idx, funcinfo);
 }

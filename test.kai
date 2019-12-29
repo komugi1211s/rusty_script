@@ -110,3 +110,30 @@ assert(infer_return_string() == "world");
 
 assert(returns_bool() == true);
 assert(infer_return_bool() != false);
+
+// Local Variables.
+print "Local Variable testing.";
+{
+    one := 10;
+    two := 10.5;
+    three := "haha";
+    four := false;
+    {
+        one := 20;
+        two := 2.5;
+        three := "hoho";
+        four := true;
+        print one;
+        assert(one == 20);
+        assert(two == 2.5);
+        assert(three == "hoho");
+        assert(four);
+    }
+    print one;
+    assert(one == 10);
+    assert(two == 10.5);
+    assert(three == "haha");
+    assert(!four);
+}
+
+

@@ -420,7 +420,22 @@ pub struct ByteChunk {
     pub functions: HashMap<usize, FuncInfo>,
 }
 
-type Definition = (Type, String); 
+
+// TODO - @Improvement: turn string into something small, stack-sized but
+// safe to use without collision problem ( u32 hash would be the best )
+#[derive(Debug)]
+pub struct GlobalDef {
+    pub dtype: Type,
+    pub name: String
+}
+
+#[derive(Debug)]
+pub struct LocalDef {
+    pub dtype: Type,
+    pub name: String,
+    pub depth: u16,
+}
+
 #[derive(Debug)]
 pub struct BytecodeGenerator {
     // Things that we return
@@ -428,13 +443,13 @@ pub struct BytecodeGenerator {
     pub const_table: ConstantTable,
 
     // To keep track of definitions
-    pub current_define: Vec<Definition>,
-    pub global_define : Vec<Definition>,
+    pub current_define: Vec<LocalDef>,
+    pub global_define : Vec<GlobalDef>,
     pub function_table: HashMap<usize, FuncInfo>,
 
     // Keep track of block nesting
     pub last_loop_start: usize,
-    current_block: usize,
+    current_block: u16,
     pub break_call: Vec<usize>,
 }
 
@@ -475,14 +490,35 @@ impl BytecodeGenerator {
     }
 
 
-    fn find_local(&self, name: &String) -> (bool, usize) {
-        let is_exist = self.current_define.iter().position(|x| &x.1 == name);
+    #[inline]
+    fn find_local(&self, name: &str) -> (bool, usize) {
+        // We're reversing this, so index would be length - ind
+        let len = self.current_define.len();
+        for (ind, local) in self.current_define.iter().rev().enumerate() {
+            if local.name == name && local.depth <= self.current_block {
+                let ind = if len - ind == 0 { 0 } else { len - ind - 1};
+                return (true, ind);
+            }
+        }
+        (false, 0)
+    }
+
+    #[inline]
+    fn find_global(&self, name: &str) -> (bool, usize) {
+        let is_exist = self.global_define.iter().position(|x| x.name == name);
         (is_exist.is_some(), is_exist.unwrap_or(0))
     }
 
-    fn find_global(&self, name: &String) -> (bool, usize) {
-        let is_exist = self.global_define.iter().position(|x| &x.1 == name);
-        (is_exist.is_some(), is_exist.unwrap_or(0))
+    #[inline]
+    fn add_local(&mut self, dtype: Type, name: &str) {
+        let add = LocalDef { dtype: dtype, name: name.to_string(), depth: self.current_block };
+        self.current_define.push(add);
+    }
+
+    #[inline]
+    pub fn add_global(&mut self, dtype: Type, name: &str) {
+        let add = GlobalDef { dtype: dtype, name: name.to_string() };
+        self.global_define.push(add);
     }
 
     fn prepare_function(
@@ -508,7 +544,7 @@ impl BytecodeGenerator {
         let arg_count = _arguments.len();
 
         // 関数自体の戻り値をグローバルに定義しておく
-        self.global_define.push((decl_info.dectype, decl_info.name.clone()));
+        self.add_global(decl_info.dectype, &decl_info.name);
         let idx = self.global_define.len() - 1;
         
         // 現在のコードセクションとローカルセクションを保存し、
@@ -643,10 +679,12 @@ impl BytecodeGenerator {
                         StatementInfo::Break(usize) => {
                             self.break_call.push(usize);
                         },
-                        StatementInfo::Continue(..) => panic!("Continue does not supported"),
+                        StatementInfo::Continue(..) => panic!("Continue is not supported"),
                         _ => (),
                     };
                 }
+                let block = self.current_block;
+                self.current_define.retain(|x| x.depth < block);
                 self.current_block -= 1;
                 // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
                 handled_result.index = self.code.current_length();
@@ -811,10 +849,12 @@ impl BytecodeGenerator {
             let (exists, pos) = self.find_local(&name);
 
             if exists {
-                panic!("Same Variable Declared TWICE.");
+                if self.current_define[pos].depth == self.current_block {
+                    panic!("Same Variable Declared TWICE.");
+                }
             }
 
-            self.current_define.push((declared_type, name));
+            self.add_local(declared_type, name.as_str());
             if decl.kind == DeclKind::Argument {
                 out.index = self.code.current_length();
             } else {
@@ -832,7 +872,7 @@ impl BytecodeGenerator {
                 panic!("Same Variable Declared TWICE.");
             }
 
-            self.global_define.push((declared_type, name));
+            self.add_global(declared_type, name.as_str());
             let position = self.global_define.len() - 1;
             let opcode = self.get_store_opcode(declared_type, true);
             let operands = position as u16;
@@ -919,6 +959,10 @@ impl BytecodeGenerator {
                 // let data = self.variable.get(name).unwrap();
                 // TODO: handle it without making a clone.
                 let (exists, pos) = self.find_local(&name); 
+                println!("{:?}", self.current_block);
+                println!("{:?}", self.current_define);
+                println!("{:?} {:?}", exists, pos);
+
 
                 // FIXME @DumbCode - up there you do "if exists {"
                 // and here you're doing "if !exists {"
@@ -930,7 +974,7 @@ impl BytecodeGenerator {
                         panic!("Undefined Variable");
                     }
 
-                    let _type = self.global_define[pos_global].0.clone();
+                    let _type = self.global_define[pos_global].dtype.clone();
                     let opcode = self.get_load_opcode(_type, true);
                     handled_result._type = _type;
                     self.code.push_opcode(opcode, line);
@@ -940,7 +984,7 @@ impl BytecodeGenerator {
                     return handled_result;
                 }
 
-                let _type = self.current_define[pos].0.clone();
+                let _type = self.current_define[pos].dtype.clone();
                 let opcode = self.get_load_opcode(_type, false);
                 handled_result._type = _type;
                 self.code.push_opcode(opcode, line);
@@ -1025,11 +1069,11 @@ impl BytecodeGenerator {
                     panic!("Undeclared / defined variable!");
                 }
 
-                let declared_type = {
+                let declared_type = { 
                     if is_global {
-                        self.global_define[position].0
+                        self.global_define[position].dtype
                     } else {
-                        self.current_define[position].0
+                        self.current_define[position].dtype
                     }
                 };
 
