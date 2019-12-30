@@ -152,6 +152,6 @@ print "Local Variable testing.";
 
 print "Array Testing.";
 
-// new_int_arr: int[] = [1, 2, 3];
+new_int_arr: int[] = [1, 2, 3];
 
 

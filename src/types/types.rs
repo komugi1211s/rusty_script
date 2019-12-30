@@ -179,7 +179,6 @@ impl Value {
         match self {
             Value::Null => Type::default(),
             Value::Int(_) => Type::int(),
-            Value::Type(x) => x.clone(),
             Value::Float(_) => Type::float(),
             Value::Str(_) => Type::string(),
             Value::Boolean(_) => Type::boolean(),
@@ -210,7 +209,6 @@ impl fmt::Display for Value {
             Value::Str(ref s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Null => write!(f, "<null>"),
-            Value::Type(x) => write!(f, "{:?}", x),
             Value::Pointer(x) => write!(f, "Pointer{}", x),
         }
     }

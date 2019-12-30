@@ -184,6 +184,9 @@ impl<'tok> Parser<'tok> {
         self.statement()
     }
 
+    fn parse_typedecl(&mut self, decl: &mut decl_data) {
+    }
+
     fn initialize_decl_data(&mut self) -> Result<DeclarationData, Error> {
         let identity = { self.get_previous().lexeme.to_owned().unwrap() };
         let colon = self.consume(TokenType::Colon)?;
@@ -203,17 +206,37 @@ impl<'tok> Parser<'tok> {
             TokenType::Iden => {
                 self.advance();
                 let type_candidate = lexeme.unwrap();
+
+                decl_data.dectype = if let Some(primitive) = Type::primitive_from_str(&type_candidate) {
+                    primitive
+                } else {
+                    Type { kind: TypeKind::UserDef, option: Default::default() }
+                };
+
+                if self.consume(TokenType::OpenSquareBracket).is_ok() {
+                    if self.is_next(TokenType::CloseSquareBracket) {
+                        // Dynamic Array.
+                    } else if self.is_next(TokenType::Digit) {
+                        let length = {
+                            let token = self.advance();
+                            let array_length = token.lexeme.as_ref().unwrap();
+                            if array_length.contains(".") {
+                                Err(Error::new_while_parsing("Array length must be an unsigned integer.", token.span))
+                            } else {
+                                Ok(array_length.parse::<usize>().unwrap())
+                            }
+                        }?;
+
+                        self.consume(TokenType::CloseSquareBracket)?;
+                    }
+                }
+
                 let is_all_uppercase =
                     type_candidate.as_str().to_ascii_uppercase() == type_candidate;
 
                 decl_data.is_const = is_all_uppercase;
                 decl_data.is_nullable = self.consume(TokenType::Question).is_ok();
                 decl_data.is_inferred = false;
-                decl_data.dectype = if let Some(primitive) = Type::primitive_from_str(&type_candidate) {
-                    primitive
-                } else {
-                    Type { kind: TypeKind::UserDef, option: Default::default() }
-                }
             }
             _ => (), // Inferred;
         };
@@ -308,24 +331,6 @@ impl<'tok> Parser<'tok> {
                     "tried to initialize non-null variable with null value",
                     CodeSpan::oneline(self.current_line),
                 ));
-            }
-        }
-        // This is an array.
-        else if self.consume(TokenType::OpenSquareBracket).is_ok() {
-            // Dynamic Slice.
-            if self.is_next(TokenType::CloseSquareBracket) {
-
-
-            } else if self.is_next(TokenType::Digit) {
-                let length =  {
-                    let token = self.advance();
-                    if token.lexeme.unwrap().contains(".") {
-                        Err(Error::new_while_parsing("Array length must be an unsigned integer.", token.span))
-                    } else {
-                        Ok(token.lexeme.unwrap()
-                            .parse::<usize>().unwrap())
-                    }
-                }?;
             }
         }
         // This is a function.
