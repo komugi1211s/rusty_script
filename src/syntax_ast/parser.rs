@@ -315,13 +315,15 @@ impl<'tok> Parser<'tok> {
             // Dynamic Slice.
             if self.is_next(TokenType::CloseSquareBracket) {
 
+
             } else if self.is_next(TokenType::Digit) {
                 let length =  {
                     let token = self.advance();
                     if token.lexeme.unwrap().contains(".") {
                         Err(Error::new_while_parsing("Array length must be an unsigned integer.", token.span))
                     } else {
-                        Ok(token.lexeme.unwrap().parse::<usize>().unwrap())
+                        Ok(token.lexeme.unwrap()
+                            .parse::<usize>().unwrap())
                     }
                 }?;
             }

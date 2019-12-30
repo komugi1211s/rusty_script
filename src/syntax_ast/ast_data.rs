@@ -1,6 +1,6 @@
 use std::fmt;
 use crate::token::{ Token };
-use types::types::{ Type };
+use types::types::{ Type, ArraySize };
 use trace::position::CodeSpan;
 
 #[derive(Debug)]
@@ -43,6 +43,7 @@ pub struct DeclarationData {
     pub is_inferred: bool,
     pub expr: Option<Expr>,
 }
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclKind {
