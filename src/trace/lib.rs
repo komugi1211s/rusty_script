@@ -2,6 +2,8 @@
 pub use log::{info, trace, warn};
 use log;
 use std::str::Lines;
+pub mod position;
+use position::{CodeSpan};
 
 /*
 
@@ -44,31 +46,31 @@ use std::str::Lines;
 pub struct Error {
     pub kind: ErrorKind,
     pub msg: String,
-    pub line: usize,
+    pub span: CodeSpan,
 }
 
 impl Error {
-    pub fn new_while_tokenizing(msg: &str, line: usize) -> Self {
+    pub fn new_while_tokenizing(msg: &str, span: CodeSpan) -> Self {
         Self {
             kind: ErrorKind::TokenError,
             msg: String::from(msg),
-            line
+            span,
         }
     }
 
-    pub fn new_on_runtime(msg: &str, line: usize) -> Self {
+    pub fn new_on_runtime(msg: &str, span: CodeSpan) -> Self {
         Self {
             kind: ErrorKind::RuntimeError,
             msg: String::from(msg),
-            line
+            span,
         }
     }
 
-    pub fn new_while_parsing(msg: &str, line: usize) -> Self {
+    pub fn new_while_parsing(msg: &str, span: CodeSpan) -> Self {
         Self {
             kind: ErrorKind::ParserError,
             msg: String::from(msg),
-            line
+            span,
         }
     }
 }
@@ -107,10 +109,21 @@ impl<'a> ErrorReporter<'a> {
 
     pub fn report_error(&self, err: Error) {
         println!("\x1b[31m{:?}\x1b[0m - {}", err.kind, err.msg);
-        println!("around line {}:", err.line);
-        println!("\x1b[36m{}|{}\x1b[0m", err.line - 1, self.contexts[err.line - 1]);
-        println!("\x1b[31m{}|{}\x1b[0m", err.line,     self.contexts[err.line]);
-        println!("\x1b[36m{}|{}\x1b[0m", err.line + 1, self.contexts[err.line + 1]);
+
+        if err.span.is_oneliner() {
+            let bottom_line = err.span.end_usize() - 1;
+            println!("around line {}:", bottom_line);
+            println!("\x1b[36m{}| {}\x1b[0m", bottom_line - 1, self.contexts[bottom_line - 1]);
+            println!("\x1b[31m{}| {}\x1b[0m", bottom_line,     self.contexts[bottom_line]);
+            println!("\x1b[36m{}| {}\x1b[0m", bottom_line + 1, self.contexts[bottom_line + 1]);
+        } else {
+            let start_line = err.span.start_usize() - 1;
+            let end_line = err.span.end_usize() - 1;
+            println!("Error detected within range {} to {}:", start_line, end_line);
+            for i in start_line..end_line {
+                println!("\x1b[31m{}| {}\x1b[0m", i, self.contexts[i]);
+            }
+        }
     }
 }
 

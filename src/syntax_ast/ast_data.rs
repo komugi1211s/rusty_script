@@ -1,18 +1,12 @@
 use std::fmt;
 use crate::token::{ Token };
 use types::types::{ Type };
+use trace::position::CodeSpan;
 
 #[derive(Debug)]
 pub struct ParsedResult {
     pub functions: Vec<FunctionData>,
     pub statements: Vec<StatementNode>,
-}
-
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CodeSpan {
-    pub start: usize,
-    pub end: usize,
 }
 
 

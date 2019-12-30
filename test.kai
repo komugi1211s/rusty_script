@@ -6,12 +6,26 @@ b: float = 1.5;
 c: string = "hello";
 d: bool = true;
 
+assert(a == 10);
+assert(b == 1.5);
+assert(c == "hello");
+assert(d);
+
 // Nullables
 print "Nullable Empty Declaration Testing.";
 an: int?;
 bn: float?;
 cn: string?;
 dn: bool?;
+
+an = 10;
+assert(an == 10);
+bn = 2.5;
+assert(bn == 2.5);
+cn = "Sam porter bridges";
+assert(cn == "Sam porter bridges");
+dn = true;
+assert(dn);
 
 // Inferred
 print "Inferred Declaration Testing.";
@@ -135,5 +149,9 @@ print "Local Variable testing.";
     assert(three == "haha");
     assert(!four);
 }
+
+print "Array Testing.";
+
+// new_int_arr: int[] = [1, 2, 3];
 
 

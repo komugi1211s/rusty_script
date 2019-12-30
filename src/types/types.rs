@@ -12,14 +12,14 @@ const USIZE_LENGTH: usize = 8;
 
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[repr(u8)]
 pub enum TypeKind {
-    Int     = 0b0000_0001,
-    Float   = 0b0000_0010,
-    Str     = 0b0000_0100,
-    Boolean = 0b0000_1000,
-    Null    = 0b0001_0000,
-    UserDef = 0b1000_0000,
+    Int,
+    Float,
+    Str,
+    Boolean,
+    Null,
+    Array(Type),
+    UserDef,
 }
 
 impl Default for TypeKind {
@@ -32,9 +32,9 @@ bitflags! {
     #[derive(Default)]
     pub struct TypeOption: u8 {
         const Func    = 0b0000_0001;
-        const Array   = 0b0000_0010;
     }
 }
+
 
 // NOTE: since this struct's size is only about 16 bits ( 2 bytes! ),
 // I just implement Copy + Clone and forget about it

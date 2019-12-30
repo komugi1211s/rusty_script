@@ -2,13 +2,14 @@ use trace::Error;
 
 use super::{
     ast_data::{
-        BlockData, CodeSpan, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
+        BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
         ParsedResult, Statement, StatementNode,
     },
     token::{Token, TokenType},
 };
 
 use types::types::{Type, TypeKind, TypeOption};
+use trace::position::CodeSpan;
 
 // TODO:
 // All clone call to a lifetime management
@@ -62,10 +63,7 @@ impl<'tok> Parser<'tok> {
         while !self.is_at_end() {
             self.start_line = self.current_line;
             let declaration = self.declaration()?;
-            let codespan = CodeSpan {
-                start: self.start_line,
-                end: self.current_line,
-            };
+            let codespan = CodeSpan::new(self.start_line, self.current_line);
             self.parsed_result
                 .statements
                 .push(StatementNode::new(declaration, codespan));
@@ -200,7 +198,7 @@ impl<'tok> Parser<'tok> {
             expr: None,
         };
 
-        let Token { tokentype, line, lexeme } = self.get_current().clone();
+        let Token { tokentype, span, lexeme } = self.get_current().clone();
         match tokentype {
             TokenType::Iden => {
                 self.advance();
@@ -224,7 +222,7 @@ impl<'tok> Parser<'tok> {
     }
 
     fn declare_argument(&mut self) -> Result<Vec<DeclarationData>, Error> {
-        self.consume(TokenType::OpenParen)?;
+        let start_span = self.consume(TokenType::OpenParen)?.span;
         let mut arguments: Vec<DeclarationData> = Vec::new();
 
         if self.is(TokenType::CloseParen) {
@@ -238,7 +236,7 @@ impl<'tok> Parser<'tok> {
             decl_info.kind = DeclKind::Argument;
 
             let bridge_token = self.advance();
-            let bridge_line = bridge_token.line;
+            let bridge_span = bridge_token.span;
             match bridge_token.tokentype {
                 TokenType::Equal => {
                     let item = self.expression()?;
@@ -251,7 +249,7 @@ impl<'tok> Parser<'tok> {
                         _ => {
                             return Err(Error::new_while_parsing(
                                 "Argument declaration must end with close paren",
-                                self.current_line,
+                                CodeSpan::new(start_span.start_usize(), self.current_line),
                             ))
                         }
                     }
@@ -267,7 +265,7 @@ impl<'tok> Parser<'tok> {
                 _ => {
                     return Err(Error::new_while_parsing(
                         "Unknown Token detected while parsing arguments",
-                        bridge_line,
+                        bridge_span,
                     ))
                 }
             }
@@ -308,8 +306,24 @@ impl<'tok> Parser<'tok> {
             } else {
                 return Err(Error::new_while_parsing(
                     "tried to initialize non-null variable with null value",
-                    self.current_line,
+                    CodeSpan::oneline(self.current_line),
                 ));
+            }
+        }
+        // This is an array.
+        else if self.consume(TokenType::OpenSquareBracket).is_ok() {
+            // Dynamic Slice.
+            if self.is_next(TokenType::CloseSquareBracket) {
+
+            } else if self.is_next(TokenType::Digit) {
+                let length =  {
+                    let token = self.advance();
+                    if token.lexeme.unwrap().contains(".") {
+                        Err(Error::new_while_parsing("Array length must be an unsigned integer.", token.span))
+                    } else {
+                        Ok(token.lexeme.unwrap().parse::<usize>().unwrap())
+                    }
+                }?;
             }
         }
         // This is a function.
@@ -320,7 +334,7 @@ impl<'tok> Parser<'tok> {
         match state {
             Statement::Empty => Err(Error::new_while_parsing(
                 "Failed to parse the declaration process.",
-                self.current_line,
+                CodeSpan::oneline(self.current_line),
             )),
             _ => Ok(state),
         }
@@ -352,7 +366,7 @@ impl<'tok> Parser<'tok> {
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
         if self.is(TokenType::Equal) {
-            let assign_line = self.advance().line;
+            let assign_span = self.advance().span;
             let value = self.assignment()?;
 
             if let Expr::Variable(s) = expr {
@@ -360,7 +374,7 @@ impl<'tok> Parser<'tok> {
             } else {
                 return Err(Error::new_while_parsing(
                     "Invalid Assignment target",
-                    assign_line,
+                    CodeSpan::oneline(assign_span.start_usize()),
                 ));
             }
         }
@@ -522,13 +536,13 @@ impl<'tok> Parser<'tok> {
 
     fn get_current(&mut self) -> &Token {
         let x = self.tokens.get(self.current).unwrap();
-        self.current_line = x.line;
+        self.current_line = x.span.end_usize();
         x
     }
 
     fn get_previous(&mut self) -> &Token {
         let x = self.tokens.get(self.current - 1).unwrap();
-        self.current_line = x.line;
+        self.current_line = x.span.end_usize();
         x
     }
 
@@ -537,14 +551,14 @@ impl<'tok> Parser<'tok> {
             return self.get_current();
         }
         let x = self.tokens.get(self.current + 1).unwrap();
-        self.current_line = x.line;
+        self.current_line = x.span.end_usize();
         x
     }
 
     fn advance(&mut self) -> &Token {
         self.current += 1;
         let x = self.tokens.get(self.current - 1).unwrap();
-        self.current_line = x.line;
+        self.current_line = x.span.end_usize();
         x
     }
 
@@ -588,7 +602,7 @@ impl<'tok> Parser<'tok> {
                                 );
                                 return Err(Error::new_while_parsing(
                                     formatted.as_str(),
-                                    self.current_line,
+                                    CodeSpan::new(previous_line, self.current_line)
                                 ));
                             }
                             Ok(Expr::Variable(inside_lexeme.to_owned()))
@@ -605,7 +619,7 @@ impl<'tok> Parser<'tok> {
             }
             _s => Err(Error::new_while_parsing(
                 format!("Received unknown token while parsing code: {:?}", _s).as_str(),
-                previous_line,
+                CodeSpan::new(previous_line, self.current_line)
             )),
         };
 
@@ -622,9 +636,9 @@ impl<'tok> Parser<'tok> {
 
         let current = self.get_current();
         let formatted = format!(
-            "Tried to consume {:?}, got {:?} at line {}",
-            x, current.tokentype, current.line
+            "Tried to consume {:?}, got {:?} at range {} - {}",
+            x, current.tokentype, current.span.start, current.span.end
         );
-        Err(Error::new_while_parsing(formatted.as_str(), current.line))
+        Err(Error::new_while_parsing(formatted.as_str(), current.span))
     }
 }

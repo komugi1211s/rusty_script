@@ -6,6 +6,7 @@ use syntax_ast::{
 use types::types::{ Type, TypeKind, TypeOption };
 use crate::vm::{ VirtualMachine };
 use crate::typecheck;
+use trace::position::{ CodeSpan };
 
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -103,7 +104,6 @@ fn literal_to_byte_array(lit: &Literal) -> Option<Vec<u8>> {
     }
 }
 
-// TODO - @DumbCode: なんでConst系統じゃないといけないのにNullが入っているのか
 fn type_to_const_opcode(ty: &Type) -> OpCode {
     match ty.kind {
         TypeKind::Int | TypeKind::Float => OpCode::Const64,
@@ -477,7 +477,7 @@ impl BytecodeGenerator {
         }
         let entry_point = self.code.current_length();
         for i in ast.statements {
-            self.handle_stmt(i.value, i.span.start);
+            self.handle_stmt(i.value, i.span.start_usize());
         }
         self.const_table.push_data(usize::max_value().to_ne_bytes().to_vec());
         let bytechunk = ByteChunk {

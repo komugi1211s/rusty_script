@@ -1,5 +1,7 @@
 use std::fmt;
 
+use trace::position::CodeSpan;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenType {
     // 予約語
@@ -12,17 +14,6 @@ pub enum TokenType {
 
     Print,  // print "message"
     Return, // return "";
-    // True,   // true
-    // False,  // false
-
-    // TODO - @Cleanup: Obsolete
-    // TypeAny,   // a: any = ...
-    // TypeInt,   // a: int =
-    // TypeFloat, // a: float =
-    // TypeStr,   // a: string =
-    // TypeBool,  // a: bool =
-    // TypeStruct,  // a: struct {
-    // Null,      // null
 
     // 括弧とか文字とか
     DoubleQuote, // ""
@@ -79,18 +70,6 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "continue" => Some(Continue),
         "return" => Some(Return),
 
-        // "true" => Some(True),
-        // "false" => Some(False),
-        // "null" => Some(Null),
-
-        // TODO - @Cleanup: Obsolete, These are an identity
-        // "any" | "ANY" => Some(TypeAny),
-        // "int" | "INT" => Some(TypeInt),
-        // "float" | "FLOAT" => Some(TypeFloat),
-        // "string" | "STRING" => Some(TypeStr),
-        // "bool" | "BOOL" => Some(TypeBool),
-        // "struct" => Some(TypeStruct),
-
         "and" => Some(And),
         "or" => Some(Or),
         _ => None,
@@ -101,22 +80,22 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
 pub struct Token {
     pub tokentype: TokenType,
     // TODO - @Improvement: Replace it with trace::CodeSpan
-    pub line: usize,
+    pub span: CodeSpan,
     pub lexeme: Option<String>,
 }
 
 impl Token {
-    pub fn simple(tokentype: TokenType, line: usize) -> Self {
+    pub fn simple(tokentype: TokenType, start: usize, end: usize) -> Self {
         Token {
             tokentype,
-            line,
+            span: CodeSpan::new(start, end),
             lexeme: None,
         }
     }
-    pub fn lexed(tokentype: TokenType, line: usize, lexeme: String) -> Self {
+    pub fn lexed(tokentype: TokenType, start: usize, end: usize, lexeme: String) -> Self {
         Token {
             tokentype,
-            line,
+            span: CodeSpan::new(start, end),
             lexeme: Some(lexeme),
         }
     }
@@ -128,6 +107,6 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "トークン {:?}, {}行目", self.tokentype, self.line)
+        write!(f, "トークン {:?}, {}行目", self.tokentype, self.span.end)
     }
 }

@@ -29,6 +29,13 @@ impl CodeSpan {
         }
     }
 
+    pub fn oneline(line: usize) -> Self {
+        CodeSpan {
+            start: line as u32,
+            end: line as u32,
+        }
+    }
+
     pub fn combine(a: &CodeSpan, b: &CodeSpan) -> Self {
         Self {
             start: cmp::min(a.start, b.start),
@@ -48,14 +55,19 @@ impl CodeSpan {
             && other.start < self.end // かつ other が始まった後に終わる => どこかが接触している
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn start_usize(&self) -> usize {
         self.start as usize
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn end_usize(&self) -> usize {
         self.end as usize
+    }
+
+    #[inline(always)]
+    pub fn is_oneliner(&self) -> bool {
+        self.end == self.start
     }
 }
 

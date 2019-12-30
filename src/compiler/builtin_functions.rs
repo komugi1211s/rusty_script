@@ -32,7 +32,7 @@ fn clock_adapter(vm: &mut VirtualMachine) {
 }
 
 fn assert(is_true: bool) {
-    assert_eq!(is_true, true);
+    assert!(is_true);
 }
 
 fn assert_adapter(vm: &mut VirtualMachine) {

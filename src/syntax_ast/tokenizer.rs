@@ -1,7 +1,7 @@
 use std::fmt;
 // use std::mem;
 use super::token::{match_identity, Token, TokenType};
-use trace::Error;
+use trace::{ Error, position::CodeSpan };
 
 /*
  10 + 2 * 4
@@ -41,7 +41,7 @@ impl Tokenizer {
         }
 
         self.tokens
-            .push(Token::simple(TokenType::EOF, self.line));
+            .push(Token::simple(TokenType::EOF, self.line, self.line));
         Ok(self.tokens.to_owned())
     }
 
@@ -129,7 +129,7 @@ impl Tokenizer {
             // Default
             def => Err(Error::new_while_tokenizing(
                 format!("Unexpected Token: {}", def).as_str(),
-                self.start_line,
+                CodeSpan::new(self.start_line, self.line)
             )),
         }
     }
@@ -164,7 +164,7 @@ impl Tokenizer {
                 .collect();
             return Err(Error::new_while_tokenizing(
                 "Unterminated String",
-                self.start_line,
+                CodeSpan::new(self.start_line, self.line)
             ));
         }
 
@@ -241,7 +241,8 @@ impl Tokenizer {
     fn add_simple(&mut self, tokentype: TokenType) -> Result<(), Error> {
         self.tokens.push(Token::simple(
             tokentype,
-            self.line,
+            self.start_line,
+            self.line
         ));
         Ok(())
     }
@@ -251,8 +252,9 @@ impl Tokenizer {
 
         self.tokens.push(Token::lexed(
             tokentype,
+            self.start_line,
             self.line,
-            string,
+            string
         ));
         Ok(())
     }
