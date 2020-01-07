@@ -10,16 +10,75 @@ const USIZE_LENGTH: usize = 4;
 #[cfg(target_pointer_width = "64")]
 const USIZE_LENGTH: usize = 8;
 
+pub type Ty<'ty> = &'ty Type<'ty>;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug)]
+pub struct TypeArena<'ty> {
+    int: Type<'ty>,
+    float: Type<'ty>,
+    string: Type<'ty>,
+    boolean: Type<'ty>,
+    null: Type<'ty>,
+    userdef: Vec<Type<'ty>>
+}
+
+impl<'ty> TypeArena<'ty> {
+    pub fn new() -> Self {
+        Self {
+            int: Type { kind: TypeKind::Int },
+            float: Type { kind: TypeKind::Float },
+            string: Type { kind: TypeKind::Str },
+            boolean: Type { kind: TypeKind::Boolean },
+            null: Type { kind: TypeKind::Null },
+            userdef: Vec::new(),
+        }
+    }
+
+    pub fn get_bool(&'ty self) -> &'ty Type<'ty> {
+        &self.boolean
+    }
+
+    pub fn get_float(&'ty self) -> &'ty Type<'ty> {
+        &self.float
+    }
+
+    pub fn get_int(&'ty self) -> &'ty Type<'ty> {
+        &self.int
+    }
+
+    pub fn get_string(&'ty self) -> &'ty Type<'ty> {
+        &self.string
+    }
+
+    pub fn get_null(&'ty self) -> &'ty Type<'ty> {
+        &self.null
+    }
+
+    pub fn primitive_from_str(&'ty self, cand: &str) -> Option<&'ty Type<'ty>> {
+        match cand {
+            "int"    | "INT"    => Some(self.get_int()),
+            "float"  | "FLOAT"  => Some(self.get_float()),
+            "string" | "STRING" => Some(self.get_string()),
+            "bool"   | "BOOL"   => Some(self.get_bool()),
+            _ => None
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum TypeKind<'ty> {
     Int,
     Float,
     Str,
     Boolean,
     Null,
+
     Array(&'ty Type<'ty>, ArraySize),
-    UserDef,
+    Ptr(&'ty Type<'ty>),
+
+    UserDef { fields: Vec<&'ty Type<'ty>> },
+    Function { ret: &'ty Type<'ty> },
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -34,78 +93,9 @@ impl Default for TypeKind<'_> {
     }
 }
 
-bitflags! {
-    #[derive(Default)]
-    pub struct TypeOption: u8 {
-        const Func    = 0b0000_0001;
-    }
-}
-
-
-// NOTE: since this struct's size is only about 16 bits ( 2 bytes! ),
-// I just implement Copy + Clone and forget about it
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Type<'ty> {
     pub kind: TypeKind<'ty>,
-    pub option: TypeOption,
-}
-
-impl<'ty> Type<'ty> {
-    pub fn new(kind: TypeKind<'ty>, opt: TypeOption) -> Self {
-        Self {
-            kind,
-            option: opt
-        }
-    }
-
-    pub fn boolean() -> Self {
-        Self {
-            kind: TypeKind::Boolean,
-            option: TypeOption::default()
-        }
-    }
-
-    pub fn float() -> Self {
-        Self {
-            kind: TypeKind::Float,
-            option: TypeOption::default()
-        }
-    }
-
-    pub fn int() -> Self {
-        Self {
-            kind: TypeKind::Int,
-            option: TypeOption::default()
-        }
-    }
-
-    pub fn string() -> Self {
-        Self {
-            kind: TypeKind::Str,
-            option: TypeOption::default()
-        }
-    }
-
-    // TODO - @Cleanup: Obsolete
-    pub fn is_compatible(self, v: &Value) -> bool {
-        if v == &Value::Null {
-            true
-        } else if self.kind == TypeKind::Null {
-            true
-        } else {
-            self.kind == v.to_type().kind
-        }
-    }
-
-    pub fn primitive_from_str(cand: &str) -> Option<Self> {
-        match cand {
-            "int"    | "INT"    => Some(Self::int()),
-            "float"  | "FLOAT"  => Some(Self::float()),
-            "string" | "STRING" => Some(Self::string()),
-            "bool"   | "BOOL"   => Some(Self::boolean()),
-            _ => None
-        }
-    }
 }
 
 
@@ -118,30 +108,6 @@ pub enum Value {
     Pointer(usize),
     //  Struct(String, Vec<(Type, usize, Value)>),
     Null,
-}
-
-impl From<&i64> for Type<'_> {
-    fn from(_: &i64) -> Self {
-        Type::int()
-    }
-}
-
-impl From<&f64> for Type<'_> {
-    fn from(_: &f64) -> Self {
-        Type::float()
-    }
-}
-
-impl From<&String> for Type<'_> {
-    fn from(_: &String) -> Self {
-        Type::string()
-    }
-}
-
-impl From<&bool> for Type<'_> {
-    fn from(_: &bool) -> Self {
-        Type::boolean()
-    }
 }
 
 impl From<i64> for Value {
@@ -174,23 +140,6 @@ impl From<usize> for Value {
 }
 
 impl Value {
-    pub fn to_type(&self) -> Type {
-        // Todo: Type Alias support
-        match self {
-            Value::Null => Type::default(),
-            Value::Int(_) => Type::int(),
-            Value::Float(_) => Type::float(),
-            Value::Str(_) => Type::string(),
-            Value::Boolean(_) => Type::boolean(),
-            _ => Type::default(),
-        }
-    }
-
-    pub fn is_same_type(&self, other: &Value) -> bool {
-        mem::discriminant(self) == mem::discriminant(&Value::Null)
-            || mem::discriminant(self) == mem::discriminant(other)
-    }
-
     pub fn is_truthy(&self) -> bool {
         // NOTE: This should work since Value implement ops::Not
         if let Value::Boolean(x) = !!self {
