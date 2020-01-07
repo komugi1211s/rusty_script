@@ -527,11 +527,13 @@ impl BytecodeGenerator {
     ) {
         let decl_info = function.it;
         let body_block = function.block;
-        let return_type = { 
-            let mut x = decl_info.dectype;
-            x.option.remove(TypeOption::Func);
-            x
-        };
+        
+        let return_type = {
+            if typecheck::is_str_builtin_type(&decl_info.dectype) {
+                unreachable!("Not implemented yet");    
+            }
+        }
+    
         // 実際に使うことはないが、特定の関数が必要とするため用意
         let mut placeholder = StatementHandleResult {
             line: 0,
@@ -596,7 +598,7 @@ impl BytecodeGenerator {
         }
 
         if !actually_returned {
-            if decl_info.is_inferred {
+            if decl_info.decl_option == DeclOption::Inferred {
                 self.handle_stmt(Statement::Return(None), 0);
             } else {
                 panic!("Return type specified but nothing returned");
@@ -809,19 +811,16 @@ impl BytecodeGenerator {
         fn decide_actual_type(decl: &DeclarationData, given_type: &Type) -> Type {
             let given_type: Type = given_type.clone();
             let given_type_is_null = given_type == Type::default();
-            if decl.is_inferred {
+            
+            if decl_info.decl_option == DeclOption::Inferred {
                 if given_type_is_null {
-                    panic!("You cannot initialize Any type with null");
-                }
-
-                if decl.is_nullable {
                     panic!("You cannot initialize Any type with null");
                 }
 
                 return given_type;
             } else {
                 if given_type_is_null {
-                    if decl.is_nullable {
+                    if decl_info.decl_option == DeclOption::Nullable {
                         // Initializing Nullable variable with null.
                         // Fall Through.
                     } else if decl.kind == DeclKind::Argument {

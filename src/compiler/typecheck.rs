@@ -13,6 +13,15 @@ pub fn literal_to_type(lit: &Literal) -> Type {
     }
 }
 
+// TODO - @DumbCode
+pub fn is_str_builtin_type(candidate: &str) -> bool {
+    if candidate.starts_with("int") { return true };
+    if candidate.starts_with("bool") { return true };
+    if candidate.starts_with("string") { return true };
+    if candidate.starts_with("float") { return true };
+    if candidate.starts_with("struct") { return true };
+    return false;
+}
 
 pub fn type_after_binary(a: &Type, b: &Type, oper: Operator) -> Result<Type, ()> {
     let a = a.kind;

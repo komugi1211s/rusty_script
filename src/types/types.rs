@@ -34,77 +34,56 @@ impl Default for TypeKind {
     }
 }
 
-bitflags! {
-    #[derive(Default)]
-    pub struct TypeOption: u8 {
-        const Func    = 0b0000_0001;
-    }
-}
-
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Type {
     pub kind: TypeKind,
-    pub option: TypeOption,
 }
 
 impl Type {
-    pub fn new(kind: TypeKind, opt: TypeOption) -> Self {
+    pub fn new(kind: TypeKind) -> Self {
         Self {
             kind,
-            option: opt
         }
     }
 
     pub fn boolean() -> Self {
         Self {
             kind: TypeKind::Boolean,
-            option: TypeOption::default()
         }
     }
 
     pub fn float() -> Self {
         Self {
             kind: TypeKind::Float,
-            option: TypeOption::default()
         }
     }
 
     pub fn int() -> Self {
         Self {
             kind: TypeKind::Int,
-            option: TypeOption::default()
         }
     }
 
     pub fn string() -> Self {
         Self {
             kind: TypeKind::Str,
-            option: TypeOption::default()
         }
     }
 
-    // TODO - @Cleanup: Obsolete
-    pub fn is_compatible(self, v: &Value) -> bool {
-        if v == &Value::Null {
-            true
-        } else if self.kind == TypeKind::Null {
-            true
-        } else {
-            self.kind == v.to_type().kind
+    pub fn array(of: Self, size: Option<u32>) -> Self {
+        Self {
+            kind: TypeKind::Array(
+                      Box::new(of),
+                      match size {
+                          Some(n) => ArraySize::Sized(n),
+                          None => ArraySize::Dynamic
+                      }
+                )
         }
     }
 
-    pub fn primitive_from_str(cand: &str) -> Option<Self> {
-        match cand {
-            "int"    | "INT"    => Some(Self::int()),
-            "float"  | "FLOAT"  => Some(Self::float()),
-            "string" | "STRING" => Some(Self::string()),
-            "bool"   | "BOOL"   => Some(Self::boolean()),
-            _ => None
-        }
-    }
 }
+
 
 
 #[derive(Debug, Clone, PartialEq)]
