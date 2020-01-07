@@ -34,16 +34,21 @@ pub struct FunctionData {
 pub struct DeclarationData {
     pub kind: DeclKind,
     pub name: String,
-    pub dectype: Type,
+    pub dectype: String,
 
     // TODO - @Improvement: const, nullable, inferred は共存できない（どれか１つだけ有効化出来る）
     // 専用のフラグかステータスを作るべきだと思う
-    pub is_const: bool,
-    pub is_nullable: bool,
-    pub is_inferred: bool,
+    pub decl_option: DeclOption,
     pub expr: Option<Expr>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeclOption {
+    Normal,
+    Constant,
+    Nullable,
+    Inferred
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclKind {
@@ -59,6 +64,8 @@ pub struct BlockData {
     pub statements: Vec<Statement>,
 }
 
+
+// TODO - @Improvement: 全部ポインタに直したほうが良い
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Binary(Box<Expr>, Box<Expr>, Operator),

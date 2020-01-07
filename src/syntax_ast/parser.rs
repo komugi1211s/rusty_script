@@ -3,12 +3,11 @@ use trace::Error;
 use super::{
     ast_data::{
         BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
-        ParsedResult, Statement, StatementNode,
+        ParsedResult, Statement, StatementNode, DeclOption
     },
     token::{Token, TokenType},
 };
 
-use types::types::{Type, TypeKind, TypeOption};
 use trace::position::CodeSpan;
 
 // TODO:
@@ -184,9 +183,6 @@ impl<'tok> Parser<'tok> {
         self.statement()
     }
 
-    fn parse_typedecl(&mut self, decl: &mut decl_data) {
-    }
-
     fn initialize_decl_data(&mut self) -> Result<DeclarationData, Error> {
         let identity = { self.get_previous().lexeme.to_owned().unwrap() };
         let colon = self.consume(TokenType::Colon)?;
@@ -194,10 +190,8 @@ impl<'tok> Parser<'tok> {
         let mut decl_data = DeclarationData {
             kind: DeclKind::Variable,
             name: identity,
-            dectype: Type::default(),
-            is_const: false,
-            is_nullable: false,
-            is_inferred: true,
+            dectype: String::new(),
+            decl_option: DeclOption::Inferred,
             expr: None,
         };
 
@@ -206,12 +200,8 @@ impl<'tok> Parser<'tok> {
             TokenType::Iden => {
                 self.advance();
                 let type_candidate = lexeme.unwrap();
-
-                decl_data.dectype = if let Some(primitive) = Type::primitive_from_str(&type_candidate) {
-                    primitive
-                } else {
-                    Type { kind: TypeKind::UserDef, option: Default::default() }
-                };
+                decl_data.dectype = type_candidate;
+                decl_data.decl_option = DeclOption::Normal;
 
                 if self.consume(TokenType::OpenSquareBracket).is_ok() {
                     if self.is_next(TokenType::CloseSquareBracket) {
@@ -231,12 +221,11 @@ impl<'tok> Parser<'tok> {
                     }
                 }
 
-                let is_all_uppercase =
-                    type_candidate.as_str().to_ascii_uppercase() == type_candidate;
-
-                decl_data.is_const = is_all_uppercase;
-                decl_data.is_nullable = self.consume(TokenType::Question).is_ok();
-                decl_data.is_inferred = false;
+                if self.consume(TokenType::Question).is_ok() {
+                    decl_data.decl_option = DeclOption::Nullable;
+                } else if self.consume(TokenType::Bang).is_ok() {
+                    decl_data.decl_option = DeclOption::Constant;
+                }
             }
             _ => (), // Inferred;
         };
@@ -324,7 +313,7 @@ impl<'tok> Parser<'tok> {
             state = Statement::Decralation(decl_info);
         } else if self.consume(TokenType::SemiColon).is_ok() {
             // return if nullable
-            if decl_info.is_nullable {
+            if decl_info.decl_option == DeclOption::Nullable {
                 state = Statement::Decralation(decl_info);
             } else {
                 return Err(Error::new_while_parsing(
@@ -348,7 +337,6 @@ impl<'tok> Parser<'tok> {
     }
 
     fn declare_function(&mut self, mut info: DeclarationData) -> Result<Statement, Error> {
-        info.dectype.option.insert(TypeOption::Func);
         let arguments = self.declare_argument()?;
 
         self.consume(TokenType::OpenBrace)?;
