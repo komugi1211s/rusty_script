@@ -11,24 +11,24 @@ const USIZE_LENGTH: usize = 4;
 const USIZE_LENGTH: usize = 8;
 
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TypeKind<'ty> {
+#[derive(Debug, PartialEq, Clone)]
+pub enum TypeKind {
     Int,
     Float,
     Str,
     Boolean,
     Null,
-    Array(&'ty Type<'ty>, ArraySize),
+    Array(Box<Type>, ArraySize),
     UserDef,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ArraySize {
     Sized(u32),
     Dynamic,
 }
 
-impl Default for TypeKind<'_> {
+impl Default for TypeKind {
     fn default() -> Self {
         TypeKind::Null
     }
@@ -42,16 +42,14 @@ bitflags! {
 }
 
 
-// NOTE: since this struct's size is only about 16 bits ( 2 bytes! ),
-// I just implement Copy + Clone and forget about it
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
-pub struct Type<'ty> {
-    pub kind: TypeKind<'ty>,
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Type {
+    pub kind: TypeKind,
     pub option: TypeOption,
 }
 
-impl<'ty> Type<'ty> {
-    pub fn new(kind: TypeKind<'ty>, opt: TypeOption) -> Self {
+impl Type {
+    pub fn new(kind: TypeKind, opt: TypeOption) -> Self {
         Self {
             kind,
             option: opt
@@ -120,25 +118,25 @@ pub enum Value {
     Null,
 }
 
-impl From<&i64> for Type<'_> {
+impl From<&i64> for Type {
     fn from(_: &i64) -> Self {
         Type::int()
     }
 }
 
-impl From<&f64> for Type<'_> {
+impl From<&f64> for Type {
     fn from(_: &f64) -> Self {
         Type::float()
     }
 }
 
-impl From<&String> for Type<'_> {
+impl From<&String> for Type {
     fn from(_: &String) -> Self {
         Type::string()
     }
 }
 
-impl From<&bool> for Type<'_> {
+impl From<&bool> for Type {
     fn from(_: &bool) -> Self {
         Type::boolean()
     }
