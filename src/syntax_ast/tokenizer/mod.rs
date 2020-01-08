@@ -1,6 +1,7 @@
 use std::fmt;
 // use std::mem;
-use super::token::{match_identity, Token, TokenType};
+pub mod token;
+use token::{match_identity, Token, TokenType};
 use trace::{ Error, position::CodeSpan };
 
 /*

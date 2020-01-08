@@ -1,12 +1,12 @@
 use syntax_ast::{
-    ast_data::{DeclarationData, DeclKind, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind, Operator},
-    token::TokenType,
+    ast::{DeclarationData, DeclKind, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind, Operator},
+    tokenizer::token::TokenType,
 };
 
 use types::types::{ Type, TypeKind, TypeOption };
 use crate::vm::{ VirtualMachine };
 use crate::typecheck;
-use trace::position::{ CodeSpan };
+use trace::position::{ CodeSpan, EMPTY_SPAN };
 
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
@@ -123,7 +123,7 @@ const USIZE_LENGTH: usize = 8;
 #[derive(Default, Debug)]
 pub struct Code {
     pub bytes: Vec<u8>,
-    pub line: Vec<usize>,
+    pub span: Vec<usize>,
 }
 
 #[derive(Default, Debug)]
@@ -136,13 +136,13 @@ impl Code {
     fn merge(&mut self, other: Code) -> usize {
         let current_length = self.current_length();
         self.bytes.extend(other.bytes);
-        self.line.extend(other.line);
+        self.span.extend(other.span);
         current_length
     }
 
-    pub fn push_operand(&mut self, operand: u8, line: usize) -> usize {
+    pub fn push_operand(&mut self, operand: u8, span: CodeSpan) -> usize {
         self.bytes.push(operand);
-        self.line.push(line);
+        self.span.push(span);
         self.bytes.len()
     }
 
@@ -150,8 +150,8 @@ impl Code {
         self.bytes.len()
     }
 
-    pub fn push_opcode(&mut self, code: OpCode, line: usize) -> usize {
-        self.push_operand(code as u8, line)
+    pub fn push_opcode(&mut self, code: OpCode, span: CodeSpan) -> usize {
+        self.push_operand(code as u8, span)
     }
 
     pub fn rewrite_operand(&mut self, byte: u8, index: usize) -> usize {
@@ -174,16 +174,16 @@ impl Code {
         self.rewrite_operand(code as u8, index)
     }
 
-    pub fn push_operands(&mut self, operands: Vec<u8>, line: usize) -> usize {
+    pub fn push_operands(&mut self, operands: Vec<u8>, span: CodeSpan) -> usize {
         for i in &operands {
-            self.push_operand(*i, line);
+            self.push_operand(*i, span);
         }
         self.bytes.len()
     }
 
-    pub fn write_null(&mut self, line: usize) -> usize {
-        self.push_opcode(OpCode::PushPtr, line);
-        self.push_operands(0usize.to_ne_bytes().to_vec(), line);
+    pub fn write_null(&mut self, span: CodeSpan) -> usize {
+        self.push_opcode(OpCode::PushPtr, span);
+        self.push_operands(0usize.to_ne_bytes().to_vec(), span);
         self.bytes.len()
     }
 
@@ -392,7 +392,7 @@ impl fmt::Display for FuncInfo {
 #[derive(Debug)]
 struct StatementHandleResult {
     index: usize,
-    line: usize,
+    span: CodeSpan,
     info: StatementInfo
 }
 
@@ -408,7 +408,7 @@ enum StatementInfo {
 #[derive(Debug)]
 struct ExpressionHandleResult {
     index: usize,
-    line: usize,
+    span: CodeSpan,
     _type: Type,
 }
 
@@ -476,8 +476,8 @@ impl BytecodeGenerator {
             self.prepare_function(function);
         }
         let entry_point = self.code.current_length();
-        for i in ast.statements {
-            self.handle_stmt(i.value, i.span.start_usize());
+        for node in ast.ast.iter() {
+            self.handle_astnode(&ast, node);
         }
         self.const_table.push_data(usize::max_value().to_ne_bytes().to_vec());
         let bytechunk = ByteChunk {
@@ -536,7 +536,7 @@ impl BytecodeGenerator {
     
         // 実際に使うことはないが、特定の関数が必要とするため用意
         let mut placeholder = StatementHandleResult {
-            line: 0,
+            span: 0,
             index: 0,
             info: StatementInfo::Nothing,
         };
@@ -573,7 +573,7 @@ impl BytecodeGenerator {
 
         // コードセクションも上記と同様に処理する
         for statement in body_block.statements {
-            let result = self.handle_stmt(statement, 0);
+            let result = self.handle_stmt(statement, EMPTY_SPAN);
             match result.info {
                 StatementInfo::Return(dtype) => {
                     if decl_info.is_inferred {
@@ -616,13 +616,17 @@ impl BytecodeGenerator {
         placeholder.index = self.code.current_length();
     }
 
+    fn handle_astnode(&mut self, ast: &ParsedResult, node: &AstNode) -> StatementHandleResult {
+        self.handle_stmt(ast, node.stmt_id, node.span)
+    }
 
-    fn handle_stmt(&mut self, data: Statement, line: usize) -> StatementHandleResult {
-        let mut handled_result = StatementHandleResult { line, index: 0, info: StatementInfo::Nothing };
+    fn handle_stmt(&mut self, ast: &ParsedResult, data: &StmtId, span: CodeSpan) -> StatementHandleResult {
+        let mut handled_result = StatementHandleResult { span, index: 0, info: StatementInfo::Nothing };
 
+        let data = ast.get_stmt(data.clone());
         match data {
             Statement::Expression(expr) => {
-                handled_result.index = self.handle_expr(expr, line).index;
+                handled_result.index = self.handle_expr(ast, expr, span).index;
                 handled_result
             }
             Statement::Decralation(declaration_info) => {
@@ -631,40 +635,40 @@ impl BytecodeGenerator {
             }
 
             Statement::Print(expr) => {
-                self.handle_expr(expr, line);
-                handled_result.index = self.code.push_opcode(OpCode::DebugPrint, line);
+                self.handle_expr(ast, expr, span);
+                handled_result.index = self.code.push_opcode(OpCode::DebugPrint, span);
                 handled_result
             }
 
-            Statement::If(expr, if_block, optional_else_block) => {
-                self.handle_expr(expr, line);
+            Statement::If(expr, if_id, opt_else_id) => {
+                self.handle_expr(ast, expr, span);
 
                 // ジャンプ用のインデックスを作っておく
-                let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, line);
+                let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, span);
                 self.code
-                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
+                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), span);
 
                 // Ifの終わりにまでJumpする為のIndexが要る
-                let end_of_if_block = self.handle_stmt(*if_block, line).index;
+                let end_of_if_block = self.handle_stmt(ast, if_id, span).index;
 
                 // jump opcodeがある位置のオペランドを、Ifブロックの終了アドレスで上書き
                 self.code
                     .rewrite_operands(end_of_if_block.to_ne_bytes().to_vec(), jump_opcode_index);
 
-                if let Some(else_block) = optional_else_block {
+                if let Some(else_id) = opt_else_id {
                     //
                     // Elseがあるので、Elseを避けるためのJump命令をIf命令の最後に叩き込む
-                    let jump_block = self.code.push_opcode(OpCode::Jump, line);
+                    let jump_block = self.code.push_opcode(OpCode::Jump, span);
                     let after_operand = self
                         .code
-                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
+                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), span);
 
                     // Ifブロックの終了アドレスがあった部分を、Else避けJump分を加味して調整
                     self.code
                         .rewrite_operands(after_operand.to_ne_bytes().to_vec(), jump_opcode_index);
 
                     // Ifブロックが丁度終わる位置のJumpオペランドを、Elseブロックの終了アドレスで上書き
-                    let end_of_else_block = self.handle_stmt(*else_block, line).index;
+                    let end_of_else_block = self.handle_stmt(ast, else_id, span).index;
                     self.code
                         .rewrite_operands(end_of_else_block.to_ne_bytes().to_vec(), jump_block);
                 }
@@ -674,10 +678,10 @@ impl BytecodeGenerator {
             }
 
             Statement::Block(block_data) => {
-                // self.code.push_opcode(OpCode::BlockIn, line);
+                // self.code.push_opcode(OpCode::BlockIn, span);
                 self.current_block += 1;
                 for i in block_data.statements {
-                    match self.handle_stmt(i, line).info {
+                    match self.handle_stmt(i, span).info {
                         StatementInfo::Break(usize) => {
                             self.break_call.push(usize);
                         },
@@ -688,12 +692,12 @@ impl BytecodeGenerator {
                 let block = self.current_block;
                 self.current_define.retain(|x| x.depth < block);
                 self.current_block -= 1;
-                // handled_result.index = self.code.push_opcode(OpCode::BlockOut, line);
+                // handled_result.index = self.code.push_opcode(OpCode::BlockOut, span);
                 handled_result.index = self.code.current_length();
                 handled_result
             }
 
-            Statement::While(expr, while_block) => {
+            Statement::While(expr, while_id) => {
                 /*
                  どうやらアセンブラではWhileループは以下のように書かれるらしい:
 
@@ -712,25 +716,25 @@ impl BytecodeGenerator {
                 */
 
                 let _before_loop = self.code.current_length();
-                let jump_conditional = self.code.push_opcode(OpCode::Jump, line);
+                let jump_conditional = self.code.push_opcode(OpCode::Jump, span);
                 let after_jump_conditional = self
                     .code
-                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
+                    .push_operands(usize::max_value().to_ne_bytes().to_vec(), span);
 
                 // この時点でContinue命令は after_jump_conditional に飛ぶようになる
                 let previous_loop_start = self.last_loop_start;
                 self.last_loop_start = after_jump_conditional;
 
-                self.handle_stmt(*while_block, line);
+                self.handle_stmt(ast, while_id, span);
 
                 let before_expr = self.code.current_length();
-                self.handle_expr(expr, line);
-                self.code.push_opcode(OpCode::Not, line);
+                self.handle_expr(expr, span);
+                self.code.push_opcode(OpCode::Not, span);
 
-                self.code.push_opcode(OpCode::JumpIfFalse, line);
+                self.code.push_opcode(OpCode::JumpIfFalse, span);
                 let end_of_loop = self
                     .code
-                    .push_operands(after_jump_conditional.to_ne_bytes().to_vec(), line);
+                    .push_operands(after_jump_conditional.to_ne_bytes().to_vec(), span);
 
                 for i in self.break_call.drain(..) {
                     self.code.rewrite_operands(end_of_loop.to_ne_bytes().to_vec(), i);
@@ -744,9 +748,9 @@ impl BytecodeGenerator {
 
             Statement::Break => {
                 if self.last_loop_start != usize::max_value() {
-                    let break_index = self.code.push_opcode(OpCode::Jump, line);
+                    let break_index = self.code.push_opcode(OpCode::Jump, span);
                     self.code
-                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), line);
+                        .push_operands(usize::max_value().to_ne_bytes().to_vec(), span);
                     handled_result.info = StatementInfo::Break(break_index);
                 }
                 handled_result.index = self.code.current_length();
@@ -755,28 +759,28 @@ impl BytecodeGenerator {
 
             Statement::Continue => {
                 if self.last_loop_start != usize::max_value() {
-                    let continue_index = self.code.push_opcode(OpCode::Jump, line);
+                    let continue_index = self.code.push_opcode(OpCode::Jump, span);
                     self.code
-                        .push_operands(self.last_loop_start.to_ne_bytes().to_vec(), line);
+                        .push_operands(self.last_loop_start.to_ne_bytes().to_vec(), span);
                     handled_result.info = StatementInfo::Continue(continue_index);
                 }
                 handled_result.index = self.code.current_length();
                 handled_result
             }
             Statement::Function(func_data) => {
-                // self.handle_function_data(&mut handled_result, func_data, line);
+                // self.handle_function_data(&mut handled_result, func_data, span);
                 handled_result
             }
             Statement::Return(opt_expr) => {
                 let result_type = if let Some(expr) = opt_expr {
-                    let result_expr = self.handle_expr(expr, line);
+                    let result_expr = self.handle_expr(expr, span);
                     result_expr._type
                 }
                 else {
-                    self.code.write_null(line);
+                    self.code.write_null(span);
                     Type::default()
                 };
-                handled_result.index = self.code.push_opcode(OpCode::Return, line);
+                handled_result.index = self.code.push_opcode(OpCode::Return, span);
                 handled_result.info = StatementInfo::Return(result_type);
                 handled_result
             }
@@ -795,7 +799,7 @@ impl BytecodeGenerator {
 
         match expression {
             Some(expr) => {
-                let expr_handle_result = self.handle_expr(expr, out.line);
+                let expr_handle_result = self.handle_expr(expr, out.span);
                 // println!("Declaration_Expr: {:?}", &expr_handle_result);
                 value_index = expr_handle_result.index;
                 actual_type = expr_handle_result._type;
@@ -803,7 +807,7 @@ impl BytecodeGenerator {
             None => {
                 empty_expr = true;
                 if decl.kind != DeclKind::Argument {
-                    value_index = self.code.write_null(out.line)
+                    value_index = self.code.write_null(out.span)
                 }
             }
         };
@@ -861,8 +865,8 @@ impl BytecodeGenerator {
                 let opcode = self.get_store_opcode(declared_type, false);
                 let operands = position as u16;
 
-                self.code.push_opcode(opcode, out.line);
-                out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.line);
+                self.code.push_opcode(opcode, out.span);
+                out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.span);
             }
         } else {
             let (exists, pos) = self.find_global(&name);
@@ -876,8 +880,8 @@ impl BytecodeGenerator {
             let opcode = self.get_store_opcode(declared_type, true);
             let operands = position as u16;
 
-            self.code.push_opcode(opcode, out.line);
-            out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.line);
+            self.code.push_opcode(opcode, out.span);
+            out.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), out.span);
         }
         out.info = StatementInfo::Declaration { is_initialized: empty_expr, dtype: declared_type };
     }
@@ -919,12 +923,12 @@ impl BytecodeGenerator {
         &mut self,
         out: &mut ExpressionHandleResult,
         lit: Literal,
-        line: usize,
+        span: CodeSpan,
     ) {
         let _type = typecheck::literal_to_type(&lit);
         if _type.kind == TypeKind::Null {
             out._type = _type;
-            out.index = self.code.write_null(line);
+            out.index = self.code.write_null(span);
             return;
         }
         let opcode = type_to_const_opcode(&_type);
@@ -940,15 +944,15 @@ impl BytecodeGenerator {
         };
 
         self.const_table.types.insert(start_index, _type);
-        self.code.push_opcode(opcode, line);
-        let index = self.code.push_operands(start_index.to_ne_bytes().to_vec(), line);
+        self.code.push_opcode(opcode, span);
+        let index = self.code.push_operands(start_index.to_ne_bytes().to_vec(), span);
         out._type = _type;
         out.index = index;
     }
 
-    fn handle_expr(&mut self, expr: Expr, line: usize) -> ExpressionHandleResult {
+    fn handle_expr(&mut self, expr: Expr, span: CodeSpan) -> ExpressionHandleResult {
         let mut handled_result = ExpressionHandleResult {
-            line,
+            span,
             index: 0,
             _type: Type::default(),
         };
@@ -976,79 +980,79 @@ impl BytecodeGenerator {
                     let _type = self.global_define[pos_global].dtype.clone();
                     let opcode = self.get_load_opcode(_type, true);
                     handled_result._type = _type;
-                    self.code.push_opcode(opcode, line);
+                    self.code.push_opcode(opcode, span);
 
                     let index = pos_global as u16;
-                    handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), line);
+                    handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), span);
                     return handled_result;
                 }
 
                 let _type = self.current_define[pos].dtype.clone();
                 let opcode = self.get_load_opcode(_type, false);
                 handled_result._type = _type;
-                self.code.push_opcode(opcode, line);
+                self.code.push_opcode(opcode, span);
 
                 let index = pos as u16;
-                handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), line);
+                handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), span);
                 handled_result
             }
             Expr::Literal(literal) => {
-                self.handle_literal(&mut handled_result, literal, line);
+                self.handle_literal(&mut handled_result, literal, span);
                 handled_result
             }
 
             Expr::Binary(left, right, operator) => {
-                let left = self.handle_expr(*left, line);
-                let right = self.handle_expr(*right, line);
+                let left = self.handle_expr(*left, span);
+                let right = self.handle_expr(*right, span);
 
                 handled_result._type =
                     typecheck::type_after_binary(&left._type, &right._type, operator)
                         .unwrap();
                 handled_result.index = match operator {
-                    Operator::Add => self.code.push_opcode(OpCode::Add, line),
-                    Operator::Sub => self.code.push_opcode(OpCode::Sub, line),
-                    Operator::Mul => self.code.push_opcode(OpCode::Mul, line),
-                    Operator::Div => self.code.push_opcode(OpCode::Div, line),
-                    Operator::Mod => self.code.push_opcode(OpCode::Mod, line),
+                    Operator::Add => self.code.push_opcode(OpCode::Add, span),
+                    Operator::Sub => self.code.push_opcode(OpCode::Sub, span),
+                    Operator::Mul => self.code.push_opcode(OpCode::Mul, span),
+                    Operator::Div => self.code.push_opcode(OpCode::Div, span),
+                    Operator::Mod => self.code.push_opcode(OpCode::Mod, span),
 
                     // PartialEq Series
-                    Operator::NotEq => self.code.push_opcode(OpCode::NotEq, line),
-                    Operator::EqEq => self.code.push_opcode(OpCode::EqEq, line),
+                    Operator::NotEq => self.code.push_opcode(OpCode::NotEq, span),
+                    Operator::EqEq => self.code.push_opcode(OpCode::EqEq, span),
 
                     // PartialOrd Series
-                    Operator::LessEq => self.code.push_opcode(OpCode::LessEq, line),
-                    Operator::MoreEq => self.code.push_opcode(OpCode::MoreEq, line),
-                    Operator::Less => self.code.push_opcode(OpCode::Less, line),
-                    Operator::More => self.code.push_opcode(OpCode::More, line),
+                    Operator::LessEq => self.code.push_opcode(OpCode::LessEq, span),
+                    Operator::MoreEq => self.code.push_opcode(OpCode::MoreEq, span),
+                    Operator::Less => self.code.push_opcode(OpCode::Less, span),
+                    Operator::More => self.code.push_opcode(OpCode::More, span),
                     _ => unreachable!(),
                 };
                 handled_result
             }
             Expr::Logical(left, right, operator) => {
-                self.handle_expr(*left, line);
-                self.handle_expr(*right, line);
+                self.handle_expr(*left, span);
+                self.handle_expr(*right, span);
 
                 handled_result.index = match operator {
-                    Operator::And => self.code.push_opcode(OpCode::And, line),
-                    Operator::Or => self.code.push_opcode(OpCode::Or, line),
+                    Operator::And => self.code.push_opcode(OpCode::And, span),
+                    Operator::Or => self.code.push_opcode(OpCode::Or, span),
                     _ => unreachable!(),
                 };
                 handled_result._type = Type::boolean();
                 handled_result
             }
             Expr::Unary(expr, operator) => {
-                let another_result = self.handle_expr(*expr, line);
+                let another_result = self.handle_expr(*expr, span);
                 handled_result._type =
                     typecheck::type_after_unary(&another_result._type, operator).unwrap();
                 handled_result.index = match operator {
-                    Operator::Not => self.code.push_opcode(OpCode::Not, line),
-                    Operator::Neg => self.code.push_opcode(OpCode::Neg, line),
+                    Operator::Not => self.code.push_opcode(OpCode::Not, span),
+                    Operator::Neg => self.code.push_opcode(OpCode::Neg, span),
                     _ => unreachable!(),
                 };
                 handled_result._type = another_result._type;
                 handled_result
             }
-            Expr::Grouping(group) => self.handle_expr(*group, line),
+            Expr::Grouping(group) => self.handle_expr(*group, span),
             Expr::Assign(name, expr) => {
                 let (exists, position, is_global) = {
                     let (lexists, lpos) = self.find_local(&name);
@@ -1076,7 +1080,7 @@ impl BytecodeGenerator {
                     }
                 };
 
-                let expression_result = self.handle_expr(*expr, line);
+                let expression_result = self.handle_expr(*expr, span);
                 let expression_type = expression_result._type;
 
                 if declared_type != expression_type {
@@ -1088,9 +1092,9 @@ impl BytecodeGenerator {
 
                 let opcode = self.get_store_opcode(expression_type, is_global);
                 let operands = position as u16;
-                self.code.push_opcode(opcode, line);
+                self.code.push_opcode(opcode, span);
                 handled_result._type = expression_type;
-                handled_result.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), line);
+                handled_result.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), span);
                 handled_result
             }
             Expr::FunctionCall(func_name, mut arguments) => {
@@ -1112,15 +1116,15 @@ impl BytecodeGenerator {
                         let argument_end = arg_count - 1;
                         arguments.reverse();
                         for (i, arg) in arguments.drain(..).enumerate() {
-                            let handled_type = self.handle_expr(arg, line)._type;
+                            let handled_type = self.handle_expr(arg, span)._type;
                             let current_type = arg_types[argument_end - i];
                             if current_type != handled_type {
                                 panic!("Type Mismatch when calling a function!! at line {}, {:?} != {:?}", line, current_type, handled_type);
                             }
                         }
                     }
-                    self.code.push_opcode(OpCode::Call, line);
-                    let jump_here = self.code.push_operands((position as u16).to_ne_bytes().to_vec(), line);
+                    self.code.push_opcode(OpCode::Call, span);
+                    let jump_here = self.code.push_operands((position as u16).to_ne_bytes().to_vec(), span);
                     handled_result._type = return_type; 
                     handled_result.index = jump_here;
                 }

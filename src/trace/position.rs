@@ -4,7 +4,7 @@ use std::mem;
 
 
 // 意図的にInvalidなスパンを作ってそれをEmptyとして使う
-const EMTPY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
+const EMPTY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
 
 
 // ソースコード内で特定の範囲を指定するStruct
@@ -68,6 +68,10 @@ impl CodeSpan {
     #[inline(always)]
     pub fn is_oneliner(&self) -> bool {
         self.end == self.start
+    }
+
+    pub fn is_invalid(&self) -> bool {
+        self.end < self.start
     }
 }
 

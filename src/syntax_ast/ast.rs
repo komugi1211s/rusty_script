@@ -1,25 +1,66 @@
 use std::fmt;
-use crate::token::{ Token };
+use crate::tokenizer::token::{ Token };
 use types::types::{ Type, ArraySize };
 use trace::position::CodeSpan;
 
 #[derive(Debug)]
 pub struct ParsedResult {
+    pub ast: Vec<AstNode>,
+    pub stmt: Vec<Statement>,
+    pub expr: Vec<Expr>,
     pub functions: Vec<FunctionData>,
-    pub statements: Vec<StatementNode>,
 }
 
+impl ParsedResult {
+    pub fn add_stmt(&mut self, stmt: Statement) -> StmtId {
+        let index = self.stmt.len();
+        self.stmt.push(stmt);
+        StmtId(index as u32)
+    }
+
+    pub fn add_expr(&mut self, expr: Expr) -> ExprId {
+        let index = self.expr.len();
+        self.expr.push(expr);
+        ExprId(index as u32)
+    }
+    
+    pub fn add_fn(&mut self, fun: FunctionData) -> usize {
+        let index = self.functions.len();
+        self.functions.push(fun);
+        index
+    }
+
+    pub fn add_ast(&mut self, stmt_id: StmtId, span: CodeSpan) {
+        self.ast.push(AstNode::new(stmt_id, span));
+    }
+
+    pub fn get_expr(&self, id: ExprId) -> &Expr {
+        self.expr.get(id.0 as usize).unwrap()
+    }
+
+    pub fn get_stmt(&self, id: StmtId) -> &Statement {
+        self.stmt.get(id.0 as usize).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StmtId(u32);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExprId(u32);
 
 #[derive(Debug, Clone)]
-pub struct StatementNode {
-    pub span: CodeSpan,
-    pub value: Statement,
+pub struct AstNode {
+    pub span:  CodeSpan,
+    pub stmt_id: StmtId,
 }
 
-
-impl StatementNode {
-    pub fn new(stmt: Statement, span: CodeSpan) -> Self {
-        Self { value: stmt, span }
+impl AstNode {
+    pub fn new(stmt_id: StmtId, span: CodeSpan) -> Self {
+        Self {
+            span,
+            stmt_id
+        }
     }
 }
 
@@ -39,7 +80,7 @@ pub struct DeclarationData {
     // TODO - @Improvement: const, nullable, inferred は共存できない（どれか１つだけ有効化出来る）
     // 専用のフラグかステータスを作るべきだと思う
     pub decl_option: DeclOption,
-    pub expr: Option<Expr>,
+    pub expr: Option<ExprId>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,35 +102,34 @@ pub enum DeclKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockData {
     pub local_count: usize,
-    pub statements: Vec<Statement>,
+    pub statements: Vec<StmtId>,
 }
 
 
-// TODO - @Improvement: 全部ポインタに直したほうが良い
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Binary(Box<Expr>, Box<Expr>, Operator),
-    Logical(Box<Expr>, Box<Expr>, Operator),
-    FunctionCall(Box<Expr>, Vec<Expr>),
-    Assign(String, Box<Expr>),
+    Binary(ExprId, ExprId, Operator),
+    Logical(ExprId, ExprId, Operator),
+    FunctionCall(ExprId, Vec<ExprId>),
+    Assign(String, ExprId),
 
     Literal(Literal),
-    Grouping(Box<Expr>),
-    Unary(Box<Expr>, Operator),
+    Grouping(ExprId),
+    Unary(ExprId, Operator),
     Variable(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     // DebugPrint
-    Print(Expr),
-    Return(Option<Expr>),
-    Expression(Expr),
+    Print(ExprId),
+    Return(Option<ExprId>),
+    Expression(ExprId),
     // Defer(Expr),
     Decralation(DeclarationData),
-    If(Expr, Box<Statement>, Option<Box<Statement>>),
-    While(Expr, Box<Statement>),
-    For(Box<Statement>, Expr, Expr, Box<Statement>),
+    If(ExprId, StmtId, Option<StmtId>),
+    While(ExprId, StmtId),
+    For(StmtId, ExprId, ExprId, StmtId),
     Block(BlockData),
     Function(usize),
     Break,
@@ -221,22 +261,3 @@ impl Literal {
     }
 }
 
-impl fmt::Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Expr::Binary(ref left, ref right, ref token) => {
-                write!(f, "{} {} {:?}", left, right, token)
-            }
-            Expr::Logical(ref left, ref right, ref token) => {
-                write!(f, "{} {} {:?}", left, right, token)
-            }
-            Expr::Grouping(ref inside) => write!(f, "({})", inside),
-            Expr::Literal(ref lit) => write!(f, "{:?}", lit),
-            Expr::Unary(ref item, ref oper) => write!(f, "{:?}{}", oper, item),
-            Expr::Variable(ref s) => write!(f, "{}", s),
-            Expr::Assign(s, ex) => write!(f, "{} = {}", s, ex),
-            Expr::FunctionCall(ref name, ref items) => write!(f, "{}({:?})", name, items),
-            x => write!(f, "unimplemented display expr {:?}", x),
-        }
-    }
-}

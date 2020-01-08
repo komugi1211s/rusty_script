@@ -1,13 +1,13 @@
 use trace::Error;
 
 use super::{
-    ast_data::{
+    ast::{self,
         BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
-        ParsedResult, Statement, StatementNode, DeclOption
+        ParsedResult, Statement, AstNode, DeclOption, StmtId, ExprId
     },
-    token::{Token, TokenType},
 };
 
+use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
 
 // TODO:
@@ -34,7 +34,7 @@ const MAX_IDENTIFIER_LENGTH: usize = 530;
 
 pub struct Parser<'tok> {
     tokens: &'tok Vec<Token>,
-    parsed_result: ParsedResult,
+    ast: ParsedResult,
     current: usize,
     start_line: usize,
     current_line: usize,
@@ -46,9 +46,11 @@ impl<'tok> Parser<'tok> {
     pub fn new(_tok: &'tok Vec<Token>) -> Self {
         Self {
             tokens: _tok,
-            parsed_result: ParsedResult {
+            ast: ParsedResult {
+                ast: vec![],
+                stmt: vec![],
+                expr: vec![],
                 functions: vec![],
-                statements: vec![],
             },
             current: 0,
             start_line: 0,
@@ -63,11 +65,9 @@ impl<'tok> Parser<'tok> {
             self.start_line = self.current_line;
             let declaration = self.declaration()?;
             let codespan = CodeSpan::new(self.start_line, self.current_line);
-            self.parsed_result
-                .statements
-                .push(StatementNode::new(declaration, codespan));
+            self.ast.add_ast(declaration, codespan);
         }
-        Ok(self.parsed_result)
+        Ok(self.ast)
     }
 
     fn is_at_end(&self) -> bool {
@@ -78,7 +78,7 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    fn statement(&mut self) -> Result<Statement, Error> {
+    fn statement(&mut self) -> Result<StmtId, Error> {
         let possible_stmt = self.get_current();
         let result = match possible_stmt.tokentype {
             // Close Bracket Expected, They'll handle the close bracket themselves
@@ -95,14 +95,17 @@ impl<'tok> Parser<'tok> {
                 // Keep track of local assignment
                 self.advance();
                 let block = self.block()?;
-                return Ok(Statement::Block(block));
+                let id = self.ast.add_stmt(Statement::Block(block));
+                return Ok(id);
             }
 
             // Semicolon Expected, I have to handle it here
             // Go through, no early return
             TokenType::Print => {
                 self.advance();
-                Ok(Statement::Print(self.expression()?))
+                let expr = self.expression()?;
+                let id = self.ast.add_stmt(Statement::Print(expr));
+                Ok(id)
             }
             TokenType::Return => {
                 self.advance();
@@ -110,40 +113,45 @@ impl<'tok> Parser<'tok> {
             }
             TokenType::Break => {
                 self.advance();
-                Ok(Statement::Break)
+                Ok(self.ast.add_stmt(Statement::Break))
             }
             TokenType::Continue => {
                 self.advance();
-                Ok(Statement::Continue)
+                Ok(self.ast.add_stmt(Statement::Continue))
             }
-            _ => Ok(Statement::Expression(self.expression()?)),
+            _ => {
+                let expr = self.expression()?;
+                Ok(self.ast.add_stmt(Statement::Expression(expr)))
+            }
         };
 
         self.consume(TokenType::SemiColon)?;
         result
     }
 
-    fn if_statement(&mut self) -> Result<Statement, Error> {
+    fn if_statement(&mut self) -> Result<StmtId, Error> {
         let condition = self.expression()?;
         let true_route = self.statement()?;
-
-        Ok(Statement::If(
+        let stmt = Statement::If(
             condition,
-            Box::new(true_route),
+            true_route,
             if self.is(TokenType::Else) {
                 self.current += 1;
-                Some(Box::new(self.statement()?))
+                Some(self.statement()?)
             } else {
                 None
             },
-        ))
+        );
+
+        Ok(self.ast.add_stmt(stmt))
     }
 
-    fn while_statement(&mut self) -> Result<Statement, Error> {
+    fn while_statement(&mut self) -> Result<StmtId, Error> {
         let condition = self.expression()?;
         let _loop = self.statement()?;
+        let stmt = Statement::While(condition, _loop);
 
-        Ok(Statement::While(condition, Box::new(_loop)))
+        Ok(self.ast.add_stmt(stmt))
     }
 
     fn block(&mut self) -> Result<BlockData, Error> {
@@ -166,16 +174,18 @@ impl<'tok> Parser<'tok> {
         })
     }
 
-    fn return_statement(&mut self) -> Result<Statement, Error> {
+    fn return_statement(&mut self) -> Result<StmtId, Error> {
         let mut result = None;
         if !self.is(TokenType::SemiColon) {
             result = Some(self.expression()?);
         }
 
-        Ok(Statement::Return(result))
+        let stmt = Statement::Return(result);
+
+        Ok(self.ast.add_stmt(stmt))
     }
 
-    fn declaration(&mut self) -> Result<Statement, Error> {
+    fn declaration(&mut self) -> Result<StmtId, Error> {
         if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
             return self.declare_variable();
         }
@@ -285,7 +295,7 @@ impl<'tok> Parser<'tok> {
         Ok(arguments)
     }
 
-    fn declare_variable(&mut self) -> Result<Statement, Error> {
+    fn declare_variable(&mut self) -> Result<StmtId, Error> {
         /*
          * NOTE: The difference between "Variable" "Function" "Argument" are really tough to
          * understand, so I'll leave a note here.
@@ -332,11 +342,13 @@ impl<'tok> Parser<'tok> {
                 "Failed to parse the declaration process.",
                 CodeSpan::oneline(self.current_line),
             )),
-            _ => Ok(state),
+            _ => { 
+                Ok(self.ast.add_stmt(state))
+            }
         }
     }
 
-    fn declare_function(&mut self, mut info: DeclarationData) -> Result<Statement, Error> {
+    fn declare_function(&mut self, mut info: DeclarationData) -> Result<StmtId, Error> {
         let arguments = self.declare_argument()?;
 
         self.consume(TokenType::OpenBrace)?;
@@ -347,16 +359,17 @@ impl<'tok> Parser<'tok> {
             args: arguments,
             block: inside_func,
         };
-        self.parsed_result.functions.push(data);
-        Ok(Statement::Function(self.parsed_result.functions.len() - 1))
+        let idx = self.ast.add_fn(data);
+        let stmt = Statement::Function(idx);
+        Ok(self.ast.add_stmt(stmt))
     }
 
-    fn expression(&mut self) -> Result<Expr, Error> {
+    fn expression(&mut self) -> Result<ExprId, Error> {
         let x = self.assignment();
         x
     }
 
-    fn assignment(&mut self) -> Result<Expr, Error> {
+    fn assignment(&mut self) -> Result<ExprId, Error> {
         let expr = self.logical_or()?;
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
@@ -364,8 +377,11 @@ impl<'tok> Parser<'tok> {
             let assign_span = self.advance().span;
             let value = self.assignment()?;
 
-            if let Expr::Variable(s) = expr {
-                return Ok(Expr::Assign(s, Box::new(value)));
+            // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
+            // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
+            if let Expr::Variable(s) = self.ast.get_expr(expr) {
+                let expr = self.ast.add_expr(Expr::Assign(s.to_string(), value));
+                return Ok(expr);
             } else {
                 return Err(Error::new_while_parsing(
                     "Invalid Assignment target",
@@ -377,30 +393,30 @@ impl<'tok> Parser<'tok> {
         Ok(expr)
     }
 
-    pub fn logical_or(&mut self) -> Result<Expr, Error> {
+    pub fn logical_or(&mut self) -> Result<ExprId, Error> {
         let mut expr = self.logical_and()?;
 
         while self.is(TokenType::Or) {
             self.advance();
             let right = self.logical_and()?;
-            expr = Expr::Logical(Box::new(expr), Box::new(right), Operator::Or);
+            expr = self.ast.add_expr(Expr::Logical(expr, right, Operator::Or));
         }
 
         Ok(expr)
     }
-    pub fn logical_and(&mut self) -> Result<Expr, Error> {
+    pub fn logical_and(&mut self) -> Result<ExprId, Error> {
         let mut expr = self.equality()?;
 
         while self.is(TokenType::And) {
             self.advance();
             let right = self.equality()?;
-            expr = Expr::Logical(Box::new(expr), Box::new(right), Operator::And);
+            expr = self.ast.add_expr(Expr::Logical(expr, right, Operator::And));
         }
 
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expr, Error> {
+    fn equality(&mut self) -> Result<ExprId, Error> {
         let mut expr = self.comparison()?;
         while !self.is_at_end() {
             let operator = match self.get_current().tokentype {
@@ -410,13 +426,13 @@ impl<'tok> Parser<'tok> {
             };
             self.advance();
             let right = self.comparison()?;
-            expr = Expr::Binary(Box::new(expr), Box::new(right), operator);
+            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
         }
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<Expr, Error> {
-        let mut start = self.addition()?;
+    fn comparison(&mut self) -> Result<ExprId, Error> {
+        let mut expr = self.addition()?;
 
         use TokenType::*;
         while !self.is_at_end() {
@@ -430,14 +446,14 @@ impl<'tok> Parser<'tok> {
             self.advance();
 
             let right = self.addition()?;
-            start = Expr::Binary(Box::new(start), Box::new(right), operator);
+            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
         }
 
-        Ok(start)
+        Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<Expr, Error> {
-        let mut start = self.multiplification()?;
+    fn addition(&mut self) -> Result<ExprId, Error> {
+        let mut expr = self.multiplification()?;
 
         while !self.is_at_end() {
             let operator = match self.get_current().tokentype {
@@ -447,14 +463,14 @@ impl<'tok> Parser<'tok> {
             };
             self.advance();
             let right = self.multiplification()?;
-            start = Expr::Binary(Box::new(start), Box::new(right), operator);
+            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
         }
 
-        Ok(start)
+        Ok(expr)
     }
 
-    fn multiplification(&mut self) -> Result<Expr, Error> {
-        let mut start = self.unary()?;
+    fn multiplification(&mut self) -> Result<ExprId, Error> {
+        let mut expr = self.unary()?;
 
         while !self.is_at_end() {
             let operator = match self.get_current().tokentype {
@@ -466,13 +482,13 @@ impl<'tok> Parser<'tok> {
             self.advance();
             let right = self.unary()?;
 
-            start = Expr::Binary(Box::new(start), Box::new(right), operator);
+            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
         }
 
-        Ok(start)
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expr, Error> {
+    fn unary(&mut self) -> Result<ExprId, Error> {
         if self.is(TokenType::Bang) || self.is(TokenType::Minus) {
             let operator = match self.get_current().tokentype {
                 TokenType::Bang => Operator::Not,
@@ -481,7 +497,7 @@ impl<'tok> Parser<'tok> {
             };
             self.advance();
             let right = self.unary()?;
-            let unary = Expr::Unary(Box::new(right), operator);
+            let unary = self.ast.add_expr(Expr::Unary(right, operator));
 
             return Ok(unary);
         }
@@ -489,7 +505,7 @@ impl<'tok> Parser<'tok> {
         self.func_call()
     }
 
-    fn func_call(&mut self) -> Result<Expr, Error> {
+    fn func_call(&mut self) -> Result<ExprId, Error> {
         let mut expr = self.primary()?;
 
         loop {
@@ -502,8 +518,8 @@ impl<'tok> Parser<'tok> {
         Ok(expr)
     }
 
-    fn finish_func_call(&mut self, _expr: Expr) -> Result<Expr, Error> {
-        let mut v = Vec::<Expr>::new();
+    fn finish_func_call(&mut self, expr: ExprId) -> Result<ExprId, Error> {
+        let mut v = Vec::<ExprId>::new();
         self.current += 1;
 
         if !self.is(TokenType::CloseParen) {
@@ -514,7 +530,8 @@ impl<'tok> Parser<'tok> {
             }
         }
         let paren = self.consume(TokenType::CloseParen)?;
-        Ok(Expr::FunctionCall(Box::new(_expr), v))
+        let expr = Expr::FunctionCall(expr, v);
+        Ok(self.ast.add_expr(expr))
     }
 
     fn is(&mut self, _type: TokenType) -> bool {
@@ -557,7 +574,7 @@ impl<'tok> Parser<'tok> {
         x
     }
 
-    fn primary(&mut self) -> Result<Expr, Error> {
+    fn primary(&mut self) -> Result<ExprId, Error> {
         let previous_line = self.current_line;
         let inside = self.advance();
         use TokenType::*;
@@ -565,28 +582,32 @@ impl<'tok> Parser<'tok> {
             Digit => {
                 let inside_lexeme = inside.lexeme.clone().unwrap();
                 let contain_dot = inside_lexeme.contains(".");
-                let literal = if contain_dot {
+                let lit = if contain_dot {
                     Literal::new_float(inside)
                 } else {
                     Literal::new_int(inside)
                 };
-                Ok(Expr::Literal(literal))
+                let expr_id = self.ast.add_expr(Expr::Literal(lit));
+                Ok(expr_id)
                 // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
             Str => {
                 let lit = Literal::new_str(inside);
-                Ok(Expr::Literal(lit))
+                let expr_id = self.ast.add_expr(Expr::Literal(lit));
+                Ok(expr_id)
             }
             Iden => {
                 if let Some(ref inside_lexeme) = inside.lexeme {
                     match inside_lexeme.as_str() {
                         "true" | "false" => {
                             let lit = Literal::new_bool(inside);
-                            Ok(Expr::Literal(lit))
+                            let expr_id = self.ast.add_expr(Expr::Literal(lit));
+                            Ok(expr_id)
                         }
                         "null" => {
                             let lit = Literal::new_null(inside);
-                            Ok(Expr::Literal(lit))
+                            let expr_id = self.ast.add_expr(Expr::Literal(lit));
+                            Ok(expr_id)
                         }
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
@@ -600,7 +621,9 @@ impl<'tok> Parser<'tok> {
                                     CodeSpan::new(previous_line, self.current_line)
                                 ));
                             }
-                            Ok(Expr::Variable(inside_lexeme.to_owned()))
+                            let expr = Expr::Variable(inside_lexeme.to_owned());
+                            let expr_id = self.ast.add_expr(expr);
+                            Ok(expr_id)
                         }
                     }
                 } else {
@@ -610,7 +633,8 @@ impl<'tok> Parser<'tok> {
             OpenParen => {
                 let inside_paren = self.expression()?;
                 let closed_paren = self.consume(CloseParen)?;
-                Ok(Expr::Grouping(Box::new(inside_paren)))
+                let expr = Expr::Grouping(inside_paren);
+                Ok(self.ast.add_expr(expr))
             }
             _s => Err(Error::new_while_parsing(
                 format!("Received unknown token while parsing code: {:?}", _s).as_str(),
