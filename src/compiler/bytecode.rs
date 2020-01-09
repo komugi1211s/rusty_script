@@ -123,7 +123,7 @@ const USIZE_LENGTH: usize = 8;
 #[derive(Default, Debug)]
 pub struct Code {
     pub bytes: Vec<u8>,
-    pub span: Vec<usize>,
+    pub span: Vec<CodeSpan>,
 }
 
 #[derive(Default, Debug)]
@@ -536,7 +536,7 @@ impl BytecodeGenerator {
     
         // 実際に使うことはないが、特定の関数が必要とするため用意
         let mut placeholder = StatementHandleResult {
-            span: 0,
+            span: EMPTY_SPAN,
             index: 0,
             info: StatementInfo::Nothing,
         };
@@ -623,7 +623,7 @@ impl BytecodeGenerator {
     fn handle_stmt(&mut self, ast: &ParsedResult, data: &StmtId, span: CodeSpan) -> StatementHandleResult {
         let mut handled_result = StatementHandleResult { span, index: 0, info: StatementInfo::Nothing };
 
-        let data = ast.get_stmt(data.clone());
+        let data = ast.get_stmt(*data);
         match data {
             Statement::Expression(expr) => {
                 handled_result.index = self.handle_expr(ast, expr, span).index;
@@ -950,7 +950,8 @@ impl BytecodeGenerator {
         out.index = index;
     }
 
-    fn handle_expr(&mut self, expr: Expr, span: CodeSpan) -> ExpressionHandleResult {
+    fn handle_expr(&mut self, ast: &ParsedResult, expr: &ExprId, span: CodeSpan) -> ExpressionHandleResult {
+        let expr = ast.get_expr(expr);
         let mut handled_result = ExpressionHandleResult {
             span,
             index: 0,
@@ -997,13 +998,13 @@ impl BytecodeGenerator {
                 handled_result
             }
             Expr::Literal(literal) => {
-                self.handle_literal(&mut handled_result, literal, span);
+                self.handle_literal(&mut handled_result, *literal, span);
                 handled_result
             }
 
             Expr::Binary(left, right, operator) => {
-                let left = self.handle_expr(*left, span);
-                let right = self.handle_expr(*right, span);
+                let left = self.handle_expr(ast, left, span);
+                let right = self.handle_expr(ast, right, span);
 
                 handled_result._type =
                     typecheck::type_after_binary(&left._type, &right._type, operator)
@@ -1029,8 +1030,8 @@ impl BytecodeGenerator {
                 handled_result
             }
             Expr::Logical(left, right, operator) => {
-                self.handle_expr(*left, span);
-                self.handle_expr(*right, span);
+                self.handle_expr(ast, left, span);
+                self.handle_expr(ast, right, span);
 
                 handled_result.index = match operator {
                     Operator::And => self.code.push_opcode(OpCode::And, span),
@@ -1041,7 +1042,7 @@ impl BytecodeGenerator {
                 handled_result
             }
             Expr::Unary(expr, operator) => {
-                let another_result = self.handle_expr(*expr, span);
+                let another_result = self.handle_expr(ast, expr, span);
                 handled_result._type =
                     typecheck::type_after_unary(&another_result._type, operator).unwrap();
                 handled_result.index = match operator {
@@ -1052,7 +1053,7 @@ impl BytecodeGenerator {
                 handled_result._type = another_result._type;
                 handled_result
             }
-            Expr::Grouping(group) => self.handle_expr(*group, span),
+            Expr::Grouping(group) => self.handle_expr(ast, group, span),
             Expr::Assign(name, expr) => {
                 let (exists, position, is_global) = {
                     let (lexists, lpos) = self.find_local(&name);
@@ -1098,7 +1099,7 @@ impl BytecodeGenerator {
                 handled_result
             }
             Expr::FunctionCall(func_name, mut arguments) => {
-                if let Expr::Variable(name) = *func_name {
+                if let Expr::Variable(ref name) = ast.get_expr(*func_name) {
                     
                     let (exists, position) = self.find_global(&name);
                     if !exists {

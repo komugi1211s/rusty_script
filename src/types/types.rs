@@ -11,6 +11,10 @@ const USIZE_LENGTH: usize = 4;
 const USIZE_LENGTH: usize = 8;
 
 
+pub struct TypeArena {
+    defined: Vec<Type>,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TypeKind {
     Int,

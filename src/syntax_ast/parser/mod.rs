@@ -3,12 +3,14 @@ use trace::Error;
 use super::{
     ast::{self,
         BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
-        ParsedResult, Statement, AstNode, DeclOption, StmtId, ExprId
+        ParsedResult, Statement, AstNode, StmtId, ExprId
     },
 };
 
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
+
+mod decl;
 
 // TODO:
 // All clone call to a lifetime management
@@ -187,7 +189,7 @@ impl<'tok> Parser<'tok> {
 
     fn declaration(&mut self) -> Result<StmtId, Error> {
         if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
-            return self.declare_variable();
+            return self.parse_variable();
         }
 
         self.statement()
@@ -201,7 +203,6 @@ impl<'tok> Parser<'tok> {
             kind: DeclKind::Variable,
             name: identity,
             dectype: String::new(),
-            decl_option: DeclOption::Inferred,
             expr: None,
         };
 
@@ -243,110 +244,7 @@ impl<'tok> Parser<'tok> {
         Ok(decl_data)
     }
 
-    fn declare_argument(&mut self) -> Result<Vec<DeclarationData>, Error> {
-        let start_span = self.consume(TokenType::OpenParen)?.span;
-        let mut arguments: Vec<DeclarationData> = Vec::new();
-
-        if self.is(TokenType::CloseParen) {
-            self.consume(TokenType::CloseParen)?;
-            return Ok(arguments);
-        }
-
-        while self.is(TokenType::Iden) {
-            self.current += 1;
-            let mut decl_info = self.initialize_decl_data()?;
-            decl_info.kind = DeclKind::Argument;
-
-            let bridge_token = self.advance();
-            let bridge_span = bridge_token.span;
-            match bridge_token.tokentype {
-                TokenType::Equal => {
-                    let item = self.expression()?;
-                    decl_info.expr = Some(item);
-                    arguments.push(decl_info);
-
-                    match self.advance().tokentype {
-                        TokenType::Comma => continue,
-                        TokenType::CloseParen => return Ok(arguments),
-                        _ => {
-                            return Err(Error::new_while_parsing(
-                                "Argument declaration must end with close paren",
-                                CodeSpan::new(start_span.start_usize(), self.current_line),
-                            ))
-                        }
-                    }
-                }
-                TokenType::Comma => {
-                    arguments.push(decl_info);
-                    continue;
-                }
-                TokenType::CloseParen => {
-                    arguments.push(decl_info);
-                    return Ok(arguments);
-                }
-                _ => {
-                    return Err(Error::new_while_parsing(
-                        "Unknown Token detected while parsing arguments",
-                        bridge_span,
-                    ))
-                }
-            }
-        }
-        Ok(arguments)
-    }
-
-    fn declare_variable(&mut self) -> Result<StmtId, Error> {
-        /*
-         * NOTE: The difference between "Variable" "Function" "Argument" are really tough to
-         * understand, so I'll leave a note here.
-         *
-         * Declaration starts -
-         *  TYPE: IDENTIFIER
-         *     Variable - TYPE: IDENTIFIER;
-         *     Function - TYPE: IDENTIFIER(
-         *         Argument - TYPE: IDENTIFIER,
-         *         Argument - TYPE: IDENTIFIER = X,
-         *     Variable - TYPE: IDENTIFIER = X;
-         *
-         * */
-        self.assign_count += 1;
-        self.current += 1;
-        let mut decl_info = self.initialize_decl_data()?;
-
-        let mut state = Statement::Empty;
-        // Initialization, Outside
-        if self.consume(TokenType::Equal).is_ok() {
-            let item = self.expression()?;
-            decl_info.expr = Some(item);
-
-            self.consume(TokenType::SemiColon)?;
-            state = Statement::Decralation(decl_info);
-        } else if self.consume(TokenType::SemiColon).is_ok() {
-            // return if nullable
-            if decl_info.decl_option == DeclOption::Nullable {
-                state = Statement::Decralation(decl_info);
-            } else {
-                return Err(Error::new_while_parsing(
-                    "tried to initialize non-null variable with null value",
-                    CodeSpan::oneline(self.current_line),
-                ));
-            }
-        }
-        // This is a function.
-        else if self.is(TokenType::OpenParen) {
-            return self.declare_function(decl_info);
-        }
-
-        match state {
-            Statement::Empty => Err(Error::new_while_parsing(
-                "Failed to parse the declaration process.",
-                CodeSpan::oneline(self.current_line),
-            )),
-            _ => { 
-                Ok(self.ast.add_stmt(state))
-            }
-        }
-    }
+    
 
     fn declare_function(&mut self, mut info: DeclarationData) -> Result<StmtId, Error> {
         let arguments = self.declare_argument()?;

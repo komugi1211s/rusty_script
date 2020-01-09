@@ -3,6 +3,8 @@ use crate::tokenizer::token::{ Token };
 use types::types::{ Type, ArraySize };
 use trace::position::CodeSpan;
 
+pub mod super::declaration::*;
+
 #[derive(Debug)]
 pub struct ParsedResult {
     pub ast: Vec<AstNode>,
@@ -71,33 +73,6 @@ pub struct FunctionData {
     pub block: BlockData,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DeclarationData {
-    pub kind: DeclKind,
-    pub name: String,
-    pub dectype: String,
-
-    // TODO - @Improvement: const, nullable, inferred は共存できない（どれか１つだけ有効化出来る）
-    // 専用のフラグかステータスを作るべきだと思う
-    pub decl_option: DeclOption,
-    pub expr: Option<ExprId>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DeclOption {
-    Normal,
-    Constant,
-    Nullable,
-    Inferred
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DeclKind {
-    Variable,
-    Argument,
-    Struct,
-    StructField,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockData {

@@ -1,6 +1,7 @@
 
 use std::cmp;
 use std::mem;
+use std::fmt;
 
 
 // 意図的にInvalidなスパンを作ってそれをEmptyとして使う
@@ -14,6 +15,12 @@ const EMPTY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_v
 pub struct CodeSpan {
     pub start: u32,
     pub end: u32,
+}
+
+impl fmt::Display for CodeSpan {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "line {} ~ {}", self.start, self.end)
+    }
 }
 
 

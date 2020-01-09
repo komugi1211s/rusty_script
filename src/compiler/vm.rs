@@ -43,10 +43,10 @@ impl VirtualMachine {
             if current_operation.is_none() {
                 panic!(
                     "Received {:04X} which is not an actual opcode, at line {}",
-                    self.chunk.code.bytes[self.code_ip], self.chunk.code.line[self.code_ip]
+                    self.chunk.code.bytes[self.code_ip], self.chunk.code.span[self.code_ip]
                 );
             }
-            let _current_line = self.chunk.code.line[self.code_ip];
+            let _current_line = self.chunk.code.span[self.code_ip];
             // println!("Current Stack: {:?}", self.stack);
             // println!("Current Environment: {:?}", self.globals);
             let current_operation = current_operation.unwrap();
