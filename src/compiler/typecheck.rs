@@ -1,7 +1,28 @@
 
 use types::types::{ Type, TypeKind, TypeOption };
-use syntax_ast::ast_data::*;
+use syntax_ast::ast::*;
 
+use std::convert::TryFrom;
+
+impl TryFrom<ParsedType> for Type {
+    type Error = &'static str;
+    fn try_from(val: ParsedType) -> Result<Self, Self::Error> {
+        use ParsedType::*;
+        match val {
+            pInt     => Ok(Type::int()),
+            pStr     => Ok(Type::string()),
+            pFloat   => Ok(Type::float()),
+            pBoolean => Ok(Type::boolean()),
+            pArray(inner, size) => {
+                let result = Type::try_from(*inner).unwrap();
+                Ok(Type::array(result, size));
+            },
+            pUserdef(name) => Ok(Type::userdef(name)),
+            pUnknown => Err("Unknown Type."),
+            _ => unimplemented!(),
+        }
+    }
+}
 
 pub fn literal_to_type(lit: &Literal) -> Type {
     match lit.kind {
@@ -15,10 +36,10 @@ pub fn literal_to_type(lit: &Literal) -> Type {
 
 // TODO - @DumbCode
 pub fn is_str_builtin_type(candidate: &str) -> bool {
-    if candidate.starts_with("int") { return true };
-    if candidate.starts_with("bool") { return true };
+    if candidate.starts_with("int")    { return true };
+    if candidate.starts_with("bool")   { return true };
     if candidate.starts_with("string") { return true };
-    if candidate.starts_with("float") { return true };
+    if candidate.starts_with("float")  { return true };
     if candidate.starts_with("struct") { return true };
     return false;
 }

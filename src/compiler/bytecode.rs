@@ -1,5 +1,5 @@
 use syntax_ast::{
-    ast::{DeclarationData, DeclKind, Expr, FunctionData, ParsedResult, Statement, StatementNode, Literal, LiteralKind, Operator},
+    ast::*,
     tokenizer::token::TokenType,
 };
 
