@@ -1,4 +1,5 @@
 
+use super::{ ExprId, BlockData }; 
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData {
@@ -17,11 +18,10 @@ pub enum ParsedType {
     pStr,
     pFloat,
     pBoolean,
-    pResult(Box<ParsedType>),
-    pOption(Box<ParsedType>),
     pArray(Box<ParsedType>, Option<u32>),
     pPointer(Box<ParsedType>),
     pStruct(BlockData),
+    pUserdef(String),
     pUnknown,
 }
 

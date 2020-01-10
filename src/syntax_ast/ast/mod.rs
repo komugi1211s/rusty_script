@@ -3,7 +3,8 @@ use crate::tokenizer::token::{ Token };
 use types::types::{ Type, ArraySize };
 use trace::position::CodeSpan;
 
-pub mod super::declaration::*;
+pub mod declaration;
+pub use declaration::*;
 
 #[derive(Debug)]
 pub struct ParsedResult {
