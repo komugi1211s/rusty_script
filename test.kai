@@ -153,9 +153,9 @@ print "Local Variable testing.";
 print "Array Testing.";
 
 // Dynamic
-new_int_arr: int[] = [1, 2, 3];
+new_int_arr: [int] = [1, 2, 3];
 
 // Static
-new_int_static_arr: int [3] = [1, 2, 3];
+new_int_static_arr: [int; 3] = [1, 2, 3];
 
 
