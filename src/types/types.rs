@@ -22,14 +22,8 @@ pub enum TypeKind {
     Str,
     Boolean,
     Null,
-    Array(Box<Type>, ArraySize),
+    Array(Box<Type>, Option<u32>),
     UserDef,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ArraySize {
-    Sized(u32),
-    Dynamic,
 }
 
 impl Default for TypeKind {
@@ -78,10 +72,7 @@ impl Type {
         Self {
             kind: TypeKind::Array(
                       Box::new(of),
-                      match size {
-                          Some(n) => ArraySize::Sized(n),
-                          None => ArraySize::Dynamic
-                      }
+                      size
                 )
         }
     }

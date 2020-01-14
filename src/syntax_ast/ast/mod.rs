@@ -1,6 +1,6 @@
 use std::fmt;
 use crate::tokenizer::token::{ Token };
-use types::types::{ Type, ArraySize };
+use types::types::{ Type };
 use trace::position::CodeSpan;
 
 pub mod declaration;
