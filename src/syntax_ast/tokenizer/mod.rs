@@ -65,6 +65,7 @@ impl Tokenizer {
             '*' => self.add_simple(TokenType::Asterisk),
             '%' => self.add_simple(TokenType::Percent),
             '?' => self.add_simple(TokenType::Question),
+            '^' => self.add_simple(TokenType::Caret),
             '=' => match self.next_is('=') {
                 true => self.add_simple(TokenType::EqualEqual),
                 false => self.add_simple(TokenType::Equal),

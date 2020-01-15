@@ -1,7 +1,8 @@
 use trace::Error;
 
 use super::{
-    ast::{self,
+    ast::{
+        self,
         BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
         ParsedResult, Statement, AstNode, StmtId, ExprId
     },
@@ -11,6 +12,7 @@ use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
 
 mod decl;
+mod stmt;
 
 // TODO:
 // All clone call to a lifetime management
@@ -80,111 +82,21 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    fn statement(&mut self) -> Result<StmtId, Error> {
-        let possible_stmt = self.get_current();
-        let result = match possible_stmt.tokentype {
-            // Close Bracket Expected, They'll handle the close bracket themselves
-            // so no need for check
-            TokenType::If => {
-                self.advance();
-                return self.if_statement();
-            }
-            TokenType::While => {
-                self.advance();
-                return self.while_statement();
-            }
-            TokenType::OpenBrace => {
-                // Keep track of local assignment
-                self.advance();
-                let block = self.block()?;
-                let id = self.ast.add_stmt(Statement::Block(block));
-                return Ok(id);
-            }
-
-            // Semicolon Expected, I have to handle it here
-            // Go through, no early return
-            TokenType::Print => {
-                self.advance();
-                let expr = self.expression()?;
-                let id = self.ast.add_stmt(Statement::Print(expr));
-                Ok(id)
-            }
-            TokenType::Return => {
-                self.advance();
-                self.return_statement()
-            }
-            TokenType::Break => {
-                self.advance();
-                Ok(self.ast.add_stmt(Statement::Break))
-            }
-            TokenType::Continue => {
-                self.advance();
-                Ok(self.ast.add_stmt(Statement::Continue))
-            }
-            _ => {
-                let expr = self.expression()?;
-                Ok(self.ast.add_stmt(Statement::Expression(expr)))
-            }
-        };
-
-        self.consume(TokenType::SemiColon)?;
-        result
-    }
-
-    fn if_statement(&mut self) -> Result<StmtId, Error> {
-        let condition = self.expression()?;
-        let true_route = self.statement()?;
-        let stmt = Statement::If(
-            condition,
-            true_route,
-            if self.is(TokenType::Else) {
-                self.current += 1;
-                Some(self.statement()?)
-            } else {
-                None
-            },
-        );
-
-        Ok(self.ast.add_stmt(stmt))
-    }
-
-    fn while_statement(&mut self) -> Result<StmtId, Error> {
-        let condition = self.expression()?;
-        let _loop = self.statement()?;
-        let stmt = Statement::While(condition, _loop);
-
-        Ok(self.ast.add_stmt(stmt))
-    }
-
-    fn block(&mut self) -> Result<BlockData, Error> {
+    fn enter_block<T>(
+        &mut self,
+        pass: &mut T,
+        wrapped_func: fn(&mut Parser<'tok>, &mut T) -> Result<(), Error>
+    ) -> usize {
         let previous_count = self.assign_count;
         self.assign_count = 0;
         self.block_count += 1;
-        let mut vector = Vec::new();
-        while !self.is_at_end() && !self.is(TokenType::CloseBrace) {
-            vector.push(self.declaration()?);
-        }
 
-        let local_assign_count = self.assign_count;
+        wrapped_func(self, pass);
+
+        let new_assign = self.assign_count;
         self.assign_count = previous_count;
         self.block_count -= 1;
-
-        self.consume(TokenType::CloseBrace)?;
-        Ok(BlockData {
-            statements: vector,
-            local_count: local_assign_count,
-        })
-    }
-
-    fn return_statement(&mut self) -> Result<StmtId, Error> {
-        let mut result = None;
-        if !self.is(TokenType::SemiColon) {
-            result = Some(self.expression()?);
-        }
-
-        let stmt = Statement::Return(result);
-
-        Ok(self.ast.add_stmt(stmt))
+        new_assign
     }
 
     fn declaration(&mut self) -> Result<StmtId, Error> {
@@ -211,7 +123,7 @@ impl<'tok> Parser<'tok> {
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
             if let Expr::Variable(s) = self.ast.get_expr(expr) {
-                let expr = self.ast.add_expr(Expr::Assign(s.to_string(), value));
+                let expr = self.ast.add_expr(Expr::Assign(expr, value));
                 return Ok(expr);
             } else {
                 return Err(Error::new_while_parsing(
@@ -320,38 +232,58 @@ impl<'tok> Parser<'tok> {
     }
 
     fn unary(&mut self) -> Result<ExprId, Error> {
-        if self.is(TokenType::Bang) || self.is(TokenType::Minus) {
-            let operator = match self.get_current().tokentype {
-                TokenType::Bang => Operator::Not,
-                TokenType::Minus => Operator::Neg,
-                _ => unreachable!(),
-            };
+        let operator = match self.get_current().tokentype {
+            TokenType::Bang     => Some(Operator::Not),
+            TokenType::Minus    => Some(Operator::Neg),
+            TokenType::Question => Some(Operator::Wrap),
+            TokenType::Caret    => Some(Operator::Ref),
+            _ => None,
+        };
+        if let Some(oper) = operator {
             self.advance();
             let right = self.unary()?;
-            let unary = self.ast.add_expr(Expr::Unary(right, operator));
+            let unary = self.ast.add_expr(Expr::Unary(right, oper));
 
             return Ok(unary);
         }
 
-        self.func_call()
+        self.postfix()
     }
 
-    fn func_call(&mut self) -> Result<ExprId, Error> {
+    fn postfix(&mut self) -> Result<ExprId, Error> {
         let mut expr = self.primary()?;
 
-        loop {
-            if self.is(TokenType::OpenParen) {
-                expr = self.finish_func_call(expr)?;
-            } else {
-                break;
+        'parse: loop {
+            expr = match self.get_current().tokentype {
+                TokenType::OpenParen => self.parse_func_call(expr)?,
+                TokenType::Bang => self.parse_unwrap(expr)?,
+                TokenType::OpenSquareBracket => self.parse_array_ref(expr)?,
+                TokenType::Caret => self.parse_deref(expr)?,
+                _ => break 'parse,
             }
         }
         Ok(expr)
     }
 
-    fn finish_func_call(&mut self, expr: ExprId) -> Result<ExprId, Error> {
+    fn parse_unwrap(&mut self, e: ExprId) -> Result<ExprId, Error> {
+        let span = self.get_current().span;
+        Err(Error::new_while_parsing("Unimplemented Unwrap.", span))
+    }
+
+    fn parse_deref(&mut self, e: ExprId) -> Result<ExprId, Error> {
+        let span = self.get_current().span;
+        Err(Error::new_while_parsing("Unimplemented Deref.", span))
+    }
+
+    fn parse_array_ref(&mut self, e: ExprId) -> Result<ExprId, Error> {
+        let span = self.get_current().span;
+        Err(Error::new_while_parsing("Unimplemented ArrayRef.", span))
+    }
+
+
+    fn parse_func_call(&mut self, expr: ExprId) -> Result<ExprId, Error> {
+        self.consume(TokenType::OpenParen)?;
         let mut v = Vec::<ExprId>::new();
-        self.current += 1;
 
         if !self.is(TokenType::CloseParen) {
             let mut z = true;

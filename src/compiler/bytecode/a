@@ -1,0 +1,42 @@
+
+
+unknown_one: = [];
+unknown_two: const int = null;
+
+
+// Optional to a pointer of an int
+unknown_two: int^? = null;
+
+// Pointer of an int
+pointer: int*;
+
+// Deref
+a := pointer^;
+
+// Ref
+b := ^pointer;
+
+// Optional to an Int
+unknown_two: int? = null;
+
+// Unwrap
+b := ?unknown_two
+
+// Wrap
+b := ?unknown_two
+
+// Empty
+b := null;
+
+
+new_function:<T> (a: T, b: int) ?T {
+    data := a.data;
+    if a.type == "int" {
+        return ?(data + b);
+    } else if a.type == "string" {
+        return ?(data + "hello" * b);
+    }
+
+    return null;
+}
+

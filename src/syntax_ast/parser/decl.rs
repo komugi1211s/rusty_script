@@ -29,9 +29,7 @@ fn is_suffix_banned(cand: &str) -> bool {
 impl<'tok> Parser<'tok> {
     fn parse_type(&mut self, prefix: &ast::DeclPrefix) -> ast::ParsedType {
         // Separate Array Consumption to other function
-        if self.consume(TokenType::Asterisk).is_ok() {
-            return ast::ParsedType::pPointer(Box::new(self.parse_type(prefix)));
-        } else if self.consume(TokenType::OpenSquareBracket).is_ok() {
+        if self.consume(TokenType::OpenSquareBracket).is_ok() {
             let inner_type = self.parse_type(prefix);
             if self.consume(TokenType::SemiColon).is_ok() {
                 // TODO - @Improvement: explicitly parsing digit prevents you from
@@ -54,24 +52,35 @@ impl<'tok> Parser<'tok> {
         }
 
         // TODO - @Broken: are you sure that there's no more prefix??
-        let Token { tokentype, span, lexeme: candidate } = self.advance();
-        if tokentype != &TokenType::Iden {
-            panic!("Tokentype is not iden??");
+        let mut core_type = if self.is(TokenType::Iden) {
+            let Token { tokentype, span, lexeme: candidate } = self.advance();
+
+            let candidate = candidate.as_ref().unwrap();
+            if is_prefix_banned(candidate) && prefix != &ast::DeclPrefix::Empty {
+                panic!("Type is not allowed to combine with prefix.");
+            }
+
+            if candidate == "struct" {
+                return self.parse_struct(prefix);
+            }
+
+            match ast::ParsedType::match_primitive(candidate) {
+                Some(x) => x,
+                None => ast::ParsedType::pUserdef(candidate.to_string())
+            }
+        } else {
+            ast::ParsedType::pUnknown
+        };
+
+        while self.is(TokenType::Caret) || self.is(TokenType::Question) {
+            if self.is(TokenType::Caret) {
+                core_type = ast::ParsedType::pPointer(Box::new(core_type));
+            } else {
+                core_type = ast::ParsedType::pOptional(Box::new(core_type));
+            }
         }
 
-        let candidate = candidate.as_ref().unwrap();
-        if is_prefix_banned(candidate) && prefix != &ast::DeclPrefix::Empty {
-            panic!("Type is not allowed to combine with prefix.");
-        }
-
-        if candidate == "struct" {
-            return self.parse_struct(prefix);
-        }
-
-        match ast::ParsedType::match_primitive(candidate) {
-            Some(x) => x,
-            None => ast::ParsedType::pUserdef(candidate.to_string())
-        }
+        core_type
     }
 
     fn parse_struct(&mut self, prefix: &ast::DeclPrefix) -> ast::ParsedType {
@@ -87,27 +96,16 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    fn parse_type_suffix(&mut self) -> ast::DeclSuffix {
-        if self.consume(TokenType::Question).is_ok() {
-            ast::DeclSuffix::Optional
-        } else if self.consume(TokenType::Bang).is_ok() {
-            ast::DeclSuffix::Resulted
-        } else {
-            trace!("Empty suffix.");
-            ast::DeclSuffix::Empty
-        }
-    }
-
     pub(super) fn parse_function_decl(&mut self, baseinfo: ast::DeclarationData) -> Result<ast::StmtId, Error> {
         let args = self.parse_arguments()?;
 
         self.consume(TokenType::OpenBrace);
-        let func = self.block()?;
+        let func = self.block_statement()?;
 
         let data = ast::FunctionData {
             it: baseinfo,
             args: args,
-            block: func,
+            block_id: func,
         };
 
         let idx = self.ast.add_fn(data);
@@ -131,14 +129,12 @@ impl<'tok> Parser<'tok> {
 
             let prefix = self.parse_type_prefix();
             let dectype = self.parse_type(&prefix);
-            let suffix = self.parse_type_suffix();
 
             let mut decl_info = ast::DeclarationData {
                 kind: ast::DeclKind::Argument,
                 name,
                 dectype,
                 prefix,
-                suffix,
                 expr: None
             };
 
@@ -158,21 +154,18 @@ impl<'tok> Parser<'tok> {
 
     pub(super) fn parse_variable(&mut self) -> Result<ast::StmtId, Error> {
         self.assign_count += 1;
-        self.current += 1;
 
         let name = self.advance().lexeme.to_owned().unwrap();
         self.consume(TokenType::Colon)?;
 
         let prefix = self.parse_type_prefix();
         let dectype = self.parse_type(&prefix);
-        let suffix = self.parse_type_suffix();
 
         let mut decl_info = ast::DeclarationData {
             kind: ast::DeclKind::Variable,
             name,
             dectype,
             prefix,
-            suffix,
             expr: None
         };
 
@@ -183,11 +176,7 @@ impl<'tok> Parser<'tok> {
             self.consume(TokenType::SemiColon)?;
             Ok(self.ast.add_stmt(ast::Statement::Decralation(decl_info)))
         } else if self.consume(TokenType::SemiColon).is_ok() {
-            if decl_info.suffix == ast::DeclSuffix::Optional {
-                Ok(self.ast.add_stmt(ast::Statement::Decralation(decl_info)))
-            } else {
-                unreachable!();
-            }
+            Ok(self.ast.add_stmt(ast::Statement::Decralation(decl_info)))
         } else if self.is(TokenType::OpenParen) {
             self.parse_function_decl(decl_info)
         } else {

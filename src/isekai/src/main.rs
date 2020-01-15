@@ -29,7 +29,7 @@ fn exit_process(success: bool) -> ! {
 }
 
 
-pub fn start(code: &str) -> Result<(), ()> {
+pub fn start(code: &str, stage: u8) -> Result<(), ()> {
     let reporter = ErrorReporter::from_lineiter(code.lines());
     let start = Instant::now();
 
@@ -41,6 +41,15 @@ pub fn start(code: &str) -> Result<(), ()> {
         "Tokenizer took: \x1b[32m{} micros\x1b[39m",
         start.elapsed().as_micros()
     );
+
+    if stage == 1 {
+        println!("Stage one finished. emitting result");
+        for tok in &_tokens {
+            println!("{}", tok);
+        }
+        return Ok(());
+    }
+
     let mut _parser = Parser::new(&_tokens);
     let parser_time = Instant::now();
     let result = match _parser.parse() {
@@ -52,6 +61,11 @@ pub fn start(code: &str) -> Result<(), ()> {
         parser_time.elapsed().as_micros()
     );
 
+    if stage == 2 {
+        println!("Stage Two finished. emitting result");
+        println!("{:?}", result);
+        return Ok(());
+    }
     let codegen = BytecodeGenerator::new();
     let codegen_time = Instant::now();
     let chunk = codegen.traverse_ast(result).unwrap();
@@ -65,6 +79,11 @@ pub fn start(code: &str) -> Result<(), ()> {
     );
 
     let disassembled = disassemble_all(&chunk.code);
+    if stage == 3 {
+        println!("Stage Two finished. emitting result");
+        println!("{:?}", disassembled);
+        return Ok(());
+    }
 
     {
         let mut file = File::create("dump").expect("Dump File failed to create.");
@@ -89,9 +108,9 @@ pub fn start(code: &str) -> Result<(), ()> {
     Ok(())
 }
 
-fn run_file(path: &String) -> bool {
+fn run_file(path: Option<&String>, stage: Option<&String>) -> bool {
     let mut strings = String::new();
-    let mut f = match File::open(path) {
+    let mut f = match File::open(path.unwrap()) {
         Ok(n) => n,
         _ => {
             println!("ファイルを開けませんでした。");
@@ -101,7 +120,12 @@ fn run_file(path: &String) -> bool {
 
     f.read_to_string(&mut strings)
         .expect("ファイルの読み込みに失敗しました。");
-    start(strings.as_str()).is_ok()
+
+    let mut stage_u8: u8 = 0;
+    if let Some(stage_) = stage {
+        stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
+    }
+    start(strings.as_str(), stage_u8).is_ok()
 }
 
 fn main() {
@@ -112,7 +136,7 @@ fn main() {
         println!("usage: isekai [filename].kai");
         exit_process(true);
     }
-    exit_process(run_file(arguments.get(1).unwrap()))
+    exit_process(run_file(arguments.get(1), arguments.get(2)))
 }
 
 /*

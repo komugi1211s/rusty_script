@@ -2,7 +2,7 @@
 #[macro_use] extern crate num_traits;
 #[macro_use] extern crate num_derive;
 
-pub mod builtin_functions;
+// pub mod builtin_functions;
 pub mod bytecode;
 pub mod typecheck;
 pub mod vm;

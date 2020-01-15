@@ -8,8 +8,22 @@ pub struct DeclarationData {
     pub dectype: ParsedType,
 
     pub prefix: DeclPrefix,
-    pub suffix: DeclSuffix,
     pub expr: Option<ExprId>,
+}
+
+impl DeclarationData {
+    pub fn is_inferred(&self) -> bool {
+        self.prefix == DeclPrefix::Empty
+        && self.dectype == ParsedType::pUnknown
+    }
+
+    pub fn is_constant(&self) -> bool {
+        self.prefix == DeclPrefix::Constant
+    }
+
+    pub fn is_annotated(&self) -> bool {
+        !self.is_inferred()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +34,7 @@ pub enum ParsedType {
     pBoolean,
     pArray(Box<ParsedType>, Option<u32>),
     pPointer(Box<ParsedType>),
+    pOptional(Box<ParsedType>),
     pStruct(BlockData),
     pUserdef(String),
     pUnknown,
@@ -40,16 +55,8 @@ impl ParsedType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclPrefix {
     Empty,
-    Pointer,
     Constant,
     Struct,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DeclSuffix {
-    Empty,
-    Optional,
-    Resulted,
 }
 
 #[derive(Debug, Clone, PartialEq)]

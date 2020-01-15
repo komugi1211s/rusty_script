@@ -1,6 +1,5 @@
 use std::fmt;
 use crate::tokenizer::token::{ Token };
-use types::types::{ Type };
 use trace::position::CodeSpan;
 
 pub mod declaration;
@@ -46,10 +45,10 @@ impl ParsedResult {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StmtId(u32);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExprId(u32);
 
 #[derive(Debug, Clone)]
@@ -71,7 +70,7 @@ impl AstNode {
 pub struct FunctionData {
     pub it: DeclarationData,
     pub args: Vec<DeclarationData>,
-    pub block: BlockData,
+    pub block_id: StmtId,
 }
 
 
@@ -87,7 +86,7 @@ pub enum Expr {
     Binary(ExprId, ExprId, Operator),
     Logical(ExprId, ExprId, Operator),
     FunctionCall(ExprId, Vec<ExprId>),
-    Assign(String, ExprId),
+    Assign(ExprId, ExprId),
 
     Literal(Literal),
     Grouping(ExprId),
@@ -133,6 +132,12 @@ pub enum Operator {
     And,
     Or,
 
+    Ref,
+    Deref,
+
+    Wrap,
+    Unwrap,
+
     Asgn,
 }
 
@@ -145,6 +150,7 @@ impl Operator {
             Add | Sub | Div | Mul | Mod => true,
             EqEq| NotEq | LessEq | MoreEq
             | Less | More | Neg | Not
+            | Ref | Deref | Wrap | Unwrap
             | And | Or | Asgn => false
         }
     }
@@ -154,7 +160,8 @@ impl Operator {
         match self {
             EqEq | NotEq | LessEq | MoreEq | Less | More => true,
             Add | Sub | Div | Mul | Mod
-            | Neg | Not | And | Or | Asgn => false,
+            | Neg | Not | And | Or | Asgn
+            | Ref | Deref | Wrap | Unwrap => false,
         }
     }
 
@@ -164,6 +171,7 @@ impl Operator {
             And | Or | Not => true,
             EqEq | NotEq | LessEq | MoreEq | Less | More
             | Add | Sub | Div | Mul | Mod
+            | Ref | Deref | Wrap | Unwrap
             | Neg | Asgn => false,
         }
     }

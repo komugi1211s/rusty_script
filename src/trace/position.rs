@@ -5,7 +5,7 @@ use std::fmt;
 
 
 // 意図的にInvalidなスパンを作ってそれをEmptyとして使う
-const EMPTY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
+pub const EMPTY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
 
 
 // ソースコード内で特定の範囲を指定するStruct
@@ -22,7 +22,6 @@ impl fmt::Display for CodeSpan {
         write!(f, "line {} ~ {}", self.start, self.end)
     }
 }
-
 
 impl CodeSpan {
     pub fn new(mut st: usize, mut en: usize) -> Self {

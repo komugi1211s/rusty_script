@@ -32,6 +32,7 @@ pub enum TokenType {
     Dot,         // .
     Comma,       // ,
     Question,    // ?
+    Caret,       // ^
 
     // 比較, 論理
     Or,         // or
