@@ -1,5 +1,5 @@
 use crate::tokenizer::token::Token;
-use std::fmt;
+
 use trace::position::CodeSpan;
 
 pub mod declaration;

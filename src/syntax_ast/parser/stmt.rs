@@ -5,8 +5,8 @@ use super::ast::{
     Operator, ParsedResult, Statement, StmtId,
 };
 
-use crate::tokenizer::token::{Token, TokenType};
-use trace::position::CodeSpan;
+use crate::tokenizer::token::{TokenType};
+
 
 use super::Parser;
 

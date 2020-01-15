@@ -119,7 +119,7 @@ impl<'tok> Parser<'tok> {
 
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
-            if let Expr::Variable(s) = self.ast.get_expr(expr) {
+            if let Expr::Variable(_s) = self.ast.get_expr(expr) {
                 let expr = self.ast.add_expr(Expr::Assign(expr, value));
                 return Ok(expr);
             } else {
@@ -262,17 +262,17 @@ impl<'tok> Parser<'tok> {
         Ok(expr)
     }
 
-    fn parse_unwrap(&mut self, e: ExprId) -> Result<ExprId, Error> {
+    fn parse_unwrap(&mut self, _e: ExprId) -> Result<ExprId, Error> {
         let span = self.get_current().span;
         Err(Error::new_while_parsing("Unimplemented Unwrap.", span))
     }
 
-    fn parse_deref(&mut self, e: ExprId) -> Result<ExprId, Error> {
+    fn parse_deref(&mut self, _e: ExprId) -> Result<ExprId, Error> {
         let span = self.get_current().span;
         Err(Error::new_while_parsing("Unimplemented Deref.", span))
     }
 
-    fn parse_array_ref(&mut self, e: ExprId) -> Result<ExprId, Error> {
+    fn parse_array_ref(&mut self, _e: ExprId) -> Result<ExprId, Error> {
         let span = self.get_current().span;
         Err(Error::new_while_parsing("Unimplemented ArrayRef.", span))
     }
@@ -288,7 +288,7 @@ impl<'tok> Parser<'tok> {
                 z = self.consume(TokenType::Comma).is_ok();
             }
         }
-        let paren = self.consume(TokenType::CloseParen)?;
+        let _paren = self.consume(TokenType::CloseParen)?;
         let expr = Expr::FunctionCall(expr, v);
         Ok(self.ast.add_expr(expr))
     }
@@ -340,7 +340,7 @@ impl<'tok> Parser<'tok> {
         let result = match &inside.tokentype {
             Digit => {
                 let inside_lexeme = inside.lexeme.clone().unwrap();
-                let contain_dot = inside_lexeme.contains(".");
+                let contain_dot = inside_lexeme.contains('.');
                 let lit = if contain_dot {
                     Literal::new_float(inside)
                 } else {
@@ -391,7 +391,7 @@ impl<'tok> Parser<'tok> {
             }
             OpenParen => {
                 let inside_paren = self.expression()?;
-                let closed_paren = self.consume(CloseParen)?;
+                let _closed_paren = self.consume(CloseParen)?;
                 let expr = Expr::Grouping(inside_paren);
                 Ok(self.ast.add_expr(expr))
             }

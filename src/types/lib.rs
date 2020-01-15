@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate bitflags;
 
-use std::borrow::Borrow;
+
 use std::fmt;
 use std::mem;
 use std::ops;

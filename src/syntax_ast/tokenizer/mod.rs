@@ -1,4 +1,4 @@
-use std::fmt;
+
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
@@ -161,7 +161,7 @@ impl Tokenizer {
 
         // Unterminated String
         if self.is_at_end() {
-            let given_string: String = (&self.source[(self.start + 1)..(self.current - 1)])
+            let _given_string: String = (&self.source[(self.start + 1)..(self.current - 1)])
                 .iter()
                 .collect();
             return Err(Error::new_while_tokenizing(

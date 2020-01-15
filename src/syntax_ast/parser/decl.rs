@@ -36,7 +36,7 @@ impl<'tok> Parser<'tok> {
                 // e.g. [int; 1 + 2]
                 let digit = self.consume(TokenType::Digit).expect("Digit Expected.");
                 let number_inside = digit.lexeme.as_ref().unwrap();
-                if number_inside.contains(".") {
+                if number_inside.contains('.') {
                     panic!("Array length cannot be fractional");
                 }
 
@@ -55,8 +55,8 @@ impl<'tok> Parser<'tok> {
         // TODO - @Broken: are you sure that there's no more prefix??
         let mut core_type = if self.is(TokenType::Iden) {
             let Token {
-                tokentype,
-                span,
+                tokentype: _,
+                span: _,
                 lexeme: candidate,
             } = self.advance();
 
@@ -88,7 +88,7 @@ impl<'tok> Parser<'tok> {
         core_type
     }
 
-    fn parse_struct(&mut self, prefix: &ast::DeclPrefix) -> ast::ParsedType {
+    fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> ast::ParsedType {
         unimplemented!();
     }
 
@@ -112,7 +112,7 @@ impl<'tok> Parser<'tok> {
 
         let data = ast::FunctionData {
             it: baseinfo,
-            args: args,
+            args,
             block_id: func,
         };
 
@@ -122,7 +122,7 @@ impl<'tok> Parser<'tok> {
     }
 
     pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, Error> {
-        let span = self.consume(TokenType::OpenParen)?.span;
+        let _span = self.consume(TokenType::OpenParen)?.span;
         let mut args = vec![];
 
         if self.is(TokenType::CloseParen) {
@@ -138,7 +138,7 @@ impl<'tok> Parser<'tok> {
             let prefix = self.parse_type_prefix();
             let dectype = self.parse_type(&prefix);
 
-            let mut decl_info = ast::DeclarationData {
+            let decl_info = ast::DeclarationData {
                 kind: ast::DeclKind::Argument,
                 name,
                 dectype,

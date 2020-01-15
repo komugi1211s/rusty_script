@@ -142,7 +142,7 @@ impl log::Log for Logger {
         meta.level() <= log::Level::Trace
     }
 
-    fn log(&self, record: &log::Record) {}
+    fn log(&self, _record: &log::Record) {}
 
     fn flush(&self) {}
 }
