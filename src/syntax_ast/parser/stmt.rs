@@ -1,12 +1,8 @@
-
 use trace::Error;
 
-use super::{
-    ast::{
-        self,
-        BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
-        ParsedResult, Statement, AstNode, StmtId, ExprId
-    },
+use super::ast::{
+    self, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData, Literal,
+    Operator, ParsedResult, Statement, StmtId,
 };
 
 use crate::tokenizer::token::{Token, TokenType};
@@ -14,23 +10,21 @@ use trace::position::CodeSpan;
 
 use super::Parser;
 
-
 impl<'tok> Parser<'tok> {
-
     pub(super) fn statement(&mut self) -> Result<StmtId, Error> {
         let possible_stmt = self.get_current().tokentype.clone();
         let result = match possible_stmt {
             // Close Bracket Expected, They'll handle the close bracket themselves
             // so no need for check
-            TokenType::If        => return self.if_statement(),
-            TokenType::While     => return self.while_statement(),
+            TokenType::If => return self.if_statement(),
+            TokenType::While => return self.while_statement(),
             TokenType::OpenBrace => return self.block_statement(),
 
             // Semicolon Expected, I have to handle it here
             // Go through, no early return
-            TokenType::Print    => self.parse_print_stmt(),
-            TokenType::Return   => self.parse_return_stmt(),
-            TokenType::Break    => self.parse_break_stmt(),
+            TokenType::Print => self.parse_print_stmt(),
+            TokenType::Return => self.parse_return_stmt(),
+            TokenType::Break => self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
             _ => {
                 let expr = self.expression()?;
@@ -81,11 +75,7 @@ impl<'tok> Parser<'tok> {
             None
         };
 
-        let stmt = Statement::If(
-            condition,
-            true_route,
-            false_route,
-        );
+        let stmt = Statement::If(condition, true_route, false_route);
 
         Ok(self.ast.add_stmt(stmt))
     }
@@ -110,8 +100,7 @@ impl<'tok> Parser<'tok> {
             Ok(())
         };
 
-        let assign_count = self.enter_block::<Vec<StmtId>>(
-            &mut vector, parse_inside_block);
+        let assign_count = self.enter_block::<Vec<StmtId>>(&mut vector, parse_inside_block);
 
         self.consume(TokenType::CloseBrace)?;
 
@@ -122,5 +111,4 @@ impl<'tok> Parser<'tok> {
 
         Ok(self.ast.add_stmt(Statement::Block(block)))
     }
-
 }

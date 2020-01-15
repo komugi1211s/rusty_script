@@ -1,8 +1,7 @@
-use super::bytecode::{ByteChunk, OpCode, disassemble};
-use types::{Type, Value, TypeKind};
+use super::bytecode::{disassemble, ByteChunk, OpCode};
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
-
+use types::{Type, TypeKind, Value};
 
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
@@ -220,7 +219,6 @@ impl VirtualMachine {
                     let operand_one = self.chunk.code.bytes[self.code_ip + 1];
                     let operand_two = self.chunk.code.bytes[self.code_ip + 2];
                     let identifier = u16::from_ne_bytes([operand_one, operand_two]) as usize;
-                    
 
                     let func_info = &self.chunk.functions[&identifier];
                     if func_info.is_native {
@@ -246,7 +244,6 @@ impl VirtualMachine {
                     let recover_ep = call_frame.pop().unwrap();
 
                     self.code_ip = recover_ep + 1;
-                    
                 }
                 _ => {
                     println!("!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!!!");

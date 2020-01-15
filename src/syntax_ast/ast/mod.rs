@@ -1,5 +1,5 @@
+use crate::tokenizer::token::Token;
 use std::fmt;
-use crate::tokenizer::token::{ Token };
 use trace::position::CodeSpan;
 
 pub mod declaration;
@@ -25,7 +25,7 @@ impl ParsedResult {
         self.expr.push(expr);
         ExprId(index as u32)
     }
-    
+
     pub fn add_fn(&mut self, fun: FunctionData) -> usize {
         let index = self.functions.len();
         self.functions.push(fun);
@@ -53,16 +53,13 @@ pub struct ExprId(u32);
 
 #[derive(Debug, Clone)]
 pub struct AstNode {
-    pub span:  CodeSpan,
+    pub span: CodeSpan,
     pub stmt_id: StmtId,
 }
 
 impl AstNode {
     pub fn new(stmt_id: StmtId, span: CodeSpan) -> Self {
-        Self {
-            span,
-            stmt_id
-        }
+        Self { span, stmt_id }
     }
 }
 
@@ -73,13 +70,11 @@ pub struct FunctionData {
     pub block_id: StmtId,
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockData {
     pub local_count: usize,
     pub statements: Vec<StmtId>,
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -148,10 +143,8 @@ impl Operator {
         use Operator::*;
         match self {
             Add | Sub | Div | Mul | Mod => true,
-            EqEq| NotEq | LessEq | MoreEq
-            | Less | More | Neg | Not
-            | Ref | Deref | Wrap | Unwrap
-            | And | Or | Asgn => false
+            EqEq | NotEq | LessEq | MoreEq | Less | More | Neg | Not | Ref | Deref | Wrap
+            | Unwrap | And | Or | Asgn => false,
         }
     }
 
@@ -159,9 +152,8 @@ impl Operator {
         use Operator::*;
         match self {
             EqEq | NotEq | LessEq | MoreEq | Less | More => true,
-            Add | Sub | Div | Mul | Mod
-            | Neg | Not | And | Or | Asgn
-            | Ref | Deref | Wrap | Unwrap => false,
+            Add | Sub | Div | Mul | Mod | Neg | Not | And | Or | Asgn | Ref | Deref | Wrap
+            | Unwrap => false,
         }
     }
 
@@ -169,10 +161,8 @@ impl Operator {
         use Operator::*;
         match self {
             And | Or | Not => true,
-            EqEq | NotEq | LessEq | MoreEq | Less | More
-            | Add | Sub | Div | Mul | Mod
-            | Ref | Deref | Wrap | Unwrap
-            | Neg | Asgn => false,
+            EqEq | NotEq | LessEq | MoreEq | Less | More | Add | Sub | Div | Mul | Mod | Ref
+            | Deref | Wrap | Unwrap | Neg | Asgn => false,
         }
     }
 }
@@ -244,4 +234,3 @@ impl Literal {
         self.is_int() || self.is_float()
     }
 }
-

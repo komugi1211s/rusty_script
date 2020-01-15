@@ -2,7 +2,7 @@ use std::fmt;
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{ Error, position::CodeSpan };
+use trace::{position::CodeSpan, Error};
 
 /*
  10 + 2 * 4
@@ -131,7 +131,7 @@ impl Tokenizer {
             // Default
             def => Err(Error::new_while_tokenizing(
                 format!("Unexpected Token: {}", def).as_str(),
-                CodeSpan::new(self.start_line, self.line)
+                CodeSpan::new(self.start_line, self.line),
             )),
         }
     }
@@ -166,7 +166,7 @@ impl Tokenizer {
                 .collect();
             return Err(Error::new_while_tokenizing(
                 "Unterminated String",
-                CodeSpan::new(self.start_line, self.line)
+                CodeSpan::new(self.start_line, self.line),
             ));
         }
 
@@ -241,23 +241,16 @@ impl Tokenizer {
     }
 
     fn add_simple(&mut self, tokentype: TokenType) -> Result<(), Error> {
-        self.tokens.push(Token::simple(
-            tokentype,
-            self.start_line,
-            self.line
-        ));
+        self.tokens
+            .push(Token::simple(tokentype, self.start_line, self.line));
         Ok(())
     }
 
     fn add_lexed(&mut self, tokentype: TokenType) -> Result<(), Error> {
         let string: String = self.source[self.start..self.current].iter().collect();
 
-        self.tokens.push(Token::lexed(
-            tokentype,
-            self.start_line,
-            self.line,
-            string
-        ));
+        self.tokens
+            .push(Token::lexed(tokentype, self.start_line, self.line, string));
         Ok(())
     }
 
@@ -269,7 +262,6 @@ impl Tokenizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     fn assert_lexed_token(token: &Token, requiretype: TokenType, requirelex: &str) {
         assert_eq!(token.tokentype, requiretype);

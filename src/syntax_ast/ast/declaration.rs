@@ -1,5 +1,4 @@
-
-use super::{ ExprId, BlockData }; 
+use super::{BlockData, ExprId};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData {
@@ -13,8 +12,7 @@ pub struct DeclarationData {
 
 impl DeclarationData {
     pub fn is_inferred(&self) -> bool {
-        self.prefix == DeclPrefix::Empty
-        && self.dectype == ParsedType::pUnknown
+        self.prefix == DeclPrefix::Empty && self.dectype == ParsedType::pUnknown
     }
 
     pub fn is_constant(&self) -> bool {
@@ -47,7 +45,7 @@ impl ParsedType {
             "string" => Some(Self::pStr),
             "float" => Some(Self::pFloat),
             "bool" => Some(Self::pBoolean),
-            _ => None
+            _ => None,
         }
     }
 }

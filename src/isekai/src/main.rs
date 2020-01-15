@@ -4,12 +4,12 @@
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use syntax_ast::tokenizer::Tokenizer;
 use syntax_ast::parser::Parser;
+use syntax_ast::tokenizer::Tokenizer;
 // use super::evaluate::Interpreter;
-use compiler::bytecode::{ BytecodeGenerator, disassemble_all };
+use compiler::bytecode::{disassemble_all, BytecodeGenerator};
 use compiler::vm::VirtualMachine;
-use trace::{ ErrorReporter };
+use trace::ErrorReporter;
 // use self::error::*;
 use std::time::Instant;
 
@@ -28,14 +28,16 @@ fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0x0000 } else { 0x0100 });
 }
 
-
 pub fn start(code: &str, stage: u8) -> Result<(), ()> {
     let reporter = ErrorReporter::from_lineiter(code.lines());
     let start = Instant::now();
 
     let _tokens = match Tokenizer::new(code).scan() {
         Ok(n) => n,
-        Err(err) => { reporter.report_error(err); return Err(()); },
+        Err(err) => {
+            reporter.report_error(err);
+            return Err(());
+        }
     };
     println!(
         "Tokenizer took: \x1b[32m{} micros\x1b[39m",
@@ -54,7 +56,10 @@ pub fn start(code: &str, stage: u8) -> Result<(), ()> {
     let parser_time = Instant::now();
     let result = match _parser.parse() {
         Ok(n) => n,
-        Err(err) => { reporter.report_error(err); return Err(()); },
+        Err(err) => {
+            reporter.report_error(err);
+            return Err(());
+        }
     };
     println!(
         "Parser took: \x1b[32m{} micros\x1b[39m",

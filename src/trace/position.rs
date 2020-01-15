@@ -1,12 +1,12 @@
-
 use std::cmp;
-use std::mem;
 use std::fmt;
-
+use std::mem;
 
 // 意図的にInvalidなスパンを作ってそれをEmptyとして使う
-pub const EMPTY_SPAN: CodeSpan = CodeSpan { start: u32::max_value(), end: u32::min_value() };
-
+pub const EMPTY_SPAN: CodeSpan = CodeSpan {
+    start: u32::max_value(),
+    end: u32::min_value(),
+};
 
 // ソースコード内で特定の範囲を指定するStruct
 // 誰も4,294,967,295行以上のコードなんて書くわけがないので
@@ -81,7 +81,6 @@ impl CodeSpan {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,4 +127,3 @@ mod tests {
         assert_eq!(combined.end, b.end);
     }
 }
-

@@ -1,11 +1,8 @@
 use trace::Error;
 
-use super::{
-    ast::{
-        self,
-        BlockData, DeclKind, DeclarationData, Expr, FunctionData, Literal, Operator,
-        ParsedResult, Statement, AstNode, StmtId, ExprId
-    },
+use super::ast::{
+    self, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData, Literal,
+    Operator, ParsedResult, Statement, StmtId,
 };
 
 use crate::tokenizer::token::{Token, TokenType};
@@ -85,7 +82,7 @@ impl<'tok> Parser<'tok> {
     fn enter_block<T>(
         &mut self,
         pass: &mut T,
-        wrapped_func: fn(&mut Parser<'tok>, &mut T) -> Result<(), Error>
+        wrapped_func: fn(&mut Parser<'tok>, &mut T) -> Result<(), Error>,
     ) -> usize {
         let previous_count = self.assign_count;
         self.assign_count = 0;
@@ -233,10 +230,10 @@ impl<'tok> Parser<'tok> {
 
     fn unary(&mut self) -> Result<ExprId, Error> {
         let operator = match self.get_current().tokentype {
-            TokenType::Bang     => Some(Operator::Not),
-            TokenType::Minus    => Some(Operator::Neg),
+            TokenType::Bang => Some(Operator::Not),
+            TokenType::Minus => Some(Operator::Neg),
             TokenType::Question => Some(Operator::Wrap),
-            TokenType::Caret    => Some(Operator::Ref),
+            TokenType::Caret => Some(Operator::Ref),
             _ => None,
         };
         if let Some(oper) = operator {
@@ -279,7 +276,6 @@ impl<'tok> Parser<'tok> {
         let span = self.get_current().span;
         Err(Error::new_while_parsing("Unimplemented ArrayRef.", span))
     }
-
 
     fn parse_func_call(&mut self, expr: ExprId) -> Result<ExprId, Error> {
         self.consume(TokenType::OpenParen)?;
@@ -381,7 +377,7 @@ impl<'tok> Parser<'tok> {
                                 );
                                 return Err(Error::new_while_parsing(
                                     formatted.as_str(),
-                                    CodeSpan::new(previous_line, self.current_line)
+                                    CodeSpan::new(previous_line, self.current_line),
                                 ));
                             }
                             let expr = Expr::Variable(inside_lexeme.to_owned());
@@ -401,7 +397,7 @@ impl<'tok> Parser<'tok> {
             }
             _s => Err(Error::new_while_parsing(
                 format!("Received unknown token while parsing code: {:?}", _s).as_str(),
-                CodeSpan::new(previous_line, self.current_line)
+                CodeSpan::new(previous_line, self.current_line),
             )),
         };
 

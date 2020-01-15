@@ -1,15 +1,10 @@
+use super::{BytecodeGenerator, OpCode};
+use crate::typecheck::{astconv, check as typeck};
 
+use trace::position::{CodeSpan, EMPTY_SPAN};
+use types::{Type, TypeKind};
 
-use crate::typecheck::{ astconv, check as typeck };
-use super::{ BytecodeGenerator, OpCode };
-
-use types::{ Type, TypeKind };
-use trace::position::{ CodeSpan, EMPTY_SPAN };
-
-use syntax_ast::{
-    ast::*,
-    tokenizer::token::TokenType,
-};
+use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
 #[derive(Debug)]
 pub struct ExpressionHandleResult {
@@ -23,7 +18,7 @@ impl BytecodeGenerator {
         &mut self,
         ast: &ParsedResult,
         expr: &ExprId,
-        span: CodeSpan
+        span: CodeSpan,
     ) -> ExpressionHandleResult {
         let expr = ast.get_expr(*expr);
         let mut handled_result = ExpressionHandleResult {
@@ -52,7 +47,8 @@ impl BytecodeGenerator {
                     self.code.push_opcode(opcode, span);
 
                     let index = pos_global as u16;
-                    handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), span);
+                    handled_result.index =
+                        self.code.push_operands(index.to_ne_bytes().to_vec(), span);
                     return handled_result;
                 }
 
@@ -155,7 +151,6 @@ impl BytecodeGenerator {
                     }
                 };
 
-
                 if declared_type != &expression_type {
                     panic!(
                         "Type Mismatch when Assigning: {:?} != {:?}",
@@ -167,12 +162,13 @@ impl BytecodeGenerator {
                 let operands = position as u16;
                 self.code.push_opcode(opcode, span);
                 handled_result._type = expression_type;
-                handled_result.index = self.code.push_operands(operands.to_ne_bytes().to_vec(), span);
+                handled_result.index = self
+                    .code
+                    .push_operands(operands.to_ne_bytes().to_vec(), span);
                 handled_result
             }
             Expr::FunctionCall(func_name, arguments) => {
                 if let Expr::Variable(ref name) = ast.get_expr(*func_name) {
-                    
                     let (exists, position) = self.find_global(&name);
                     if !exists {
                         panic!("Undefined Function.");
@@ -182,7 +178,10 @@ impl BytecodeGenerator {
                     let arg_types = self.function_table[&position].arg_types.clone();
                     let return_type = self.function_table[&position].return_type.clone();
                     if arg_count != arguments.len() {
-                        panic!("Too Few / much arguments provided. require {} arg(s)", arg_count);
+                        panic!(
+                            "Too Few / much arguments provided. require {} arg(s)",
+                            arg_count
+                        );
                     }
 
                     if 0 < arg_count {
@@ -199,7 +198,9 @@ impl BytecodeGenerator {
                         }
                     }
                     self.code.push_opcode(OpCode::Call, span);
-                    let jump_here = self.code.push_operands((position as u16).to_ne_bytes().to_vec(), span);
+                    let jump_here = self
+                        .code
+                        .push_operands((position as u16).to_ne_bytes().to_vec(), span);
                     handled_result._type = return_type.clone();
                     handled_result.index = jump_here;
                 }
@@ -209,12 +210,7 @@ impl BytecodeGenerator {
         }
     }
 
-    fn handle_literal(
-        &mut self,
-        out: &mut ExpressionHandleResult,
-        lit: &Literal,
-        span: CodeSpan,
-    ) {
+    fn handle_literal(&mut self, out: &mut ExpressionHandleResult, lit: &Literal, span: CodeSpan) {
         let _type = astconv::literal_to_type(lit);
         if _type.kind == TypeKind::Null {
             out._type = _type;
@@ -235,7 +231,9 @@ impl BytecodeGenerator {
 
         self.const_table.types.insert(start_index, _type.clone());
         self.code.push_opcode(opcode, span);
-        let index = self.code.push_operands(start_index.to_ne_bytes().to_vec(), span);
+        let index = self
+            .code
+            .push_operands(start_index.to_ne_bytes().to_vec(), span);
         out._type = _type;
         out.index = index;
     }
@@ -257,21 +255,16 @@ fn literal_to_byte_array(lit: &Literal) -> Option<Vec<u8>> {
             let item = string_.parse::<i64>().unwrap();
             Some(i64::to_ne_bytes(item).to_vec())
         }
-        LiteralKind::Str => {
-            Some(string_.as_bytes().to_vec())
-        }
+        LiteralKind::Str => Some(string_.as_bytes().to_vec()),
         LiteralKind::Float => {
             let item = string_.parse::<f64>().unwrap();
             Some(u64::to_ne_bytes(f64::to_bits(item)).to_vec())
         }
-        LiteralKind::Bool => {
-            match string_.as_str() {
-                "true" => Some(vec![1]),
-                "false" => Some(vec![0]),
-                _=> unreachable!(),
-            }
-        }
-        LiteralKind::Null => None
+        LiteralKind::Bool => match string_.as_str() {
+            "true" => Some(vec![1]),
+            "false" => Some(vec![0]),
+            _ => unreachable!(),
+        },
+        LiteralKind::Null => None,
     }
 }
-

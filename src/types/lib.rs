@@ -1,17 +1,16 @@
+#[macro_use]
+extern crate bitflags;
 
-#[macro_use] extern crate bitflags;
-
+use std::borrow::Borrow;
 use std::fmt;
 use std::mem;
 use std::ops;
-use std::borrow::Borrow;
 
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
 
 #[cfg(target_pointer_width = "64")]
 const USIZE_LENGTH: usize = 8;
-
 
 pub struct TypeArena {
     defined: Vec<Type>,
@@ -42,9 +41,7 @@ pub struct Type {
 
 impl Type {
     pub fn new(kind: TypeKind) -> Self {
-        Self {
-            kind,
-        }
+        Self { kind }
     }
 
     pub fn is_null(&self) -> bool {
@@ -77,29 +74,22 @@ impl Type {
 
     pub fn array(of: &Self, size: Option<u32>) -> Self {
         Self {
-            kind: TypeKind::Array(
-                Box::new(of.clone()),
-                size
-            )
+            kind: TypeKind::Array(Box::new(of.clone()), size),
         }
     }
 
     pub fn optional(of: &Self) -> Self {
         Self {
-            kind: TypeKind::Optional(
-                Box::new(of.clone()),
-            )
+            kind: TypeKind::Optional(Box::new(of.clone())),
         }
     }
 
     pub fn null(&self) -> Self {
         Self {
-            kind: TypeKind::Null
+            kind: TypeKind::Null,
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

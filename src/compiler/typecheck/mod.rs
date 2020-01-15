@@ -2,11 +2,11 @@ pub mod astconv;
 pub mod check;
 
 use syntax_ast::ast::*;
-use types::{ Type, TypeKind };
+use types::{Type, TypeKind};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeArena {
-    cont: Vec<TypeContext>
+    cont: Vec<TypeContext>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

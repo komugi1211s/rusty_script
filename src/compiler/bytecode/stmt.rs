@@ -1,19 +1,16 @@
-use super::{ BytecodeGenerator, OpCode };
-use trace::position::{ CodeSpan, EMPTY_SPAN };
+use super::{BytecodeGenerator, OpCode};
+use trace::position::{CodeSpan, EMPTY_SPAN};
 
-use syntax_ast::{
-    ast::*,
-    tokenizer::token::TokenType,
-};
+use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
 use super::expr::ExpressionHandleResult;
-use types::{ Type, TypeKind };
+use types::{Type, TypeKind};
 
 #[derive(Debug)]
 pub struct StatementHandleResult {
     pub index: usize,
     pub span: CodeSpan,
-    pub info: StatementInfo
+    pub info: StatementInfo,
 }
 
 #[derive(Debug)]
@@ -25,15 +22,18 @@ pub enum StatementInfo {
     Return(Option<Type>),
 }
 
-
 impl BytecodeGenerator {
     pub(super) fn handle_stmt(
         &mut self,
         ast: &ParsedResult,
         data: &StmtId,
-        span: CodeSpan
+        span: CodeSpan,
     ) -> StatementHandleResult {
-        let mut handled_result = StatementHandleResult { span, index: 0, info: StatementInfo::Nothing };
+        let mut handled_result = StatementHandleResult {
+            span,
+            index: 0,
+            info: StatementInfo::Nothing,
+        };
 
         let data = ast.get_stmt(*data);
         match data {
@@ -63,7 +63,7 @@ impl BytecodeGenerator {
                     match self.handle_stmt(ast, i, span).info {
                         StatementInfo::Break(usize) => {
                             self.break_call.push(usize);
-                        },
+                        }
                         StatementInfo::Continue(..) => panic!("Continue is not supported"),
                         _ => (),
                     };
@@ -109,8 +109,7 @@ impl BytecodeGenerator {
                 let result_type = if let Some(expr) = opt_expr {
                     let result_expr = self.handle_expr(ast, expr, span);
                     Some(result_expr._type)
-                }
-                else {
+                } else {
                     self.code.write_null(span);
                     None
                 };
@@ -123,14 +122,18 @@ impl BytecodeGenerator {
     }
 
     fn handle_if_statement(
-        &mut self, 
+        &mut self,
         ast: &ParsedResult,
         expr: &ExprId,
         if_id: &StmtId,
         opt_else_id: Option<&StmtId>,
-        span: CodeSpan
+        span: CodeSpan,
     ) -> StatementHandleResult {
-        let mut handled_result = StatementHandleResult { span, index: 0, info: StatementInfo::Nothing };
+        let mut handled_result = StatementHandleResult {
+            span,
+            index: 0,
+            info: StatementInfo::Nothing,
+        };
         self.handle_expr(ast, expr, span);
 
         // ジャンプ用のインデックスを作っておく
@@ -172,7 +175,7 @@ impl BytecodeGenerator {
         ast: &ParsedResult,
         expr: &ExprId,
         while_id: &StmtId,
-        span: CodeSpan 
+        span: CodeSpan,
     ) -> StatementHandleResult {
         /*
          どうやらアセンブラではWhileループは以下のように書かれるらしい:
@@ -191,7 +194,11 @@ impl BytecodeGenerator {
          https://stackoverflow.com/questions/28665528/while-do-while-for-loops-in-assembly-language-emu8086
         */
 
-        let mut handled_result = StatementHandleResult { span, index: 0, info: StatementInfo::Nothing };
+        let mut handled_result = StatementHandleResult {
+            span,
+            index: 0,
+            info: StatementInfo::Nothing,
+        };
         let _before_loop = self.code.current_length();
         let jump_conditional = self.code.push_opcode(OpCode::Jump, span);
         let after_jump_conditional = self
@@ -214,7 +221,8 @@ impl BytecodeGenerator {
             .push_operands(after_jump_conditional.to_ne_bytes().to_vec(), span);
 
         for i in self.break_call.drain(..) {
-            self.code.rewrite_operands(end_of_loop.to_ne_bytes().to_vec(), i);
+            self.code
+                .rewrite_operands(end_of_loop.to_ne_bytes().to_vec(), i);
         }
         self.code
             .rewrite_operands(before_expr.to_ne_bytes().to_vec(), jump_conditional);

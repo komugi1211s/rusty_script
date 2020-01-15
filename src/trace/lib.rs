@@ -1,9 +1,8 @@
-
-pub use log::{info, trace, warn};
 use log;
+pub use log::{info, trace, warn};
 use std::str::Lines;
 pub mod position;
-use position::{CodeSpan};
+use position::CodeSpan;
 
 /*
 
@@ -84,21 +83,16 @@ pub enum ErrorKind {
 }
 
 pub struct ErrorReporter<'a> {
-    pub contexts: Vec<&'a str>
+    pub contexts: Vec<&'a str>,
 }
-
 
 impl<'a> ErrorReporter<'a> {
     pub fn empty() -> Self {
-        Self {
-            contexts: vec![],
-        }
+        Self { contexts: vec![] }
     }
 
     pub fn new(ctx: Vec<&'a str>) -> Self {
-        Self {
-            contexts: ctx,
-        }
+        Self { contexts: ctx }
     }
 
     pub fn from_lineiter(ctx: Lines<'a>) -> Self {
@@ -113,13 +107,27 @@ impl<'a> ErrorReporter<'a> {
         if err.span.is_oneliner() {
             let bottom_line = err.span.end_usize() - 1;
             println!("around line {}:", bottom_line);
-            println!("\x1b[36m{}| {}\x1b[0m", bottom_line - 1, self.contexts[bottom_line - 1]);
-            println!("\x1b[31m{}| {}\x1b[0m", bottom_line,     self.contexts[bottom_line]);
-            println!("\x1b[36m{}| {}\x1b[0m", bottom_line + 1, self.contexts[bottom_line + 1]);
+            println!(
+                "\x1b[36m{}| {}\x1b[0m",
+                bottom_line - 1,
+                self.contexts[bottom_line - 1]
+            );
+            println!(
+                "\x1b[31m{}| {}\x1b[0m",
+                bottom_line, self.contexts[bottom_line]
+            );
+            println!(
+                "\x1b[36m{}| {}\x1b[0m",
+                bottom_line + 1,
+                self.contexts[bottom_line + 1]
+            );
         } else {
             let start_line = err.span.start_usize() - 1;
             let end_line = err.span.end_usize() - 1;
-            println!("Error detected within range {} to {}:", start_line, end_line);
+            println!(
+                "Error detected within range {} to {}:",
+                start_line, end_line
+            );
             for i in start_line..end_line {
                 println!("\x1b[31m{}| {}\x1b[0m", i, self.contexts[i]);
             }
@@ -134,10 +142,7 @@ impl log::Log for Logger {
         meta.level() <= log::Level::Trace
     }
 
-    fn log(&self, record: &log::Record) {
-    }
+    fn log(&self, record: &log::Record) {}
 
     fn flush(&self) {}
 }
-
-

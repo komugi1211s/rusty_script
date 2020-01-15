@@ -12,27 +12,27 @@ pub enum TokenType {
     Break,    // break;
     Continue, // continue;
 
-    Print,  // print "message"
-    Return, // return "";
+    Print,    // print "message"
+    Return,   // return "";
     Constant, // const int;
 
     // 括弧とか文字とか
-    DoubleQuote, // ""
-    Slash,       // / <- 計算でも使う
-    OpenParen,   // (
-    CloseParen,  // )
-    OpenBrace,   // {
-    CloseBrace,  // }
-    OpenSquareBracket,    // [
-    CloseSquareBracket,   // ]
-    AtMark,      // @
-    Colon,       // :
-    SemiColon,   // ;
-    Equal,       // =
-    Dot,         // .
-    Comma,       // ,
-    Question,    // ?
-    Caret,       // ^
+    DoubleQuote,        // ""
+    Slash,              // / <- 計算でも使う
+    OpenParen,          // (
+    CloseParen,         // )
+    OpenBrace,          // {
+    CloseBrace,         // }
+    OpenSquareBracket,  // [
+    CloseSquareBracket, // ]
+    AtMark,             // @
+    Colon,              // :
+    SemiColon,          // ;
+    Equal,              // =
+    Dot,                // .
+    Comma,              // ,
+    Question,           // ?
+    Caret,              // ^
 
     // 比較, 論理
     Or,         // or
@@ -58,7 +58,6 @@ pub enum TokenType {
     Digit,
     EOF,
 }
-
 
 pub fn match_identity(keywords: &str) -> Option<TokenType> {
     use TokenType::*;

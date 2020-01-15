@@ -2,15 +2,14 @@
  * タイプ及び定義をハンドリングする
  * */
 
-use super::{ Parser };
+use super::Parser;
 
 use crate::ast;
 use crate::tokenizer::token::{Token, TokenType};
 
-use trace::{trace, info, warn};
-use trace::Error;
 use trace::position::CodeSpan;
-
+use trace::Error;
+use trace::{info, trace, warn};
 
 fn is_prefix_banned(cand: &str) -> bool {
     match cand {
@@ -43,17 +42,23 @@ impl<'tok> Parser<'tok> {
 
                 // TODO: do not use unwrap
                 let length = number_inside.parse::<u32>().unwrap();
-                self.consume(TokenType::CloseSquareBracket).expect("Close Square Bracket not found.");
+                self.consume(TokenType::CloseSquareBracket)
+                    .expect("Close Square Bracket not found.");
                 return ast::ParsedType::pArray(Box::new(inner_type), Some(length));
             } else {
-                self.consume(TokenType::CloseSquareBracket).expect("Close Square Bracket not found.");
+                self.consume(TokenType::CloseSquareBracket)
+                    .expect("Close Square Bracket not found.");
                 return ast::ParsedType::pArray(Box::new(inner_type), None);
             }
         }
 
         // TODO - @Broken: are you sure that there's no more prefix??
         let mut core_type = if self.is(TokenType::Iden) {
-            let Token { tokentype, span, lexeme: candidate } = self.advance();
+            let Token {
+                tokentype,
+                span,
+                lexeme: candidate,
+            } = self.advance();
 
             let candidate = candidate.as_ref().unwrap();
             if is_prefix_banned(candidate) && prefix != &ast::DeclPrefix::Empty {
@@ -66,7 +71,7 @@ impl<'tok> Parser<'tok> {
 
             match ast::ParsedType::match_primitive(candidate) {
                 Some(x) => x,
-                None => ast::ParsedType::pUserdef(candidate.to_string())
+                None => ast::ParsedType::pUserdef(candidate.to_string()),
             }
         } else {
             ast::ParsedType::pUnknown
@@ -96,7 +101,10 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    pub(super) fn parse_function_decl(&mut self, baseinfo: ast::DeclarationData) -> Result<ast::StmtId, Error> {
+    pub(super) fn parse_function_decl(
+        &mut self,
+        baseinfo: ast::DeclarationData,
+    ) -> Result<ast::StmtId, Error> {
         let args = self.parse_arguments()?;
 
         self.consume(TokenType::OpenBrace);
@@ -116,7 +124,7 @@ impl<'tok> Parser<'tok> {
     pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, Error> {
         let span = self.consume(TokenType::OpenParen)?.span;
         let mut args = vec![];
-        
+
         if self.is(TokenType::CloseParen) {
             self.consume(TokenType::CloseParen)?;
             return Ok(args);
@@ -135,7 +143,7 @@ impl<'tok> Parser<'tok> {
                 name,
                 dectype,
                 prefix,
-                expr: None
+                expr: None,
             };
 
             if self.is(TokenType::Equal) {
@@ -166,7 +174,7 @@ impl<'tok> Parser<'tok> {
             name,
             dectype,
             prefix,
-            expr: None
+            expr: None,
         };
 
         if self.consume(TokenType::Equal).is_ok() {
