@@ -77,14 +77,13 @@ impl<'tok> Parser<'tok> {
             ast::ParsedType::pUnknown
         };
 
-        while self.is(TokenType::Caret) || self.is(TokenType::Question) {
-            if self.is(TokenType::Caret) {
-                core_type = ast::ParsedType::pPointer(Box::new(core_type));
-            } else {
-                core_type = ast::ParsedType::pOptional(Box::new(core_type));
+        loop {
+            match self.get_current().tokentype {
+                TokenType::Caret => { self.advance(); core_type = ast::ParsedType::pPointer(Box::new(core_type)); }, 
+                TokenType::Question => { self.advance(); core_type = ast::ParsedType::pOptional(Box::new(core_type)); }, 
+                _ => break,
             }
         }
-
         core_type
     }
 
