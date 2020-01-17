@@ -12,10 +12,6 @@ const USIZE_LENGTH: usize = 4;
 #[cfg(target_pointer_width = "64")]
 const USIZE_LENGTH: usize = 8;
 
-pub struct TypeArena {
-    defined: Vec<Type>,
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum TypeKind {
     Int,
@@ -24,9 +20,20 @@ pub enum TypeKind {
     Boolean,
     Null,
     Array(Box<Type>, Option<u32>),
-    Optional(Box<Type>),
-    UserDef,
+    Function {
+        args: Vec<Type>,
+        ret: Box<Type>
+    }
+    Compound {
+        field: Option<Vec<Type>>,
+    },
+    Existential
 }
+
+// const TInt: TypeKind     = TypeKind::Variable("Int", vec![]);
+// const TFloat: TypeKind   = TypeKind::Variable("Float", vec![]);
+// const TBoolean: TypeKind = TypeKind::Variable("Boolean", vec![]);
+// const TString: TypeKind  = TypeKind::Variable("String", vec![]);
 
 impl Default for TypeKind {
     fn default() -> Self {
@@ -42,10 +49,6 @@ pub struct Type {
 impl Type {
     pub fn new(kind: TypeKind) -> Self {
         Self { kind }
-    }
-
-    pub fn is_null(&self) -> bool {
-        self.kind == TypeKind::Null
     }
 
     pub fn boolean() -> Self {
@@ -78,17 +81,24 @@ impl Type {
         }
     }
 
-    pub fn optional(of: &Self) -> Self {
-        Self {
-            kind: TypeKind::Optional(Box::new(of.clone())),
-        }
-    }
-
-    pub fn null(&self) -> Self {
+    pub fn null() -> Self {
         Self {
             kind: TypeKind::Null,
         }
     }
+
+    pub fn is_null(&self) -> bool {
+        self.kind == TypeKind::Null
+    }
+
+    pub fn is_compound(&self) -> bool {
+        if let TypeKind::Compound { .. } = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]

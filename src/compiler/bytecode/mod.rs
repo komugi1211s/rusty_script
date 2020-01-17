@@ -1,6 +1,6 @@
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
-use crate::typecheck::{astconv, check as typecheck};
+use crate::typecheck::{self, astconv, tcheck};
 use crate::vm::VirtualMachine;
 use trace::position::{CodeSpan, EMPTY_SPAN};
 use types::{Type, TypeKind};
@@ -40,7 +40,6 @@ pub enum OpCode {
     Div = 0b0011_0100,
     Mod = 0b0011_0101,
     Not = 0b0011_0111,
-    Neg = 0b0011_1000,
 
     // Logical     = 0b01000000,
     EqEq = 0b0100_0001,
@@ -51,6 +50,7 @@ pub enum OpCode {
     More = 0b0100_0111,
     And = 0b0100_1000,
     Or = 0b0100_1001,
+    Neg = 0b0100_1010,
 
     // Branching   = 0b01010000,
     Jump = 0b0101_0000,
@@ -372,21 +372,6 @@ pub struct ByteChunk {
     pub functions: HashMap<usize, FuncInfo>,
 }
 
-// TODO - @Improvement: turn string into something small, stack-sized but
-// safe to use without collision problem ( u32 hash would be the best )
-#[derive(Debug)]
-pub struct GlobalDef {
-    pub dtype: Type,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct LocalDef {
-    pub dtype: Type,
-    pub name: String,
-    pub depth: u16,
-}
-
 #[derive(Debug)]
 pub struct BytecodeGenerator {
     // Things that we return
@@ -394,8 +379,7 @@ pub struct BytecodeGenerator {
     pub const_table: ConstantTable,
 
     // To keep track of definitions
-    pub current_define: Vec<LocalDef>,
-    pub global_define: Vec<GlobalDef>,
+    pub defs: typecheck::TypeArena,
     pub function_table: HashMap<usize, FuncInfo>,
 
     // Keep track of block nesting
@@ -410,8 +394,7 @@ impl BytecodeGenerator {
             code: Code::default(),
             const_table: ConstantTable::default(),
             last_loop_start: usize::max_value(),
-            current_define: Vec::new(),
-            global_define: Vec::new(),
+            defs: typecheck::TypeArena::new(),
             function_table: HashMap::new(),
             current_block: 0,
             break_call: Vec::new(),
@@ -429,56 +412,16 @@ impl BytecodeGenerator {
         for node in ast.ast.iter() {
             self.handle_astnode(&ast, node);
         }
-        self.const_table
-            .push_data(usize::max_value().to_ne_bytes().to_vec());
+
         let bytechunk = ByteChunk {
             entry_point,
-            code: self.code,
+            code:      self.code,
             constants: self.const_table,
             functions: self.function_table,
         };
         Ok(bytechunk)
     }
 
-    #[inline]
-    fn find_local(&self, name: &str) -> (bool, usize) {
-        // We're reversing this, so index would be length - ind
-        let len = self.current_define.len();
-        for (ind, local) in self.current_define.iter().rev().enumerate() {
-            if &local.name == name && local.depth <= self.current_block {
-                let ind = if len - ind == 0 { 0 } else { len - ind - 1 };
-                return (true, ind);
-            }
-        }
-        (false, 0)
-    }
-
-    #[inline]
-    fn find_global(&self, name: &str) -> (bool, usize) {
-        let is_exist = self.global_define.iter().position(|x| &x.name == name);
-        (is_exist.is_some(), is_exist.unwrap_or(0))
-    }
-
-    #[inline]
-    fn add_local(&mut self, dtype: Type, name: &str) -> usize {
-        let add = LocalDef {
-            dtype: dtype,
-            name: name.to_string(),
-            depth: self.current_block,
-        };
-        self.current_define.push(add);
-        self.current_define.len() - 1
-    }
-
-    #[inline]
-    pub fn add_global(&mut self, dtype: Type, name: &str) -> usize {
-        let add = GlobalDef {
-            dtype: dtype,
-            name: name.to_string(),
-        };
-        self.global_define.push(add);
-        self.global_define.len() - 1
-    }
 
     fn prepare_function(&mut self, ast: &ParsedResult, function: &FunctionData) {
         let decl_info = &function.it;
@@ -651,15 +594,15 @@ impl BytecodeGenerator {
 
         // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.current_block > 0 {
-            let (exists, pos) = self.find_local(&name);
+            let (exists, pos) = self.defs.find_local(&name, self.current_block);
 
             if exists {
-                if self.current_define[pos].depth == self.current_block {
+                if self.defs.local[pos].depth == self.current_block {
                     panic!("Same Variable Declared TWICE.");
                 }
             }
 
-            self.add_local(final_type.clone(), name.as_str());
+            self.defs.add_local(final_type.clone(), name.as_str(), self.current_block);
             if decl.kind == DeclKind::Argument {
                 out.index = self.code.current_length();
             } else {

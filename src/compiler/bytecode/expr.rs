@@ -29,36 +29,40 @@ impl BytecodeGenerator {
 
         match expr {
             Expr::Variable(name) => {
-                let (exists, pos) = self.find_local(&name);
-
-                // FIXME @DumbCode - up there you do "if exists {"
-                // and here you're doing "if !exists {"
-                // It's confusing, make it consistent
-                if !exists {
-                    // it could be a global variable;
-                    let (exists_global, pos_global) = self.find_global(&name);
-                    if !exists_global {
-                        panic!("Undefined Variable");
+                let (exists, position, is_global) = {
+                    let (lexists, lpos) = self.find_local(&name);
+                    if lexists {
+                        (lexists, lpos, false)
+                    } else {
+                        let (gexists, gpos) = self.find_global(&name);
+                        if gexists {
+                            (gexists, gpos, true)
+                        } else {
+                            (false, 0, false)
+                        }
                     }
+                };
 
-                    let _type = self.global_define[pos_global].dtype.clone();
-                    let opcode = self.get_load_opcode(&_type, true);
-                    handled_result._type = _type.clone();
+                if !exists { panic!("Undefined Variable"); }
+
+                let defined_type = match is_global {
+                    true  => &self.global_define[position].dtype,
+                    false => &self.current_define[position].dtype,
+                }.clone();
+
+                if defined_type.is_compound() {
+                    self.emit_opcode_for_compoundtype(&mut handled_result, defined_type);
+                } else {
+                    let opcode = self.get_load_opcode(&defined_type, is_global);
+                    let index = position as u16;
+                    
                     self.code.push_opcode(opcode, span);
+                    self.code.push_operands(index.to_ne_bytes().to_vec(), span);
 
-                    let index = pos_global as u16;
-                    handled_result.index =
-                        self.code.push_operands(index.to_ne_bytes().to_vec(), span);
-                    return handled_result;
+                    handled_result.index = self.code.current_length();
+                    handled_result._type = defined_type;
                 }
 
-                let local_type = self.current_define[pos].dtype.clone();
-                let opcode = self.get_load_opcode(&local_type, false);
-                handled_result._type = local_type;
-                self.code.push_opcode(opcode, span);
-
-                let index = pos as u16;
-                handled_result.index = self.code.push_operands(index.to_ne_bytes().to_vec(), span);
                 handled_result
             }
             Expr::Literal(literal) => {
@@ -236,6 +240,9 @@ impl BytecodeGenerator {
             .push_operands(start_index.to_ne_bytes().to_vec(), span);
         out._type = _type;
         out.index = index;
+    }
+
+    fn emit_opcode_for_compoundtype(&mut self, out: &mut ExpressionHandleResult, dtype: Type) {
     }
 }
 
