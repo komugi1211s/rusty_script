@@ -23,7 +23,7 @@ pub enum TypeKind {
     Function {
         args: Vec<Type>,
         ret: Box<Type>
-    }
+    },
     Compound {
         field: Option<Vec<Type>>,
     },

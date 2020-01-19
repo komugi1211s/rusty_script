@@ -15,6 +15,7 @@ pub enum TokenType {
     Print,    // print "message"
     Return,   // return "";
     Constant, // const int;
+    Public, // public int;
 
     // 括弧とか文字とか
     DoubleQuote,        // ""
@@ -71,6 +72,7 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
         "continue" => Some(Continue),
         "return" => Some(Return),
         "const" => Some(Constant),
+        "pub" => Some(Public),
 
         "and" => Some(And),
         "or" => Some(Or),

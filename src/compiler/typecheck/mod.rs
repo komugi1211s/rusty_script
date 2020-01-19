@@ -18,15 +18,12 @@ pub enum TypeContext {
     Annotated(Type),
 }
 
-impl TypeContext {
-    pub fn is_solved(&self) -> bool {
+impl Solvable for TypeContext {
+    fn is_solved(&self) -> bool {
         match self {
             Self::Solved(_) | Self::Annotated(_) => true,
             _ => false
         }
-    }
-
-    pub fn unravel(&self) -> Type {
     }
 }
 
@@ -42,6 +39,24 @@ pub struct LocalDef {
     pub depth: u16,
 }
 
+pub trait Solvable {
+    fn is_solved(&self) -> bool;
+    fn is_not_solved(&self) -> bool { self.is_solved() }
+}
+
+
+impl Solvable for GlobalDef {
+    fn is_solved(&self) -> bool {
+        self.dtype.is_solved()
+    }
+}
+
+impl Solvable for LocalDef {
+    fn is_solved(&self) -> bool {
+        self.dtype.is_solved()
+    }
+}
+
 impl TypeArena {
     pub fn new() -> Self {
         Self {
@@ -54,21 +69,21 @@ impl TypeArena {
     pub fn add_local(&mut self, dtype: TypeContext, name: &str, depth: u16) -> usize {
         let add = LocalDef {
             name: name.to_string(),
-            dtype: dtype,
-            depth: depth,
+            dtype,
+            depth,
         };
-        self.current_define.push(add);
-        self.current_define.len() - 1
+        self.local.push(add);
+        self.local.len() - 1
     }
 
     #[inline]
     pub fn add_global(&mut self, dtype: TypeContext, name: &str) -> usize {
         let add = GlobalDef {
             name: name.to_string(),
-            dtype: dtype,
+            dtype,
         };
-        self.global_define.push(add);
-        self.global_define.len() - 1
+        self.global.push(add);
+        self.global.len() - 1
     }
 
     #[inline]
