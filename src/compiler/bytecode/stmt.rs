@@ -6,6 +6,26 @@ use syntax_ast::{ast::*, tokenizer::token::TokenType};
 use super::expr::ExpressionHandleResult;
 use types::{Type, TypeKind};
 
+
+/*
+ * TODO: more useful™ Instruction System
+ * // simple
+ * self.code.op_single(a);
+ *
+ * // operand simple
+ * self.code.op_with_operand(a, b);
+ *
+ * // Reserve
+ * let address = self.code.reserve_single();
+ * self.code.apply_single(address, OpCode);
+ *
+ * // Self handle
+ * let address = self.code.reserve_sizeof(OpCode::Call);
+ * let instruction = BC::code(OpCode::Call).operand(abc).put_to(address);
+ *
+ * self.code.apply(instruction);
+ * */
+
 #[derive(Debug)]
 pub struct StatementHandleResult {
     pub index: usize,
@@ -58,7 +78,7 @@ impl BytecodeGenerator {
 
             Statement::Block(block_data) => {
                 // self.code.push_opcode(OpCode::BlockIn, span);
-                self.current_block += 1;
+                self.enter_local();
                 for i in block_data.statements.iter() {
                     match self.handle_stmt(ast, i, span).info {
                         StatementInfo::Break(usize) => {
@@ -68,9 +88,7 @@ impl BytecodeGenerator {
                         _ => (),
                     };
                 }
-                let block = self.current_block;
-                self.current_define.retain(|x| x.depth < block);
-                self.current_block -= 1;
+                self.leave_local();
                 // handled_result.index = self.code.push_opcode(OpCode::BlockOut, span);
                 handled_result.index = self.code.current_length();
                 handled_result

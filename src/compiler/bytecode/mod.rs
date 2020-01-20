@@ -384,7 +384,7 @@ pub struct BytecodeGenerator {
 
     // Keep track of block nesting
     pub last_loop_start: usize,
-    current_block: u16,
+    depth: u16
     pub break_call: Vec<usize>,
 }
 
@@ -396,7 +396,7 @@ impl BytecodeGenerator {
             last_loop_start: usize::max_value(),
             defs: typecheck::TypeArena::new(),
             function_table: HashMap::new(),
-            current_block: 0,
+            depth: 0,
             break_call: Vec::new(),
         }
     }
@@ -444,11 +444,10 @@ impl BytecodeGenerator {
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
         // 変数を引数として処理する
         let main_code = mem::replace(&mut self.code, Code::default());
-        let main_local = mem::replace(&mut self.current_define, Vec::new());
         let function_starts_at = main_code.current_length();
 
-        // current_block を加算する事でローカル領域として処理を進める
-        self.current_block += 1;
+        // depth を加算する事でローカル領域として処理を進める
+        self.enter_local();
         let arg_count = function.args.len();
         let mut argument_types = Vec::new();
         for arg_decl_info in function.args.iter() {
@@ -513,11 +512,10 @@ impl BytecodeGenerator {
             }
         }
 
-        self.current_block -= 1;
+        self.leave_local();
 
         // 元のコードを復活させ、後付けでマージする
         let function_code = mem::replace(&mut self.code, main_code);
-        let _function_local = mem::replace(&mut self.current_define, main_local);
         self.code.merge(function_code);
 
         // 関数に関する情報を保存してテーブルに保存
@@ -532,83 +530,56 @@ impl BytecodeGenerator {
         &mut self,
         ast: &ParsedResult,
         out: &mut StatementHandleResult,
-        mut decl: &DeclarationData,
+        decl: &DeclarationData,
     ) {
-        let mut value_index = 0;
-        let mut actual_type = Type::default();
 
-        let name = decl.name.clone();
-        let mut declared_type = astconv::annotation_to_type(&decl.dectype);
         let mut empty_expr = false;
         let expression = decl.expr.as_ref();
-
+        let mut actual_type = Type::default();
         match expression {
             Some(expr) => {
                 let expr_handle_result = self.handle_expr(ast, expr, out.span);
                 // println!("Declaration_Expr: {:?}", &expr_handle_result);
-                value_index = expr_handle_result.index;
                 actual_type = expr_handle_result._type;
             }
             None => {
                 empty_expr = true;
-                if decl.kind != DeclKind::Argument {
-                    value_index = self.code.write_null(out.span)
-                }
             }
         };
 
-        fn decide_actual_type(decl: &DeclarationData, given_type: &Type) -> Type {
-            let given_type: Type = given_type.clone();
 
-            if decl.is_inferred() {
-                if given_type.is_null() {
-                    panic!("You cannot initialize Any type with null");
-                }
-
-                return given_type;
+        let declared_type = if decl.is_annotated() {
+            TypeContext::Annotated(astconv::annotation_to_type(&decl.dectype))
+        } else {
+            if !empty_expr {
+                TypeContext::Solved(actual_type)
             } else {
-                if given_type.is_null() {
-                    if let ParsedType::pOptional(_) = decl.dectype {
-                        // Initializing Nullable variable with null.
-                        // Fall Through.
-                    } else if decl.kind == DeclKind::Argument {
-                        // It's not really initializing it. not much of a problem.
-                        // Fall through.
-                    } else {
-                        panic!("an attempt to initialize non-nullable variable with null");
-                    }
+                // Kind of unreachable.
+                TypeContext::Existential(decl.name.clone())
+            }
+        };
 
-                    return astconv::annotation_to_type(&decl.dectype).unwrap();
-                } else {
-                    let annotated_type = astconv::annotation_to_type(&decl.dectype).unwrap();
-                    if annotated_type != given_type {
-                        panic!("Type mismatch! {:?} != {:?}", decl.dectype, given_type);
-                    }
+        // TODO: Dumb Code
+        let def_position = {
+            let def_result = if self.is_local() {
+                self.defs.add_local(declared_type, &decl.name, self.depth)
+            } else {
+                self.defs.add_global(declared_type, &decl.name)
+            };
 
-                    return given_type;
-                }
+            match def_result {
+                Ok(n) => n,
+                Err(p) => panic!("Variable Declared TWICE!");
             }
         }
 
-        let final_type = decide_actual_type(&decl, &actual_type);
-
         // FIXME @Cleanup + @DumbCode - This can be super simplified
-        if self.current_block > 0 {
-            let (exists, pos) = self.defs.find_local(&name, self.current_block);
-
-            if exists {
-                if self.defs.local[pos].depth == self.current_block {
-                    panic!("Same Variable Declared TWICE.");
-                }
-            }
-
-            self.defs.add_local(final_type.clone(), name.as_str(), self.current_block);
+        if self.is_local() {
             if decl.kind == DeclKind::Argument {
                 out.index = self.code.current_length();
             } else {
-                let position = self.current_define.len() - 1;
                 let opcode = self.get_store_opcode(&final_type, false);
-                let operands = position as u16;
+                let operands = def_position as u16;
 
                 self.code.push_opcode(opcode, out.span);
                 out.index = self
@@ -616,16 +587,8 @@ impl BytecodeGenerator {
                     .push_operands(operands.to_ne_bytes().to_vec(), out.span);
             }
         } else {
-            let (exists, pos) = self.find_global(&name);
-
-            if exists {
-                panic!("Same Variable Declared TWICE.");
-            }
-
-            self.add_global(final_type.clone(), name.as_str());
-            let position = self.global_define.len() - 1;
             let opcode = self.get_store_opcode(&final_type, true);
-            let operands = position as u16;
+            let operands = def_position as u16;
 
             self.code.push_opcode(opcode, out.span);
             out.index = self
@@ -636,6 +599,21 @@ impl BytecodeGenerator {
             is_initialized: empty_expr,
             dtype: final_type,
         };
+    }
+
+    fn enter_local(&mut self) -> usize {
+        self.depth += 1;
+        self.depth
+    }
+
+    fn leave_local(&mut self) -> usize {
+        self.depth -= 1;
+        self.defs.ditch_out_of_scope(self.depth);
+        self.depth
+    }
+
+    fn is_local(&self) -> bool {
+        self.depth > 0
     }
 
     fn get_load_opcode(&self, _type: &Type, is_global: bool) -> OpCode {

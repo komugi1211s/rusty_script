@@ -1,6 +1,32 @@
 use syntax_ast::ast::{self, ParsedType};
 use types::Type;
 
+
+pub fn synthesize(ast: &ParsedResult, expr: ExprId, arena: &mut TypeArena) -> Option<Type> {
+    use ast::Expr::*;
+    match ast.get_expr(expr) {
+        Literal(lit) => Some(literal_to_type(lit)),
+        Variable(ref string) => {
+            let (ex, n) = arena.find_local(string, 
+
+        }
+    }
+}
+
+/*
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Binary(ExprId, ExprId, Operator),
+    Logical(ExprId, ExprId, Operator),
+    FunctionCall(ExprId, Vec<ExprId>),
+    Assign(ExprId, ExprId),
+
+    Literal(Literal),
+    Grouping(ExprId),
+    Unary(ExprId, Operator),
+    Variable(String),
+}
+*/
 pub fn annotation_to_type(parsed: &ParsedType) -> Option<Type> {
     return match parsed {
         ParsedType::pInt => Some(Type::int()),
@@ -27,6 +53,6 @@ pub fn literal_to_type(lit: &ast::Literal) -> Type {
         ast::LiteralKind::Float => Type::float(),
         ast::LiteralKind::Str => Type::string(),
         ast::LiteralKind::Bool => Type::boolean(),
-        ast::LiteralKind::Null => Type::default(),
+        ast::LiteralKind::Null => Type::null(),
     }
 }

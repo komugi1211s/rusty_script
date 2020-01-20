@@ -30,11 +30,11 @@ impl BytecodeGenerator {
         match expr {
             Expr::Variable(name) => {
                 let (exists, position, is_global) = {
-                    let (lexists, lpos) = self.find_local(&name);
+                    let (lexists, lpos) = self.defs.find_local(&name, self.depth);
                     if lexists {
                         (lexists, lpos, false)
                     } else {
-                        let (gexists, gpos) = self.find_global(&name);
+                        let (gexists, gpos) = self.defs.find_global(&name);
                         if gexists {
                             (gexists, gpos, true)
                         } else {
@@ -46,8 +46,8 @@ impl BytecodeGenerator {
                 if !exists { panic!("Undefined Variable"); }
 
                 let defined_type = match is_global {
-                    true  => &self.global_define[position].dtype,
-                    false => &self.current_define[position].dtype,
+                    true  => &self.defs.global[position].dtype,
+                    false => &self.defs.local[position].dtype,
                 }.clone();
 
                 if defined_type.is_compound() {
@@ -125,11 +125,11 @@ impl BytecodeGenerator {
                 let (exists, position, is_global) = {
                     let name = ast.get_expr(name_id.clone());
                     if let Expr::Variable(name) = name {
-                        let (lexists, lpos) = self.find_local(&name);
+                        let (lexists, lpos) = self.defs.find_local(&name, self.depth);
                         if lexists {
                             (lexists, lpos, false)
                         } else {
-                            let (gexists, gpos) = self.find_global(&name);
+                            let (gexists, gpos) = self.defs.find_global(&name);
                             if gexists {
                                 (gexists, gpos, true)
                             } else {
@@ -149,9 +149,9 @@ impl BytecodeGenerator {
                 let expression_type = expression_result._type;
                 let declared_type = {
                     if is_global {
-                        &self.global_define[position].dtype
+                        &self.defs.global[position].dtype
                     } else {
-                        &self.current_define[position].dtype
+                        &self.defs.local[position].dtype
                     }
                 };
 
@@ -173,7 +173,7 @@ impl BytecodeGenerator {
             }
             Expr::FunctionCall(func_name, arguments) => {
                 if let Expr::Variable(ref name) = ast.get_expr(*func_name) {
-                    let (exists, position) = self.find_global(&name);
+                    let (exists, position) = self.defs.find_global(&name);
                     if !exists {
                         panic!("Undefined Function.");
                     }
@@ -216,7 +216,7 @@ impl BytecodeGenerator {
 
     fn handle_literal(&mut self, out: &mut ExpressionHandleResult, lit: &Literal, span: CodeSpan) {
         let _type = astconv::literal_to_type(lit);
-        if _type.kind == TypeKind::Null {
+        if _type.is_null() {
             out._type = _type;
             out.index = self.code.write_null(span);
             return;
