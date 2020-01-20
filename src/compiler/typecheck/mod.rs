@@ -74,8 +74,8 @@ impl TypeArena {
 
         let add = LocalDef {
             name: name.to_string(),
-            dtype: dtype,
-            depth: depth,
+            dtype,
+            depth,
         };
         self.local.push(add);
         Ok(self.local.len() - 1)
@@ -89,7 +89,7 @@ impl TypeArena {
         }
         let add = GlobalDef {
             name: name.to_string(),
-            dtype: dtype,
+            dtype,
         };
         self.global.push(add);
         Ok(self.global.len() - 1)

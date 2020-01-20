@@ -12,11 +12,11 @@ pub struct DeclarationData {
 
 impl DeclarationData {
     pub fn is_inferred(&self) -> bool {
-        self.prefix == DeclPrefix::Empty && self.dectype == ParsedType::pUnknown
+        self.prefix.is_empty() && self.dectype == ParsedType::pUnknown
     }
 
     pub fn is_constant(&self) -> bool {
-        self.prefix == DeclPrefix::Constant
+        self.prefix.contains(DeclPrefix::Const)
     }
 
     pub fn is_annotated(&self) -> bool {
@@ -50,11 +50,11 @@ impl ParsedType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum DeclPrefix {
-    Empty,
-    Constant,
-    Struct,
+bitflags! {
+    pub struct DeclPrefix: u16 {
+        const Const  = 1 << 1;
+        const Public = 1 << 2;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

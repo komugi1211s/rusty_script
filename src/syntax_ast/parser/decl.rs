@@ -61,7 +61,7 @@ impl<'tok> Parser<'tok> {
             } = self.advance();
 
             let candidate = candidate.as_ref().unwrap();
-            if is_prefix_banned(candidate) && prefix != &ast::DeclPrefix::Empty {
+            if is_prefix_banned(candidate) && !prefix.is_empty() {
                 panic!("Type is not allowed to combine with prefix.");
             }
 
@@ -92,12 +92,18 @@ impl<'tok> Parser<'tok> {
     }
 
     fn parse_type_prefix(&mut self) -> ast::DeclPrefix {
-        if self.consume(TokenType::Constant).is_ok() {
-            ast::DeclPrefix::Constant
-        } else {
-            trace!("Empty prefix.");
-            ast::DeclPrefix::Empty
+        let mut prefix = ast::DeclPrefix::empty();
+        loop {
+            if self.consume(TokenType::Constant).is_ok() {
+                prefix.insert(ast::DeclPrefix::Const);
+            } else if self.consume(TokenType::Public).is_ok() {
+                prefix.insert(ast::DeclPrefix::Public);
+            } else {
+                break;
+            }
         }
+
+        prefix
     }
 
     pub(super) fn parse_function_decl(
