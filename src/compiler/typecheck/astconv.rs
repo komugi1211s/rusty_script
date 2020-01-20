@@ -4,13 +4,7 @@ use types::Type;
 
 pub fn synthesize(ast: &ParsedResult, expr: ExprId, arena: &mut TypeArena) -> Option<Type> {
     use ast::Expr::*;
-    match ast.get_expr(expr) {
-        Literal(lit) => Some(literal_to_type(lit)),
-        Variable(ref string) => {
-            let (ex, n) = arena.find_local(string, 
-
-        }
-    }
+    None
 }
 
 /*

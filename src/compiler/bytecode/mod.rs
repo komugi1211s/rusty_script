@@ -1,6 +1,6 @@
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
-use crate::typecheck::{self, astconv, tcheck};
+use crate::typecheck::{TypeArena, TypeContext, astconv, check};
 use crate::vm::VirtualMachine;
 use trace::position::{CodeSpan, EMPTY_SPAN};
 use types::{Type, TypeKind};
@@ -379,7 +379,7 @@ pub struct BytecodeGenerator {
     pub const_table: ConstantTable,
 
     // To keep track of definitions
-    pub defs: typecheck::TypeArena,
+    pub defs: TypeArena,
     pub function_table: HashMap<usize, FuncInfo>,
 
     // Keep track of block nesting
@@ -394,7 +394,7 @@ impl BytecodeGenerator {
             code: Code::default(),
             const_table: ConstantTable::default(),
             last_loop_start: usize::max_value(),
-            defs: typecheck::TypeArena::new(),
+            defs: TypeArena::new(),
             function_table: HashMap::new(),
             depth: 0,
             break_call: Vec::new(),
@@ -549,9 +549,13 @@ impl BytecodeGenerator {
 
 
         let declared_type = if decl.is_annotated() {
-            TypeContext::Annotated(astconv::annotation_to_type(&decl.dectype))
+            let annotation = astconv::annotation_to_type(&decl.dectype);
+            match annotation {
+                Some(x) => TypeContext::Annotated(x),
+                None => TypeContext::Var(decl.name.clone())
+            }
         } else {
-            if !empty_expr {
+            if !empty_expr && !actual_type.is_null() {
                 TypeContext::Solved(actual_type)
             } else {
                 // Kind of unreachable.
@@ -577,6 +581,11 @@ impl BytecodeGenerator {
         if self.is_local() {
             if decl.kind == DeclKind::Argument {
                 out.index = self.code.current_length();
+                out.info = StatementInfo::Declaration {
+                    is_initialized: empty_expr,
+                    dtype: final_type,
+                };
+                return;
             } else {
                 let opcode = self.get_store_opcode(&final_type, false);
                 let operands = def_position as u16;
@@ -603,13 +612,13 @@ impl BytecodeGenerator {
 
     fn enter_local(&mut self) -> usize {
         self.depth += 1;
-        self.depth
+        self.depth as usize
     }
 
     fn leave_local(&mut self) -> usize {
         self.depth -= 1;
         self.defs.ditch_out_of_scope(self.depth);
-        self.depth
+        self.depth as usize
     }
 
     fn is_local(&self) -> bool {

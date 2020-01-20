@@ -25,7 +25,7 @@ pub enum TypeKind {
         ret: Box<Type>
     },
     Compound {
-        field: Option<Vec<Type>>,
+        field: Vec<Type>,
     },
     Existential
 }

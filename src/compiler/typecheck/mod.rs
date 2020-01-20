@@ -24,10 +24,20 @@ pub trait Solve {
 }
 
 impl Solve for TypeContext {
-    pub fn is_solved(&self) -> bool {
+    fn is_solved(&self) -> bool {
         match self {
             Self::Solved(_) | Self::Annotated(_) => true,
             _ => false
+        }
+    }
+}
+
+impl TypeContext {
+    pub fn unwrap_ref(&self) -> Option<&Type> {
+        match self {
+            Self::Solved(ref x) => Some(x),
+            Self::Annotated(ref x) => Some(x),
+            _ => None
         }
     }
 }
