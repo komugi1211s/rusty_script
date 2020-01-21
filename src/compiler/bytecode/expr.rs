@@ -20,6 +20,8 @@ impl BytecodeGenerator {
         expr: &ExprId,
         span: CodeSpan,
     ) -> ExpressionHandleResult {
+        let result_type = typeck::synthesize(&mut self.defs, ast, *expr, self.depth);
+
         let expr = ast.get_expr(*expr);
         let mut handled_result = ExpressionHandleResult {
             span,
@@ -48,7 +50,7 @@ impl BytecodeGenerator {
                 let defined_type = match is_global {
                     true  => &self.defs.global[position].dtype,
                     false => &self.defs.local[position].dtype,
-                }.clone();
+                }.inner_ref().expect("I expected this type to be already solved.").clone();
 
                 if defined_type.is_compound() {
                     self.emit_opcode_for_compoundtype(&mut handled_result, defined_type);
@@ -79,21 +81,21 @@ impl BytecodeGenerator {
 
                 handled_result._type = left._type;
                 handled_result.index = match operator {
-                    Operator::Add => self.code.push_opcode(OpCode::Add, span),
-                    Operator::Sub => self.code.push_opcode(OpCode::Sub, span),
-                    Operator::Mul => self.code.push_opcode(OpCode::Mul, span),
-                    Operator::Div => self.code.push_opcode(OpCode::Div, span),
-                    Operator::Mod => self.code.push_opcode(OpCode::Mod, span),
+                    Operator::Add    => self.code.push_opcode(OpCode::Add, span),
+                    Operator::Sub    => self.code.push_opcode(OpCode::Sub, span),
+                    Operator::Mul    => self.code.push_opcode(OpCode::Mul, span),
+                    Operator::Div    => self.code.push_opcode(OpCode::Div, span),
+                    Operator::Mod    => self.code.push_opcode(OpCode::Mod, span),
 
                     // PartialEq Series
-                    Operator::NotEq => self.code.push_opcode(OpCode::NotEq, span),
-                    Operator::EqEq => self.code.push_opcode(OpCode::EqEq, span),
+                    Operator::NotEq  => self.code.push_opcode(OpCode::NotEq, span),
+                    Operator::EqEq   => self.code.push_opcode(OpCode::EqEq, span),
 
                     // PartialOrd Series
                     Operator::LessEq => self.code.push_opcode(OpCode::LessEq, span),
                     Operator::MoreEq => self.code.push_opcode(OpCode::MoreEq, span),
-                    Operator::Less => self.code.push_opcode(OpCode::Less, span),
-                    Operator::More => self.code.push_opcode(OpCode::More, span),
+                    Operator::Less   => self.code.push_opcode(OpCode::Less, span),
+                    Operator::More   => self.code.push_opcode(OpCode::More, span),
                     _ => unreachable!(),
                 };
                 handled_result
@@ -147,21 +149,7 @@ impl BytecodeGenerator {
 
                 let expression_result = self.handle_expr(ast, expr, span);
                 let expression_type = expression_result._type;
-                let declared_type = {
-                    if is_global {
-                        &self.defs.global[position].dtype
-                    } else {
-                        &self.defs.local[position].dtype
-                    }
-                };
-
-                if declared_type != &expression_type {
-                    panic!(
-                        "Type Mismatch when Assigning: {:?} != {:?}",
-                        declared_type, &expression_type
-                    );
-                }
-
+                
                 let opcode = self.get_store_opcode(&expression_type, is_global);
                 let operands = position as u16;
                 self.code.push_opcode(opcode, span);

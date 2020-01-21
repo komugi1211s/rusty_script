@@ -3,8 +3,8 @@ use trace::position::{CodeSpan, EMPTY_SPAN};
 
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
-use super::expr::ExpressionHandleResult;
-use types::{Type, TypeKind};
+// use super::expr::ExpressionHandleResult;
+use types::{Type}; // , TypeKind};
 
 
 /*
@@ -38,7 +38,7 @@ pub enum StatementInfo {
     Nothing,
     Break(usize),
     Continue(usize),
-    Declaration { is_initialized: bool, dtype: Type },
+    Declaration { is_initialized: bool, def: (usize, bool /* is_global */) },
     Return(Option<Type>),
 }
 

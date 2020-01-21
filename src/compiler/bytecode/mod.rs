@@ -384,7 +384,7 @@ pub struct BytecodeGenerator {
 
     // Keep track of block nesting
     pub last_loop_start: usize,
-    depth: u16
+    depth: u16,
     pub break_call: Vec<usize>,
 }
 
@@ -438,7 +438,7 @@ impl BytecodeGenerator {
 
         // 関数自体の戻り値をグローバルに定義しておく
         let ret_ty = astconv::annotation_to_type(&decl_info.dectype);
-        let idx = self.add_global(ret_ty.as_ref().unwrap().clone(), &decl_info.name);
+        let idx = self.defs.add_global(TypeContext::Annotated(ret_ty.as_ref().unwrap().clone()), &decl_info.name);
 
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -464,7 +464,7 @@ impl BytecodeGenerator {
             ret_ty.clone().unwrap(),
             false,
         );
-        self.function_table.insert(idx, func_info);
+        self.function_table.insert(idx.unwrap(), func_info);
 
         let mut returned_type: Option<Type> = None;
 
@@ -549,18 +549,27 @@ impl BytecodeGenerator {
 
 
         let declared_type = if decl.is_annotated() {
+            println!("Declared Type: {:?}", &decl.dectype);
             let annotation = astconv::annotation_to_type(&decl.dectype);
             match annotation {
                 Some(x) => TypeContext::Annotated(x),
                 None => TypeContext::Var(decl.name.clone())
             }
         } else {
-            if !empty_expr && !actual_type.is_null() {
+            if !empty_expr { 
+                if actual_type.is_null() {
+                    panic!("Inferred Null");
+                }
                 TypeContext::Solved(actual_type)
             } else {
                 // Kind of unreachable.
-                TypeContext::Existential(decl.name.clone())
+                self.defs.new_existential()
             }
+        };
+
+        let dectype = match declared_type.inner_ref() {
+            Some(x) => x.clone(),
+            None => panic!("I expected this to be solved, but instead got: {:?}", declared_type)
         };
 
         // TODO: Dumb Code
@@ -573,9 +582,9 @@ impl BytecodeGenerator {
 
             match def_result {
                 Ok(n) => n,
-                Err(p) => panic!("Variable Declared TWICE!");
+                Err(p) => panic!("Variable Declared TWICE!"),
             }
-        }
+        };
 
         // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.is_local() {
@@ -583,11 +592,11 @@ impl BytecodeGenerator {
                 out.index = self.code.current_length();
                 out.info = StatementInfo::Declaration {
                     is_initialized: empty_expr,
-                    dtype: final_type,
+                    def: (def_position, !self.is_local()),
                 };
                 return;
             } else {
-                let opcode = self.get_store_opcode(&final_type, false);
+                let opcode = self.get_store_opcode(&dectype, false);
                 let operands = def_position as u16;
 
                 self.code.push_opcode(opcode, out.span);
@@ -596,7 +605,7 @@ impl BytecodeGenerator {
                     .push_operands(operands.to_ne_bytes().to_vec(), out.span);
             }
         } else {
-            let opcode = self.get_store_opcode(&final_type, true);
+            let opcode = self.get_store_opcode(&dectype, true);
             let operands = def_position as u16;
 
             self.code.push_opcode(opcode, out.span);
@@ -606,7 +615,7 @@ impl BytecodeGenerator {
         }
         out.info = StatementInfo::Declaration {
             is_initialized: empty_expr,
-            dtype: final_type,
+            def: (def_position, !self.is_local()),
         };
     }
 
@@ -652,6 +661,14 @@ impl BytecodeGenerator {
             TypeKind::Float if !is_global && is_load => OpCode::FLoad,
             TypeKind::Boolean if !is_global && is_load => OpCode::BLoad,
             TypeKind::Str if !is_global && is_load => OpCode::SLoad,
+
+            TypeKind::Compound { ref field } => {
+                if field.len() == 2 && field[1].is_null() {
+                    self.get_type_based_opcode(&field[0], is_global, is_load)
+                } else {
+                    panic!();
+                }
+            }
             _ => panic!(
                 "Unsupported opcode for here: opcode: {:?}, is_global: {}, is_load: {}",
                 _type, is_global, is_load
