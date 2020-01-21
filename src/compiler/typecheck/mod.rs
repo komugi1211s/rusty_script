@@ -1,13 +1,16 @@
 pub mod astconv;
 pub mod check;
 
-use syntax_ast::ast::*;
+// use syntax_ast::ast::*;
 use types::{Type, TypeKind};
+
+use std::cell::Cell;
 
 #[derive(Clone, Debug)]
 pub struct TypeArena {
     pub global: Vec<GlobalDef>,
     pub local: Vec<LocalDef>,
+    _exist_count: Cell<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,7 +23,7 @@ pub enum TypeContext {
 
 pub trait Solve {
     fn is_solved(&self) -> bool;
-    fn is_not_solved(&self) -> bool { !self.is_solved() };
+    fn is_not_solved(&self) -> bool { !self.is_solved() }
 }
 
 impl Solve for TypeContext {
@@ -33,7 +36,7 @@ impl Solve for TypeContext {
 }
 
 impl TypeContext {
-    pub fn unwrap_ref(&self) -> Option<&Type> {
+    pub fn inner_ref(&self) -> Option<&Type> {
         match self {
             Self::Solved(ref x) => Some(x),
             Self::Annotated(ref x) => Some(x),
@@ -71,7 +74,8 @@ impl TypeArena {
     pub fn new() -> Self {
         Self {
             global: vec![],
-            local: vec![]
+            local: vec![],
+            _exist_count: Cell::new(0),
         }
     }
 
@@ -105,6 +109,12 @@ impl TypeArena {
         Ok(self.global.len() - 1)
     }
 
+    pub fn new_existential(&self) -> TypeContext {
+        let current = self._exist_count.get();
+        self._exist_count.set(self._exist_count.get() + 1);
+        TypeContext::Existential(format!("Ext{}", current))
+    }
+
     #[inline]
     pub fn find_local(&self, name: &str, current_depth: u16) -> (bool, usize) {
         // We're reversing this, so index would be length - ind
@@ -122,19 +132,29 @@ impl TypeArena {
         (is_exist.is_some(), is_exist.unwrap_or(0))
     }
 
-    pub fn mark_solved_local(&mut self, position: usize, dtype: Type) {
-        if self.local[position].is_not_solved() {
+    pub fn determine_local(&mut self, position: usize, dtype: Type) -> Result<(), ()> {
+        if self.local[position].is_solved() {
+            if self.local[position].dtype.inner_ref().unwrap() != &dtype {
+                return Err(())
+            }
+        } else {
             self.local[position].dtype = TypeContext::Solved(dtype);
         }
+        Ok(())
     }
 
-    pub fn mark_solved_global(&mut self, position: usize, dtype: Type) {
-        if self.global[position].is_not_solved() {
+    pub fn determine_global(&mut self, position: usize, dtype: Type) -> Result<(), ()> {
+        if self.global[position].is_solved() {
+            if self.global[position].dtype.inner_ref().unwrap() != &dtype {
+                return Err(())
+            }
+        } else {
             self.global[position].dtype = TypeContext::Solved(dtype);
         }
+        Ok(())
     }
 
-    pub ditch_out_of_scope(&mut self, depth: u16) {
+    pub fn ditch_out_of_scope(&mut self, depth: u16) {
         self.local.retain(|x| x.depth <= depth);
     }
 }

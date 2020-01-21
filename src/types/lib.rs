@@ -27,7 +27,8 @@ pub enum TypeKind {
     Compound {
         field: Vec<Type>,
     },
-    Existential
+    Variable(String),
+    Existential(String),
 }
 
 // const TInt: TypeKind     = TypeKind::Variable("Int", vec![]);
@@ -84,6 +85,14 @@ impl Type {
     pub fn null() -> Self {
         Self {
             kind: TypeKind::Null,
+        }
+    }
+
+    pub fn optional(of: Type) -> Self {
+        Self {
+            kind: TypeKind::Compound {
+                field: vec![of, Type::null()]
+            }
         }
     }
 
