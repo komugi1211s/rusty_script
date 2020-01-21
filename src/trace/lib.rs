@@ -1,8 +1,10 @@
-use log;
-pub use log::{info, trace, warn};
-use std::str::Lines;
+
 pub mod position;
+pub mod macros;
+
 use position::CodeSpan;
+pub use log::{self, info, trace, warn};
+use std::str::Lines;
 
 /*
 
@@ -81,16 +83,13 @@ pub enum ErrorKind {
     TokenError,
     RuntimeError,
 }
+pub type ErrorReporter<'a> = IsekaiLogger<'a>;
 
-pub struct ErrorReporter<'a> {
+pub struct IsekaiLogger<'a> {
     pub contexts: Vec<&'a str>,
 }
 
 impl<'a> ErrorReporter<'a> {
-    pub fn empty() -> Self {
-        Self { contexts: vec![] }
-    }
-
     pub fn new(ctx: Vec<&'a str>) -> Self {
         Self { contexts: ctx }
     }
@@ -135,14 +134,35 @@ impl<'a> ErrorReporter<'a> {
     }
 }
 
-struct Logger;
-
-impl log::Log for Logger {
+impl log::Log for IsekaiLogger<'_> {
     fn enabled(&self, meta: &log::Metadata) -> bool {
         meta.level() <= log::Level::Trace
     }
 
-    fn log(&self, _record: &log::Record) {}
+    fn log(&self, rec: &log::Record) {
+        if !self.enabled(rec.metadata()) {
+            return;
+        }
+
+        println!("[{}] {} --------------------------------", rec.level(), rec.args());
+
+        match (rec.module_path(), rec.file(), rec.line()) {
+            (None, _, _) => {
+                println!("Error file not provided... Something is wrong with error handler too.");
+            }
+            (Some(name), _, None) => {
+                println!("Error ocurred in file {}, but position not provided.", name);
+            }
+            (Some(name), None, Some(num)) => {
+                println!("Error ocurred in file {}, Line {}. but I cannot show the specific line of given file.", name, num);
+            }
+            (Some(name), Some(file), Some(line)) => {
+                println!("Line {} :: File {}", line, name);
+                let line_vec: Vec<&'_ str> = file.lines().collect();
+                println!("{} |: {}", line, line_vec[line as usize]);
+            }
+        }
+    }
 
     fn flush(&self) {}
 }

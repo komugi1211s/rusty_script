@@ -9,27 +9,19 @@ use syntax_ast::tokenizer::Tokenizer;
 // use super::evaluate::Interpreter;
 use compiler::bytecode::{disassemble_all, BytecodeGenerator};
 use compiler::vm::VirtualMachine;
-use trace::ErrorReporter;
 // use self::error::*;
 use std::time::Instant;
+use trace;
 
-#[cfg(target_os = "macos")]
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
-}
-
-#[cfg(target_os = "linux")]
-fn exit_process(success: bool) -> ! {
-    ::std::process::exit(if success { 0 } else { 1 });
-}
-
-#[cfg(target_os = "windows")]
-fn exit_process(success: bool) -> ! {
-    ::std::process::exit(if success { 0x0000 } else { 0x0100 });
 }
 
 pub fn start(code: &str, stage: u8) -> Result<(), ()> {
-    let reporter = ErrorReporter::from_lineiter(code.lines());
+    let reporter = trace::IsekaiLogger::new();
+
+    trace::log::set_boxed_logger(
+    
     let start = Instant::now();
 
     let _tokens = match Tokenizer::new(code).scan() {
