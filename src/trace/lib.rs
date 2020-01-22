@@ -43,6 +43,8 @@ use std::str::Lines;
 
 */
 
+
+
 #[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
@@ -83,58 +85,16 @@ pub enum ErrorKind {
     TokenError,
     RuntimeError,
 }
-pub type ErrorReporter<'a> = IsekaiLogger<'a>;
 
-pub struct IsekaiLogger<'a> {
-    pub contexts: Vec<&'a str>,
-}
+pub struct IsekaiLogger;
 
-impl<'a> ErrorReporter<'a> {
-    pub fn new(ctx: Vec<&'a str>) -> Self {
-        Self { contexts: ctx }
-    }
 
-    pub fn from_lineiter(ctx: Lines<'a>) -> Self {
-        Self {
-            contexts: ctx.collect(),
-        }
-    }
-
+impl IsekaiLogger {
     pub fn report_error(&self, err: Error) {
-        println!("\x1b[31m{:?}\x1b[0m - {}", err.kind, err.msg);
-
-        if err.span.is_oneliner() {
-            let bottom_line = err.span.end_usize() - 1;
-            println!("around line {}:", bottom_line);
-            println!(
-                "\x1b[36m{}| {}\x1b[0m",
-                bottom_line - 1,
-                self.contexts[bottom_line - 1]
-            );
-            println!(
-                "\x1b[31m{}| {}\x1b[0m",
-                bottom_line, self.contexts[bottom_line]
-            );
-            println!(
-                "\x1b[36m{}| {}\x1b[0m",
-                bottom_line + 1,
-                self.contexts[bottom_line + 1]
-            );
-        } else {
-            let start_line = err.span.start_usize() - 1;
-            let end_line = err.span.end_usize() - 1;
-            println!(
-                "Error detected within range {} to {}:",
-                start_line, end_line
-            );
-            for i in start_line..end_line {
-                println!("\x1b[31m{}| {}\x1b[0m", i, self.contexts[i]);
-            }
-        }
     }
 }
 
-impl log::Log for IsekaiLogger<'_> {
+impl log::Log for IsekaiLogger {
     fn enabled(&self, meta: &log::Metadata) -> bool {
         meta.level() <= log::Level::Trace
     }
@@ -166,3 +126,34 @@ impl log::Log for IsekaiLogger<'_> {
 
     fn flush(&self) {}
 }
+
+
+#[cfg(tests)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+    use std::cell::RefCell;
+
+    static once: Once = Once::new();
+    static file: RefCell<String> = RefCell::new(String::new());
+
+    fn open_file() {
+        once.call_once(|| {
+            let mut f = match File::open("test_file") {
+                Ok(n) => n,
+                _ => panic!(),
+            };
+
+            let mut string = file.borrow_mut();
+            f.read_to_string(&mut string).expect("File open failed.");
+        });
+    }
+
+    #[test]
+    fn log_file() {
+        open_file();
+    }
+
+}
+
+

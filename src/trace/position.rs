@@ -51,8 +51,8 @@ impl CodeSpan {
 
     #[inline]
     pub fn contains(&self, other: &CodeSpan) -> bool {
-        self.start <= other.start // self は other より前に始まって
-            && self.end >= other.end // other が終わったあとに終わる => 完全に中に収まっている
+        self.start < other.start // self は other より前に始まって
+            && self.end > other.end // other が終わったあとに終わる => 完全に中に収まっている
     }
 
     #[inline]
@@ -91,8 +91,8 @@ mod tests {
         let end: usize = 15;
         let invalid = CodeSpan::new(end, start);
 
-        assert_eq!(invalid.start, start);
-        assert_eq!(invalid.end, end);
+        assert_eq!(invalid.start_usize(), start);
+        assert_eq!(invalid.end_usize(), end);
     }
 
     #[test]
