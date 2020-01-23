@@ -75,6 +75,7 @@ impl BytecodeGenerator {
                 let left = self.handle_expr(ast, left, span);
                 let right = self.handle_expr(ast, right, span);
 
+                println!("Binary Oper {:?} {:?}", left, right);
                 if left._type != right._type {
                     panic!();
                 }

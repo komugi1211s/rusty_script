@@ -2,14 +2,7 @@
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{position::CodeSpan, Error};
-
-/*
- 10 + 2 * 4
- expression -> (unary)calcnum operator (unary)calcnum;
- calcnum -> ;
- digit -> 0..9;
-*/
+use trace::{ position::CodeSpan, Error, source::Module };
 
 pub struct Tokenizer {
     source: Vec<char>,
@@ -20,6 +13,7 @@ pub struct Tokenizer {
     line: usize,
     column: usize,
 }
+
 
 impl Tokenizer {
     pub fn new(token: &str) -> Self {

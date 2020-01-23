@@ -17,16 +17,16 @@ bn: float?;
 cn: string?;
 dn: bool?;
 
-/*
 an = 10;
-assert(an == 10);
+print an == 10;
 bn = 2.5;
-assert(bn == 2.5);
+print bn == 2.5;
 cn = "Sam porter bridges";
-assert(cn == "Sam porter bridges");
+print cn == "Sam porter bridges";
 dn = true;
-assert(dn);
+print dn;
 
+/*
 // Inferred
 print "Inferred Declaration Testing.";
 ai := 10;
@@ -157,4 +157,9 @@ new_int_arr: [int] = [1, 2, 3];
 
 // Static
 new_int_static_arr: [int; 3] = [1, 2, 3];
+
+// Import line.
+$import modulename;
+$expand modulename2; // This expands the module file.
+
 */

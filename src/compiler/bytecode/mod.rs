@@ -572,6 +572,7 @@ impl BytecodeGenerator {
             None => panic!("I expected this to be solved, but instead got: {:?}", declared_type)
         };
 
+
         // TODO: Dumb Code
         let def_position = {
             let def_result = if self.is_local() {
@@ -585,6 +586,14 @@ impl BytecodeGenerator {
                 Err(p) => panic!("Variable Declared TWICE!"),
             }
         };
+
+        if empty_expr {
+            out.info = StatementInfo::Declaration {
+                is_initialized: empty_expr,
+                def: (def_position, !self.is_local()),
+            };
+            return;
+        }
 
         // FIXME @Cleanup + @DumbCode - This can be super simplified
         if self.is_local() {
