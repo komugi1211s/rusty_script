@@ -1,7 +1,7 @@
 use std::fs;
-
 use super::CodeSpan;
 
+#[derive(Clone, Debug)]
 pub struct Module {
     pub filename: String,
     pub code: String,

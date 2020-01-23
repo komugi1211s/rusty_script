@@ -90,6 +90,7 @@ impl Type {
 
     pub fn optional(of: Type) -> Self {
         Self {
+            // TODO - @Broken: Move optional into TypeKind::Union
             kind: TypeKind::Compound {
                 field: vec![of, Type::null()]
             }

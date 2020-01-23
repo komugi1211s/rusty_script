@@ -1,12 +1,14 @@
 use crate::tokenizer::token::Token;
 
 use trace::position::CodeSpan;
+use trace::Module;
 
 pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
 pub struct ParsedResult {
+    pub file: Module,
     pub ast: Vec<AstNode>,
     pub stmt: Vec<Statement>,
     pub expr: Vec<Expr>,

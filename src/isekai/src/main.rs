@@ -62,12 +62,12 @@ fn run_module(
 
 */
 
-pub fn start(code: &str, stage: u8) -> Result<(), ()> {
+pub fn start(module: Module, code: &str, stage: u8) -> Result<(), ()> {
     let chunk = time_it(
         "Total",
         || {
             let tokens = time_it("Tokenizer", || Tokenizer::new(code).scan()).unwrap();
-            let parsed = time_it("Parser",    || Parser::new(&tokens).parse()).unwrap();
+            let parsed = time_it("Parser",    || Parser::new(module, &tokens).parse()).unwrap();
             let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed)).unwrap();
             chunk
         }
@@ -93,7 +93,7 @@ fn run_file(path: &str, stage: Option<&String>) -> bool {
 
     let string = fs::read_to_string(path).unwrap();
 
-    start(string.as_str(), stage_u8).is_ok()
+    start(module, string.as_str(), stage_u8).is_ok()
 }
 
 fn main() {

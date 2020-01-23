@@ -1,8 +1,9 @@
 #[macro_use] 
 extern crate lazy_static;
-extern crate log;
+pub extern crate log;
 
 pub mod source;
+pub use source::{ Module };
 pub mod position;
 pub mod macros;
 

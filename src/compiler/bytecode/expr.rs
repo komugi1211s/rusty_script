@@ -1,10 +1,12 @@
 use super::{BytecodeGenerator, OpCode};
 use crate::typecheck::{astconv, check as typeck};
 
-use trace::position::{CodeSpan, EMPTY_SPAN};
 use types::{Type, TypeKind};
 
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
+use trace::position::{CodeSpan, EMPTY_SPAN};
+
+use trace::{ err_bc, log, Module };
 
 #[derive(Debug)]
 pub struct ExpressionHandleResult {
@@ -51,6 +53,7 @@ impl BytecodeGenerator {
                     true  => &self.defs.global[position].dtype,
                     false => &self.defs.local[position].dtype,
                 }.inner_ref().expect("I expected this type to be already solved.").clone();
+                println!("defined_type: {:?}", &defined_type);
 
                 if defined_type.is_compound() {
                     self.emit_opcode_for_compoundtype(&mut handled_result, defined_type);
@@ -77,7 +80,7 @@ impl BytecodeGenerator {
 
                 println!("Binary Oper {:?} {:?}", left, right);
                 if left._type != right._type {
-                    panic!();
+                    err_bc!(src: ast.file, span: span, msg: "Type Mismatch.");
                 }
 
                 handled_result._type = left._type;

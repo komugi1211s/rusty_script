@@ -7,6 +7,7 @@ use super::ast::{
 
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
+use trace::Module;
 
 mod decl;
 mod stmt;
@@ -44,10 +45,11 @@ pub struct Parser<'tok> {
 }
 
 impl<'tok> Parser<'tok> {
-    pub fn new(_tok: &'tok Vec<Token>) -> Self {
+    pub fn new(modu: Module, _tok: &'tok Vec<Token>) -> Self {
         Self {
             tokens: _tok,
             ast: ParsedResult {
+                file: modu,
                 ast: vec![],
                 stmt: vec![],
                 expr: vec![],
