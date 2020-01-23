@@ -1,10 +1,20 @@
+#[macro_use] extern crate lazy_static;
+extern crate log;
 
+pub mod source;
 pub mod position;
-pub mod macros;
-
+#[macro_use] pub mod macros;
 use position::CodeSpan;
-pub use log::{self, info, trace, warn};
+pub use log::{info, trace, warn};
 use std::str::Lines;
+use std::fs::File;
+use std::io::*;
+
+pub static Logger: IsekaiLogger = IsekaiLogger;
+
+pub fn init_logger() {
+    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Trace));
+}
 
 /*
 
@@ -101,24 +111,37 @@ impl log::Log for IsekaiLogger {
 
     fn log(&self, rec: &log::Record) {
         if !self.enabled(rec.metadata()) {
-            return;
+            println!("Disabled.");
         }
 
-        println!("[{}] {} --------------------------------", rec.level(), rec.args());
+        println!("[{}] {} -----------------------------", rec.level(), rec.target());
+        println!("{}", rec.args());
 
-        match (rec.module_path(), rec.file(), rec.line()) {
-            (None, _, _) => {
-                println!("Error file not provided... Something is wrong with error handler too.");
+        match (rec.file(), rec.line()) {
+            (None, None) => {
+                println!("Error File / Position Unknown.");
             }
-            (Some(name), _, None) => {
-                println!("Error ocurred in file {}, but position not provided.", name);
+            (None, Some(line)) => {
+                println!("Error occurred in Line {}. but I don't know which file is.", line);
             }
-            (Some(name), None, Some(num)) => {
-                println!("Error ocurred in file {}, Line {}. but I cannot show the specific line of given file.", name, num);
+            (Some(file_name), None) => {
+                println!("Error occurred in File {}. but I don't know where it happened.", file_name);
             }
-            (Some(name), Some(file), Some(line)) => {
-                println!("Line {} :: File {}", line, name);
-                let line_vec: Vec<&'_ str> = file.lines().collect();
+            (Some(file), Some(line)) => {
+                println!("Line {} :: File {}", line, file);
+
+                let mut f = match File::open(file) {
+                    Ok(n) => n,
+                    _ => { println!("Failed to open the file. don't know where it happened."); return; },
+                };
+                
+                let mut string = String::new();
+                match f.read_to_string(&mut string) {
+                    Ok(_) => (),
+                    Err(_) => println!("Failed to read the file!"),
+                }
+
+                let line_vec: Vec<&str> = string.lines().collect();
                 println!("{} |: {}", line, line_vec[line as usize]);
             }
         }
@@ -128,32 +151,31 @@ impl log::Log for IsekaiLogger {
 }
 
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Once;
-    use std::cell::RefCell;
+    use std::fs::File;
+    use std::io::*;
+    use std::sync::{ Once, Mutex };
 
-    static once: Once = Once::new();
-    static file: RefCell<String> = RefCell::new(String::new());
 
-    fn open_file() {
-        once.call_once(|| {
+    lazy_static! {
+        static ref file: String = {
             let mut f = match File::open("test_file") {
                 Ok(n) => n,
                 _ => panic!(),
             };
 
-            let mut string = file.borrow_mut();
+            let mut string = String::new();
             f.read_to_string(&mut string).expect("File open failed.");
-        });
-    }
+            string
+        };
+    } 
 
     #[test]
     fn log_file() {
-        open_file();
+        init_logger();
+        trace!("Hello world.");
+        assert!(true);
     }
-
 }
-
-

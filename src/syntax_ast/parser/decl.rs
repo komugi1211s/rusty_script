@@ -9,7 +9,7 @@ use crate::tokenizer::token::{Token, TokenType};
 
 use trace::position::CodeSpan;
 use trace::Error;
-use trace::{info, trace, warn};
+use trace::{info, warn};
 
 fn is_prefix_banned(cand: &str) -> bool {
     match cand {

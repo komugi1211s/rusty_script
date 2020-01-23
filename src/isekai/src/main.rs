@@ -2,130 +2,96 @@
 //extern crate test;
 
 use std::env;
-use std::fs::File;
 use std::io::prelude::*;
+use std::fs::{ self, File };
+
+use std::time::Instant;
+
 use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
-// use super::evaluate::Interpreter;
-use compiler::bytecode::{disassemble_all, BytecodeGenerator};
+use compiler::bytecode::{disassemble_all, BytecodeGenerator, ByteChunk };
 use compiler::vm::VirtualMachine;
-// use self::error::*;
-use std::time::Instant;
-use trace;
+
+use trace::{ source::Module };
 
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
 }
 
-pub fn start(code: &str, stage: u8) -> Result<(), ()> {
-    let reporter = trace::IsekaiLogger::new();
+type Stage = u8;
 
-    trace::log::set_boxed_logger(
-    
-    let start = Instant::now();
-
-    let _tokens = match Tokenizer::new(code).scan() {
-        Ok(n) => n,
-        Err(err) => {
-            reporter.report_error(err);
-            return Err(());
-        }
-    };
-    println!(
-        "Tokenizer took: \x1b[32m{} micros\x1b[39m",
-        start.elapsed().as_micros()
-    );
-
-    if stage == 1 {
-        println!("Stage one finished. emitting result");
-        for tok in &_tokens {
-            println!("{}", tok);
-        }
-        return Ok(());
-    }
-
-    let mut _parser = Parser::new(&_tokens);
-    let parser_time = Instant::now();
-    let result = match _parser.parse() {
-        Ok(n) => n,
-        Err(err) => {
-            reporter.report_error(err);
-            return Err(());
-        }
-    };
-    println!(
-        "Parser took: \x1b[32m{} micros\x1b[39m",
-        parser_time.elapsed().as_micros()
-    );
-
-    if stage == 2 {
-        println!("Stage Two finished. emitting result");
-        println!("{:?}", result);
-        return Ok(());
-    }
-    let codegen = BytecodeGenerator::new();
-    let codegen_time = Instant::now();
-    let chunk = codegen.traverse_ast(result).unwrap();
-    println!(
-        "Codegen took: \x1b[32m{} micros\x1b[39m",
-        codegen_time.elapsed().as_micros()
-    );
-    println!(
-        "Total Time: \x1b[32m{} micros\x1b[39m",
-        start.elapsed().as_micros()
-    );
-
+fn dump_chunk(chunk: &ByteChunk) {
     let disassembled = disassemble_all(&chunk.code);
-    if stage == 3 {
-        println!("Stage Two finished. emitting result");
-        println!("{:?}", disassembled);
-        return Ok(());
+    let mut file = File::create("dump").expect("Dump File failed to create.");
+    for i in disassembled {
+        writeln!(file, "{}", i).expect("Hey?");
     }
+    file.flush().expect("File Flushing Failed.");
+}
 
-    {
-        let mut file = File::create("dump").expect("Dump File failed to create.");
-        for i in disassembled {
-            writeln!(file, "{}", i).expect("Hey?");
+fn time_it<T>(step: &str, fun: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let result = fun();
+
+    println!(
+        " {0:<12} Finished :: \x1b[32m{1} micros\x1b[39m",
+        step,
+        start.elapsed().as_micros()
+    );
+
+    result
+}
+
+/*
+fn run_module(
+    core: Module,
+    stage: Stage
+) -> Result<(), ()> {
+    let mut tokenizer  = Tokenizer::new();
+    let mut parser     = Parser::new();
+    let mut codegen    = BytecodeGenerator::new();
+    let mut vmachine   = VirtualMachine::new();
+
+
+    let tokens = tokenizer.from_module(core).scan().unwrap();
+
+    let parsed = parser.tokens(tokens).parse().unwrap();
+
+    let chunk = codegen.traverse_ast(parsed).unwrap();
+}
+
+*/
+
+pub fn start(code: &str, stage: u8) -> Result<(), ()> {
+    let chunk = time_it(
+        "Total",
+        || {
+            let tokens = time_it("Tokenizer", || Tokenizer::new(code).scan()).unwrap();
+            let parsed = time_it("Parser",    || Parser::new(&tokens).parse()).unwrap();
+            let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed)).unwrap();
+            chunk
         }
-        file.flush().expect("File Flushing Failed.");
-    }
+    );
+
     let mut vm = VirtualMachine::new(chunk);
     vm.run();
-
-    /*
-    let mut interpreter = Interpreter::new();
-    let interp_time = Instant::now();
-    {
-        interpreter.visit(i);
-    }
-    println!("Interpreter took: {} ns", interp_time.elapsed().as_nanos());
-
-    println!("TOTAL took: {} ms", start.elapsed().as_nanos());
-    */
     Ok(())
 }
 
-fn run_file(path: Option<&String>, stage: Option<&String>) -> bool {
-    let mut strings = String::new();
-    let mut f = match File::open(path.unwrap()) {
-        Ok(n) => n,
-        _ => {
-            println!("ファイルを開けませんでした。");
-            return false;
-        }
-    };
-
-    f.read_to_string(&mut strings)
-        .expect("ファイルの読み込みに失敗しました。");
-
+fn run_file(path: &str, stage: Option<&String>) -> bool {
+    let module = Module::open(path).expect("ファイルの読み込みに失敗しました。");
     let mut stage_u8: u8 = 0;
     if let Some(stage_) = stage {
         stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
     }
-    start(strings.as_str(), stage_u8).is_ok()
+
+    let string = fs::read_to_string(path).unwrap();
+
+    start(string.as_str(), stage_u8).is_ok()
 }
 
 fn main() {
+    trace::init_logger();
     let arguments: Vec<String> = env::args().collect();
 
     if arguments.len() <= 1 {
@@ -133,7 +99,7 @@ fn main() {
         println!("usage: isekai [filename].kai");
         exit_process(true);
     }
-    exit_process(run_file(arguments.get(1), arguments.get(2)))
+    exit_process(run_file(arguments.get(1).unwrap(), arguments.get(2)))
 }
 
 /*
