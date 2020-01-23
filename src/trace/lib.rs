@@ -1,11 +1,13 @@
-#[macro_use] extern crate lazy_static;
+#[macro_use] 
+extern crate lazy_static;
 extern crate log;
 
 pub mod source;
 pub mod position;
-#[macro_use] pub mod macros;
+pub mod macros;
+
 use position::CodeSpan;
-pub use log::{info, trace, warn};
+pub use log::{info, trace, warn, error, debug};
 use std::str::Lines;
 use std::fs::File;
 use std::io::*;
@@ -98,12 +100,6 @@ pub enum ErrorKind {
 
 pub struct IsekaiLogger;
 
-
-impl IsekaiLogger {
-    pub fn report_error(&self, err: Error) {
-    }
-}
-
 impl log::Log for IsekaiLogger {
     fn enabled(&self, meta: &log::Metadata) -> bool {
         meta.level() <= log::Level::Trace
@@ -114,21 +110,25 @@ impl log::Log for IsekaiLogger {
             println!("Disabled.");
         }
 
-        println!("[{}] {} -----------------------------", rec.level(), rec.target());
-        println!("{}", rec.args());
+        if rec.target() == "internal" {
+            println!("[Isekai :: {}] 内部エラー - {}", rec.level(), rec.args());
+            return;
+        }
+
+        println!("[Isekai :: {}] {} - {}", rec.level(), rec.target(), rec.args());
 
         match (rec.file(), rec.line()) {
             (None, None) => {
-                println!("Error File / Position Unknown.");
+                println!("エラーの位置が分かりません！");
             }
             (None, Some(line)) => {
-                println!("Error occurred in Line {}. but I don't know which file is.", line);
+                println!("{} 行目で発生していますが、発生元のファイルが提供されませんでした。", line);
             }
             (Some(file_name), None) => {
-                println!("Error occurred in File {}. but I don't know where it happened.", file_name);
+                println!("ファイル {} で発生していますが、原因の行目が提供されませんでした。", file_name);
             }
             (Some(file), Some(line)) => {
-                println!("Line {} :: File {}", line, file);
+                println!("{} 行目 :: ファイル {}", line, file);
 
                 let mut f = match File::open(file) {
                     Ok(n) => n,

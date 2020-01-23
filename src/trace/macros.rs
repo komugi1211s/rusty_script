@@ -1,6 +1,6 @@
 
 use super::{ Logger };
-use super::log::{self, Record, RecordBuilder };
+use super::log::{ self, error, Record, RecordBuilder };
 
 macro_rules! rt_error {
     (src: $src:expr, span: $spn:expr, msg: $msg:expr) => {
@@ -20,6 +20,13 @@ macro_rules! rt_error {
 
             Logger.log(&__y);
         }
+    }
+}
+
+#[macro_export]
+macro_rules! err_internal {
+    ($msg:expr) => {
+        error!(target: "internal", "{}", $msg);
     }
 }
 

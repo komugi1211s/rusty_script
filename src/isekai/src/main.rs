@@ -12,7 +12,7 @@ use syntax_ast::tokenizer::Tokenizer;
 use compiler::bytecode::{disassemble_all, BytecodeGenerator, ByteChunk };
 use compiler::vm::VirtualMachine;
 
-use trace::{ source::Module };
+use trace::{ error, err_internal, source::Module };
 
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
@@ -79,7 +79,13 @@ pub fn start(code: &str, stage: u8) -> Result<(), ()> {
 }
 
 fn run_file(path: &str, stage: Option<&String>) -> bool {
-    let module = Module::open(path).expect("ファイルの読み込みに失敗しました。");
+    let module = match Module::open(path) {
+        Ok(n) => n,
+        Err(_) => {
+            err_internal!("ファイルが読み込めませんでした。");
+            return false;
+        },
+    };
     let mut stage_u8: u8 = 0;
     if let Some(stage_) = stage {
         stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
