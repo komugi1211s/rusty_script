@@ -111,6 +111,31 @@ impl Type {
 
 }
 
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use TypeKind::*;
+        write!(f, "{}", match self.kind {
+            Int => "int".into(),
+            Float => "float".into(),
+            Str => "string".into(),
+            Boolean => "boolean".into(),
+            Array(ref x, ref s) if s.is_none() => format!("[{}]", &*x),
+            Array(ref x, ref s) if s.is_some() => format!("[{}; {}]", &*x, s.as_ref().unwrap()),
+            Array(_, _) => "[?; ?]".into(),
+            Function { ref args, ref ret } => {
+                let args = args.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().connect(", ");
+                format!("({}) {}", args, &*ret)
+            }
+            Compound { ref field } => {
+                field.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().connect(", ")
+            }
+            Variable(ref x) => x.clone(),
+            Existential(ref x) => x.clone(),
+            Null => "null".into()
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Int(i64),

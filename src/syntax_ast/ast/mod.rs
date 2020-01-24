@@ -139,6 +139,36 @@ pub enum Operator {
     Asgn,
 }
 
+impl std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use Operator::*;
+        write!(f, "{}", match self {
+            Add    => "+",
+            Sub    => "-",
+            Div    => "/",
+            Mul    => "*",
+            Mod    => "%",
+            EqEq   => "==",
+            NotEq  => "!=",
+            LessEq => "<=",
+            MoreEq => ">=",
+            Less   => ">",
+            More   => "<",
+            Not    => "!",
+            Neg    => "-",
+            And    => "and",
+            Or     => "or",
+            Ref    => "^",
+            Deref  => "^",
+            Wrap   => "?",
+            Unwrap => "!",
+            Asgn   => "=",
+            _      => "??"
+        })
+    }
+} 
+
+
 impl Operator {
     // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
     pub fn is_arithmetic(&self) -> bool {

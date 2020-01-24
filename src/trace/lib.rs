@@ -19,6 +19,8 @@ pub fn init_logger() {
     log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Trace));
 }
 
+
+
 /*
 
     Tokenizer
@@ -101,6 +103,23 @@ pub enum ErrorKind {
 
 pub struct IsekaiLogger;
 
+
+impl IsekaiLogger {
+    pub fn spit_line(
+        &self,
+        lines: CodeSpan,
+        codes: &Module
+    ) {
+        println!(" :: 指定ファイルのコード出力");
+        let mut code_lines = codes.code.lines();
+        code_lines.nth(lines.start_usize() - 1);
+
+        for line in lines.start_usize() .. lines.end_usize() {
+            println!(" :: {} |: {}", line, code_lines.next().unwrap_or("~~~~~~~~~~~~~~"));
+        }
+    }
+}
+
 impl log::Log for IsekaiLogger {
     fn enabled(&self, meta: &log::Metadata) -> bool {
         meta.level() <= log::Level::Trace
@@ -116,7 +135,9 @@ impl log::Log for IsekaiLogger {
             return;
         }
 
-        println!("[Isekai :: {}] {} - {}", rec.level(), rec.target(), rec.args());
+        println!("{:-<50}", format!("[Isekai :: {}] {} ", rec.level(), rec.target()));
+
+        println!("{}", rec.args());
 
         match (rec.file(), rec.line()) {
             (None, None) => {
@@ -130,20 +151,6 @@ impl log::Log for IsekaiLogger {
             }
             (Some(file), Some(line)) => {
                 println!("{} 行目 :: ファイル {}", line, file);
-
-                let mut f = match File::open(file) {
-                    Ok(n) => n,
-                    _ => { println!("Failed to open the file. don't know where it happened."); return; },
-                };
-                
-                let mut string = String::new();
-                match f.read_to_string(&mut string) {
-                    Ok(_) => (),
-                    Err(_) => println!("Failed to read the file!"),
-                }
-
-                let line_vec: Vec<&str> = string.lines().collect();
-                println!("{} |: {}", line, line_vec[line as usize]);
             }
         }
     }

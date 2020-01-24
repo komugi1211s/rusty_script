@@ -76,8 +76,14 @@ impl CodeSpan {
         self.end == self.start
     }
 
+    #[inline(always)]
     pub fn is_invalid(&self) -> bool {
         self.end < self.start
+    }
+
+    #[inline(always)]
+    pub fn length(&self) -> usize {
+        self.end_usize() - self.start_usize()
     }
 }
 

@@ -5,8 +5,7 @@ use types::{Type, TypeKind};
 
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
 use trace::position::{CodeSpan, EMPTY_SPAN};
-
-use trace::{ err_bc, log, Module };
+use trace::{ err_fatal, code_line, Module };
 
 #[derive(Debug)]
 pub struct ExpressionHandleResult {
@@ -80,7 +79,20 @@ impl BytecodeGenerator {
 
                 println!("Binary Oper {:?} {:?}", left, right);
                 if left._type != right._type {
-                    err_bc!(src: ast.file, span: span, msg: "Type Mismatch.");
+                    err_fatal!(
+                        src: ast.file,
+                        span: span,
+                        title: "Type Mismatch",
+                        msg: "\n\
+                            違う型同士に演算子 {0} を適用しようとしました。\n\
+                            検知: {1} {0} {2}\n\
+                        ",
+                        operator,
+                        left._type,
+                        right._type
+                    );
+                    code_line!(src: ast.file, span: span, pad: 2);
+                    panic!();
                 }
 
                 handled_result._type = left._type;
