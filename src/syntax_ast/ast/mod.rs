@@ -7,15 +7,15 @@ pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
-pub struct ParsedResult {
-    pub file: Module,
+pub struct ParsedResult<'m> {
+    pub file: &'m Module,
     pub ast: Vec<AstNode>,
     pub stmt: Vec<Statement>,
     pub expr: Vec<Expr>,
     pub functions: Vec<FunctionData>,
 }
 
-impl ParsedResult {
+impl<'m> ParsedResult<'m> {
     pub fn add_stmt(&mut self, stmt: Statement) -> StmtId {
         let index = self.stmt.len();
         self.stmt.push(stmt);
@@ -38,11 +38,11 @@ impl ParsedResult {
         self.ast.push(AstNode::new(stmt_id, span));
     }
 
-    pub fn get_expr(&self, id: ExprId) -> &Expr {
+    pub fn get_expr(&'m self, id: ExprId) -> &'m Expr {
         self.expr.get(id.0 as usize).unwrap()
     }
 
-    pub fn get_stmt(&self, id: StmtId) -> &Statement {
+    pub fn get_stmt(&'m self, id: StmtId) -> &'m Statement {
         self.stmt.get(id.0 as usize).unwrap()
     }
 }

@@ -3,8 +3,10 @@
 pub mod token;
 use token::{match_identity, Token, TokenType};
 use trace::{ position::CodeSpan, Error, source::Module };
+use trace::{ err_fatal, err_internal, code_line };
 
-pub struct Tokenizer {
+pub struct Tokenizer<'m> {
+    module: &'m Module,
     source: Vec<char>,
     tokens: Vec<Token>,
     start: usize,
@@ -14,11 +16,13 @@ pub struct Tokenizer {
     column: usize,
 }
 
+type TResult = Result<(), ()>;
 
-impl Tokenizer {
-    pub fn new(token: &str) -> Self {
+impl<'m> Tokenizer<'m> {
+    pub fn new(modu: &'m Module) -> Self {
         Tokenizer {
-            source: token.chars().collect::<Vec<char>>(),
+            module: modu,
+            source: modu.code.chars().collect::<Vec<char>>(),
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -28,7 +32,7 @@ impl Tokenizer {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, Error> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, ()> {
         while !self.is_at_end() {
             self.start = self.current;
             self.start_line = self.line;
@@ -40,7 +44,7 @@ impl Tokenizer {
         Ok(self.tokens.to_owned())
     }
 
-    fn scan_next_token(&mut self) -> Result<(), Error> {
+    fn scan_next_token(&mut self) -> TResult {
         let c: char = self.advance();
         match c {
             '(' => self.add_simple(TokenType::OpenParen),
@@ -123,10 +127,18 @@ impl Tokenizer {
             'A'..='z' => self.add_possible_iden(),
 
             // Default
-            def => Err(Error::new_while_tokenizing(
-                format!("Unexpected Token: {}", def).as_str(),
-                CodeSpan::new(self.start_line, self.line),
-            )),
+            def => {
+                let span = CodeSpan::new(self.start_line, self.line);
+                err_fatal!(
+                    src: self.module,
+                    span: span,
+                    title: "Unknown Token",
+                    msg: "未知のトークン {} を発見しました。", def
+                );
+                code_line!(src: self.module, span: span, pad: 2);
+
+                Err(())
+            },
         }
     }
 
@@ -139,13 +151,15 @@ impl Tokenizer {
         true
     }
 
-    fn add_newline(&mut self) -> Result<(), Error> {
+    fn add_newline(&mut self) -> TResult {
         self.line += 1;
         self.column = 1;
         Ok(())
     }
 
-    fn add_string(&mut self) -> Result<(), Error> {
+    fn add_string(&mut self) -> TResult {
+        let starting_line = self.line;
+
         while !self.is_at_end() && self.peek() != '"' {
             if self.source[self.current] == '\n' {
                 self.add_newline()?;
@@ -155,13 +169,15 @@ impl Tokenizer {
 
         // Unterminated String
         if self.is_at_end() {
-            let _given_string: String = (&self.source[(self.start + 1)..(self.current - 1)])
-                .iter()
-                .collect();
-            return Err(Error::new_while_tokenizing(
-                "Unterminated String",
-                CodeSpan::new(self.start_line, self.line),
-            ));
+            let span = CodeSpan::oneline(starting_line);
+            err_fatal!(
+                src: self.module,
+                span: span,
+                title: "Unterminated String",
+                msg: "\n文字列が閉じられていません。\n"
+            );
+            code_line!(src: self.module, span: span, pad: 2);
+            return Err(());
         }
 
         self.advance();
@@ -195,7 +211,7 @@ impl Tokenizer {
         }
     }
 
-    fn add_digit(&mut self) -> Result<(), Error> {
+    fn add_digit(&mut self) -> TResult {
         // Advance while it's numeric
         loop {
             let n = self.peek();
@@ -214,7 +230,7 @@ impl Tokenizer {
         self.add_lexed(TokenType::Digit)
     }
 
-    fn add_possible_iden(&mut self) -> Result<(), Error> {
+    fn add_possible_iden(&mut self) -> TResult {
         while self.peek().is_ascii_alphanumeric() || self.peek() == '_' {
             self.advance();
         }
@@ -234,13 +250,13 @@ impl Tokenizer {
         self.source[self.current - 1]
     }
 
-    fn add_simple(&mut self, tokentype: TokenType) -> Result<(), Error> {
+    fn add_simple(&mut self, tokentype: TokenType) -> TResult {
         self.tokens
             .push(Token::simple(tokentype, self.start_line, self.line));
         Ok(())
     }
 
-    fn add_lexed(&mut self, tokentype: TokenType) -> Result<(), Error> {
+    fn add_lexed(&mut self, tokentype: TokenType) -> TResult {
         let string: String = self.source[self.start..self.current].iter().collect();
 
         self.tokens
@@ -257,12 +273,14 @@ impl Tokenizer {
 mod tests {
     use super::*;
 
+    #[cfg(test)]
     fn assert_lexed_token(token: &Token, requiretype: TokenType, requirelex: &str) {
         assert_eq!(token.tokentype, requiretype);
         assert!(token.lexeme.is_some());
         assert_eq!(token.lexeme.as_ref().unwrap().as_str(), requirelex);
     }
 
+    #[cfg(test)]
     fn assert_simple_token(token: &Token, requiretype: TokenType) {
         assert_eq!(token.tokentype, requiretype);
         assert!(token.lexeme.is_none());
@@ -270,8 +288,8 @@ mod tests {
 
     #[test]
     fn tokenizer_arithmetic() {
-        let code = "10 + 2 - 5.2 * 10 / 12 % 9";
-        let result = Tokenizer::new(code).scan();
+        let code = Module::repl("10 + 2 - 5.2 * 10 / 12 % 9");
+        let result = Tokenizer::new(&code).scan();
 
         assert!(result.is_ok());
         let tokens = result.unwrap();
@@ -293,9 +311,9 @@ mod tests {
 
     #[test]
     fn tokenize_string() {
-        let correct = r#" "Hello World." "#;
+        let correct = Module::repl(r#" "Hello World." "#);
 
-        let correct_result = Tokenizer::new(correct).scan();
+        let correct_result = Tokenizer::new(&correct).scan();
         assert!(correct_result.is_ok());
 
         let correct_vec = correct_result.unwrap();
@@ -305,38 +323,38 @@ mod tests {
 
     #[test]
     fn ignore_comments() {
-        let only_comment = r"// Oh Hey mark.";
-        let result = Tokenizer::new(only_comment).scan().unwrap();
+        let only_comment = Module::repl(r"// Oh Hey mark.");
+        let result = Tokenizer::new(&only_comment).scan().unwrap();
         assert_eq!(result.len(), 1);
     }
 
     #[test]
     fn ignore_block_comments() {
-        let only_comment = r"/* Hello there */ /* general reposti */";
-        let result = Tokenizer::new(only_comment).scan().unwrap();
+        let only_comment = Module::repl(r"/* Hello there */ /* general reposti */");
+        let result = Tokenizer::new(&only_comment).scan().unwrap();
         assert_eq!(result.len(), 1);
     }
 
     #[test]
     fn reject_unterminated_string() {
-        let invalid = r#" "This string is unterminated "#;
-        let invalid_result = Tokenizer::new(invalid).scan();
+        let invalid = Module::repl(r#" "This string is unterminated "#);
+        let invalid_result = Tokenizer::new(&invalid).scan();
         assert!(invalid_result.is_err());
     }
 
     #[test]
     fn reject_unknown_char() {
-        let unknown = "🌔";
-        let invalid_result = Tokenizer::new(unknown).scan();
+        let unknown = Module::repl("🌔");
+        let invalid_result = Tokenizer::new(&unknown).scan();
         assert!(invalid_result.is_err());
     }
 
     #[test]
     fn different_line_break() {
-        let windows_style = "100\r\n";
-        let unix_style = "100\n";
-        let windows_result = Tokenizer::new(windows_style).scan();
-        let unix_result = Tokenizer::new(unix_style).scan();
+        let windows_style = Module::repl("100\r\n");
+        let unix_style = Module::repl("100\n");
+        let windows_result = Tokenizer::new(&windows_style).scan();
+        let unix_result = Tokenizer::new(&unix_style).scan();
         assert!(windows_result.is_ok());
         assert!(unix_result.is_ok());
 

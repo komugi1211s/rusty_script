@@ -112,9 +112,9 @@ impl IsekaiLogger {
     ) {
         println!(" :: 指定ファイルのコード出力");
         let mut code_lines = codes.code.lines();
-        code_lines.nth(lines.start_usize() - 1);
+        code_lines.nth(lines.start_usize().saturating_sub(1));
 
-        for line in lines.start_usize() .. lines.end_usize() {
+        for line in lines.start_usize()+1 .. lines.end_usize()+1 {
             println!(" :: {} |: {}", line, code_lines.next().unwrap_or("~~~~~~~~~~~~~~"));
         }
     }

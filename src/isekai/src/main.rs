@@ -29,15 +29,23 @@ fn dump_chunk(chunk: &ByteChunk) {
     file.flush().expect("File Flushing Failed.");
 }
 
-fn time_it<T>(step: &str, fun: impl FnOnce() -> T) -> T {
+fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
     let start = Instant::now();
     let result = fun();
 
-    println!(
-        " {0:<12} Finished :: \x1b[32m{1} micros\x1b[39m",
-        step,
-        start.elapsed().as_micros()
-    );
+    if result.is_ok() {
+        println!(
+            " {0:<12} Finished :: \x1b[32m{1} micros\x1b[39m",
+            step,
+            start.elapsed().as_micros()
+        );
+    } else {
+        println!(
+            " {0:<12} Error :: \x1b[31m{1} micros\x1b[39m",
+            step,
+            start.elapsed().as_micros()
+        );
+    }
 
     result
 }
@@ -62,16 +70,16 @@ fn run_module(
 
 */
 
-pub fn start(module: Module, code: &str, stage: u8) -> Result<(), ()> {
+pub fn start(module: Module, stage: u8) -> Result<(), ()> {
     let chunk = time_it(
         "Total",
         || {
-            let tokens = time_it("Tokenizer", || Tokenizer::new(code).scan()).unwrap();
-            let parsed = time_it("Parser",    || Parser::new(module, &tokens).parse()).unwrap();
+            let tokens = time_it("Tokenizer", || Tokenizer::new(&module).scan())?;
+            let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse()).unwrap();
             let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed)).unwrap();
-            chunk
+            Ok(chunk)
         }
-    );
+    )?;
 
     let mut vm = VirtualMachine::new(chunk);
     vm.run();
@@ -91,9 +99,7 @@ fn run_file(path: &str, stage: Option<&String>) -> bool {
         stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
     }
 
-    let string = fs::read_to_string(path).unwrap();
-
-    start(module, string.as_str(), stage_u8).is_ok()
+    start(module, stage_u8).is_ok()
 }
 
 fn main() {

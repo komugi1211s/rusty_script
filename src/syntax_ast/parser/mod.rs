@@ -34,9 +34,9 @@ mod stmt;
 */
 const MAX_IDENTIFIER_LENGTH: usize = 530;
 
-pub struct Parser<'tok> {
-    tokens: &'tok Vec<Token>,
-    ast: ParsedResult,
+pub struct Parser<'m> {
+    tokens: &'m Vec<Token>,
+    ast: ParsedResult<'m>,
     current: usize,
     start_line: usize,
     current_line: usize,
@@ -44,8 +44,8 @@ pub struct Parser<'tok> {
     block_count: usize,
 }
 
-impl<'tok> Parser<'tok> {
-    pub fn new(modu: Module, _tok: &'tok Vec<Token>) -> Self {
+impl<'m> Parser<'m> {
+    pub fn new(modu: &'m Module, _tok: &'m Vec<Token>) -> Self {
         Self {
             tokens: _tok,
             ast: ParsedResult {
@@ -63,7 +63,7 @@ impl<'tok> Parser<'tok> {
         }
     }
 
-    pub fn parse(mut self) -> Result<ParsedResult, Error> {
+    pub fn parse(mut self) -> Result<ParsedResult<'m>, Error> {
         while !self.is_at_end() {
             self.start_line = self.current_line;
             let declaration = self.declaration()?;
@@ -84,7 +84,7 @@ impl<'tok> Parser<'tok> {
     fn enter_block<T>(
         &mut self,
         pass: &mut T,
-        wrapped_func: fn(&mut Parser<'tok>, &mut T) -> Result<(), Error>,
+        wrapped_func: fn(&mut Parser<'m>, &mut T) -> Result<(), Error>,
     ) -> usize {
         let previous_count = self.assign_count;
         self.assign_count = 0;

@@ -9,7 +9,7 @@ use crate::tokenizer::token::{TokenType};
 
 use super::Parser;
 
-impl<'tok> Parser<'tok> {
+impl<'m> Parser<'m> {
     pub(super) fn statement(&mut self) -> Result<StmtId, Error> {
         let possible_stmt = self.get_current().tokentype.clone();
         let result = match possible_stmt {

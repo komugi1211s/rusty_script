@@ -43,6 +43,12 @@ impl Module {
             line: code.lines().collect::<Vec<&'_ str>>().len(),
         }
     }
+
+    // TODO - @DumbCode: every time user uses repl, it allocates new string and maybe it'll become
+    // more slow -- require measurement, and fix if necessary.
+    pub fn repl(code: &str) -> Self {
+        Self::new("-- repl --", code)
+    }
 }
 
 
