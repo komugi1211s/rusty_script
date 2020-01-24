@@ -9,14 +9,11 @@ pub mod macros;
 
 use position::CodeSpan;
 pub use log::{info, trace, warn, error, debug};
-use std::str::Lines;
-use std::fs::File;
-use std::io::*;
 
 pub static Logger: IsekaiLogger = IsekaiLogger;
 
 pub fn init_logger() {
-    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Trace));
+    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Trace)).unwrap();
 }
 
 
@@ -121,7 +118,7 @@ impl IsekaiLogger {
         println!("{} ~ {}", start, end);
         println!(" :: 指定ファイルのコード出力\n");
 
-        let mut code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
+        let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
         for line in start .. end {
             println!("   :: {} |: {}", line, code_lines.get(line-1).unwrap_or(&"~~~~~~~~~~~~~~"));
         }
@@ -171,8 +168,8 @@ impl log::Log for IsekaiLogger {
 mod tests {
     use super::*;
     use std::fs::File;
-    use std::io::*;
-    use std::sync::{ Once, Mutex };
+    
+    
 
 
     lazy_static! {
