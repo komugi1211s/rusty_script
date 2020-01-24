@@ -25,14 +25,12 @@ macro_rules! err_fatal {
 
 #[macro_export]
 macro_rules! code_line {
+    (src: $src:expr, span: $span:expr) => {
+        code_line!(src: $src, span: $span, pad: 0);
+    };
     (src: $src:expr, span: $span:expr, pad: $pad:expr) => {
         {
-            assert_eq!($pad % 2, 0, "padding must be an even number!");
-            let spn_start = std::cmp::max($span.start_usize() - $pad, 0);
-            let spn_end = std::cmp::min($span.end_usize() + $pad, $src.line);
-
-            let new_span = $crate::position::CodeSpan::new(spn_start, spn_end);
-            $crate::Logger.spit_line(new_span, &$src);
+            $crate::Logger.spit_line($span, &$src, $pad);
         }
     };
 }

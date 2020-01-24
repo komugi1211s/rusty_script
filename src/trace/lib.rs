@@ -108,14 +108,22 @@ impl IsekaiLogger {
     pub fn spit_line(
         &self,
         lines: CodeSpan,
-        codes: &Module
+        codes: &Module,
+        pad: usize
     ) {
-        println!(" :: 指定ファイルのコード出力");
-        let mut code_lines = codes.code.lines();
-        code_lines.nth(lines.start_usize().saturating_sub(1));
+        println!("{} {}", lines, pad);
 
-        for line in lines.start_usize()+1 .. lines.end_usize()+1 {
-            println!(" :: {} |: {}", line, code_lines.next().unwrap_or("~~~~~~~~~~~~~~"));
+        let (start, end) = if lines.length() > pad+1 {
+            (lines.start_usize(), lines.end_usize())
+        } else {
+            (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad, codes.line))
+        };
+        println!("{} ~ {}", start, end);
+        println!(" :: 指定ファイルのコード出力\n");
+
+        let mut code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
+        for line in start .. end {
+            println!("   :: {} |: {}", line, code_lines.get(line-1).unwrap_or(&"~~~~~~~~~~~~~~"));
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::tokenizer::token::{TokenType};
 use super::Parser;
 
 impl<'m> Parser<'m> {
-    pub(super) fn statement(&mut self) -> Result<StmtId, Error> {
+    pub(super) fn statement(&mut self) -> Result<StmtId, ()> {
         let possible_stmt = self.get_current().tokentype.clone();
         let result = match possible_stmt {
             // Close Bracket Expected, They'll handle the close bracket themselves
@@ -35,24 +35,24 @@ impl<'m> Parser<'m> {
         result
     }
 
-    fn parse_print_stmt(&mut self) -> Result<StmtId, Error> {
+    fn parse_print_stmt(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::Print)?;
         let expr = self.expression()?;
         let id = self.ast.add_stmt(Statement::Print(expr));
         Ok(id)
     }
 
-    fn parse_break_stmt(&mut self) -> Result<StmtId, Error> {
+    fn parse_break_stmt(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::Break)?;
         Ok(self.ast.add_stmt(Statement::Break))
     }
 
-    fn parse_continue_stmt(&mut self) -> Result<StmtId, Error> {
+    fn parse_continue_stmt(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::Continue)?;
         Ok(self.ast.add_stmt(Statement::Continue))
     }
 
-    fn parse_return_stmt(&mut self) -> Result<StmtId, Error> {
+    fn parse_return_stmt(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::Return)?;
         let mut result = None;
         if !self.is(TokenType::SemiColon) {
@@ -64,11 +64,12 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn if_statement(&mut self) -> Result<StmtId, Error> {
+    fn if_statement(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::If)?;
         let condition = self.expression()?;
         let true_route = self.statement()?;
-        let false_route = if self.consume(TokenType::Else).is_ok() {
+        let false_route = if self.is(TokenType::Else) {
+            self.advance();
             Some(self.statement()?)
         } else {
             None
@@ -79,7 +80,7 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn while_statement(&mut self) -> Result<StmtId, Error> {
+    fn while_statement(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::While)?;
         let condition = self.expression()?;
         let whileloop = self.statement()?;
@@ -88,11 +89,11 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    pub(super) fn block_statement(&mut self) -> Result<StmtId, Error> {
+    pub(super) fn block_statement(&mut self) -> Result<StmtId, ()> {
         self.consume(TokenType::OpenBrace)?;
         let mut vector = Vec::new();
 
-        fn parse_inside_block(parser: &mut Parser, vector: &mut Vec<StmtId>) -> Result<(), Error> {
+        fn parse_inside_block(parser: &mut Parser, vector: &mut Vec<StmtId>) -> Result<(), ()> {
             while !parser.is_at_end() && !parser.is(TokenType::CloseBrace) {
                 vector.push(parser.declaration()?);
             }

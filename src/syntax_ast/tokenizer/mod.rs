@@ -135,7 +135,7 @@ impl<'m> Tokenizer<'m> {
                     title: "Unknown Token",
                     msg: "未知のトークン {} を発見しました。", def
                 );
-                code_line!(src: self.module, span: span, pad: 2);
+                code_line!(src: self.module, span: span, pad: 1);
 
                 Err(())
             },
@@ -176,7 +176,7 @@ impl<'m> Tokenizer<'m> {
                 title: "Unterminated String",
                 msg: "\n文字列が閉じられていません。\n"
             );
-            code_line!(src: self.module, span: span, pad: 2);
+            code_line!(src: self.module, span: span, pad: 1);
             return Err(());
         }
 

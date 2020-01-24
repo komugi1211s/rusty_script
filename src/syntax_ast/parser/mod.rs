@@ -7,7 +7,7 @@ use super::ast::{
 
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
-use trace::Module;
+use trace::{ err_fatal, err_internal, code_line, Module };
 
 mod decl;
 mod stmt;
@@ -38,8 +38,6 @@ pub struct Parser<'m> {
     tokens: &'m Vec<Token>,
     ast: ParsedResult<'m>,
     current: usize,
-    start_line: usize,
-    current_line: usize,
     assign_count: usize,
     block_count: usize,
 }
@@ -56,18 +54,18 @@ impl<'m> Parser<'m> {
                 functions: vec![],
             },
             current: 0,
-            start_line: 0,
-            current_line: 0,
             assign_count: 0,
             block_count: 0,
         }
+
     }
 
-    pub fn parse(mut self) -> Result<ParsedResult<'m>, Error> {
+    pub fn parse(mut self) -> Result<ParsedResult<'m>, ()> {
         while !self.is_at_end() {
-            self.start_line = self.current_line;
+            let start_line = self.get_current().span.start_usize();
             let declaration = self.declaration()?;
-            let codespan = CodeSpan::new(self.start_line, self.current_line);
+            let end_line = self.get_current().span.start_usize();
+            let codespan = CodeSpan::new(start_line, end_line);
             self.ast.add_ast(declaration, codespan);
         }
         Ok(self.ast)
@@ -84,7 +82,7 @@ impl<'m> Parser<'m> {
     fn enter_block<T>(
         &mut self,
         pass: &mut T,
-        wrapped_func: fn(&mut Parser<'m>, &mut T) -> Result<(), Error>,
+        wrapped_func: fn(&mut Parser<'m>, &mut T) -> Result<(), ()>,
     ) -> usize {
         let previous_count = self.assign_count;
         self.assign_count = 0;
@@ -98,7 +96,7 @@ impl<'m> Parser<'m> {
         new_assign
     }
 
-    fn declaration(&mut self) -> Result<StmtId, Error> {
+    fn declaration(&mut self) -> Result<StmtId, ()> {
         if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
             return self.parse_variable();
         }
@@ -106,12 +104,12 @@ impl<'m> Parser<'m> {
         self.statement()
     }
 
-    fn expression(&mut self) -> Result<ExprId, Error> {
+    fn expression(&mut self) -> Result<ExprId, ()> {
         let x = self.assignment();
         x
     }
 
-    fn assignment(&mut self) -> Result<ExprId, Error> {
+    fn assignment(&mut self) -> Result<ExprId, ()> {
         let expr = self.logical_or()?;
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
@@ -121,21 +119,26 @@ impl<'m> Parser<'m> {
 
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
-            if let Expr::Variable(_s) = self.ast.get_expr(expr) {
+            if let Expr::Variable(_) = self.ast.get_expr(expr) {
                 let expr = self.ast.add_expr(Expr::Assign(expr, value));
                 return Ok(expr);
             } else {
-                return Err(Error::new_while_parsing(
-                    "Invalid Assignment target",
-                    CodeSpan::oneline(assign_span.start_usize()),
-                ));
+                let span = CodeSpan::oneline(assign_span.start_usize());
+                err_fatal!(
+                    src: self.ast.file,
+                    span: span,
+                    title: "Invalid Assignment Target",
+                    msg: "\n値の割当を行う対象が不正です。", 
+                );
+                code_line!(src: self.ast.file, span: span, pad: 1);
+                return Err(());
             }
         }
 
         Ok(expr)
     }
 
-    pub fn logical_or(&mut self) -> Result<ExprId, Error> {
+    pub fn logical_or(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.logical_and()?;
 
         while self.is(TokenType::Or) {
@@ -146,7 +149,7 @@ impl<'m> Parser<'m> {
 
         Ok(expr)
     }
-    pub fn logical_and(&mut self) -> Result<ExprId, Error> {
+    pub fn logical_and(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.equality()?;
 
         while self.is(TokenType::And) {
@@ -158,7 +161,7 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<ExprId, Error> {
+    fn equality(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.comparison()?;
         while !self.is_at_end() {
             let operator = match self.get_current().tokentype {
@@ -173,7 +176,7 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<ExprId, Error> {
+    fn comparison(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.addition()?;
 
         use TokenType::*;
@@ -194,7 +197,7 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<ExprId, Error> {
+    fn addition(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.multiplification()?;
 
         while !self.is_at_end() {
@@ -211,7 +214,7 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn multiplification(&mut self) -> Result<ExprId, Error> {
+    fn multiplification(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.unary()?;
 
         while !self.is_at_end() {
@@ -230,7 +233,7 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<ExprId, Error> {
+    fn unary(&mut self) -> Result<ExprId, ()> {
         let operator = match self.get_current().tokentype {
             TokenType::Bang => Some(Operator::Not),
             TokenType::Minus => Some(Operator::Neg),
@@ -249,7 +252,7 @@ impl<'m> Parser<'m> {
         self.postfix()
     }
 
-    fn postfix(&mut self) -> Result<ExprId, Error> {
+    fn postfix(&mut self) -> Result<ExprId, ()> {
         let mut expr = self.primary()?;
 
         'parse: loop {
@@ -264,30 +267,39 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn parse_unwrap(&mut self, _e: ExprId) -> Result<ExprId, Error> {
+    fn parse_unwrap(&mut self, _e: ExprId) -> Result<ExprId, ()> {
         let span = self.get_current().span;
-        Err(Error::new_while_parsing("Unimplemented Unwrap.", span))
+        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "Unwrap機能は実装されていません。");
+        code_line!(src: self.ast.file, span: span);
+        Err(())
     }
 
-    fn parse_deref(&mut self, _e: ExprId) -> Result<ExprId, Error> {
+    fn parse_deref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
         let span = self.get_current().span;
-        Err(Error::new_while_parsing("Unimplemented Deref.", span))
+        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "Deref機能は実装されていません。");
+        code_line!(src: self.ast.file, span: span);
+        Err(())
     }
 
-    fn parse_array_ref(&mut self, _e: ExprId) -> Result<ExprId, Error> {
+    fn parse_array_ref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
         let span = self.get_current().span;
-        Err(Error::new_while_parsing("Unimplemented ArrayRef.", span))
+        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "ArrayRef機能は実装されていません。");
+        code_line!(src: self.ast.file, span: span);
+        Err(())
     }
 
-    fn parse_func_call(&mut self, expr: ExprId) -> Result<ExprId, Error> {
+    fn parse_func_call(&mut self, expr: ExprId) -> Result<ExprId, ()> {
         self.consume(TokenType::OpenParen)?;
         let mut v = Vec::<ExprId>::new();
 
         if !self.is(TokenType::CloseParen) {
-            let mut z = true;
-            while z {
+            loop {
                 v.push(self.expression()?);
-                z = self.consume(TokenType::Comma).is_ok();
+                if self.is(TokenType::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
             }
         }
         let _paren = self.consume(TokenType::CloseParen)?;
@@ -307,37 +319,33 @@ impl<'m> Parser<'m> {
         (!self.is_at_end() && self.get_previous().tokentype == _type)
     }
 
-    fn get_current(&mut self) -> &Token {
+    fn get_current(&self) -> &Token {
         let x = self.tokens.get(self.current).unwrap();
-        self.current_line = x.span.end_usize();
         x
     }
 
-    fn get_previous(&mut self) -> &Token {
+    fn get_previous(&self) -> &Token {
         let x = self.tokens.get(self.current - 1).unwrap();
-        self.current_line = x.span.end_usize();
         x
     }
 
-    fn get_next(&mut self) -> &Token {
+    fn get_next(&self) -> &Token {
         if self.current + 1 >= self.tokens.len() {
             return self.get_current();
         }
         let x = self.tokens.get(self.current + 1).unwrap();
-        self.current_line = x.span.end_usize();
         x
     }
 
     fn advance(&mut self) -> &Token {
         self.current += 1;
         let x = self.tokens.get(self.current - 1).unwrap();
-        self.current_line = x.span.end_usize();
         x
     }
 
-    fn primary(&mut self) -> Result<ExprId, Error> {
-        let previous_line = self.current_line;
-        let inside = self.advance();
+    fn primary(&mut self) -> Result<ExprId, ()> {
+        self.advance();
+        let inside = self.get_previous();
         use TokenType::*;
         let result = match &inside.tokentype {
             Digit => {
@@ -372,19 +380,26 @@ impl<'m> Parser<'m> {
                         }
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
-                                let formatted = format!(
-                                    "Identifier maximum length exceeded: {}, max length is {}",
-                                    inside_lexeme.len(),
-                                    MAX_IDENTIFIER_LENGTH
+                                err_fatal!(
+                                    src: self.ast.file,
+                                    span: inside.span,
+                                    title: "Maximum Identifier Length Exceeded",
+                                    msg: "\n識別子の長さ( {} )が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。",
+                                        inside_lexeme.len(),
+                                        MAX_IDENTIFIER_LENGTH
+                                    );
+
+                                code_line!(
+                                    src: self.ast.file,
+                                    span: inside.span,
+                                    pad:1
                                 );
-                                return Err(Error::new_while_parsing(
-                                    formatted.as_str(),
-                                    CodeSpan::new(previous_line, self.current_line),
-                                ));
+                                Err(())
+                            } else {
+                                let expr = Expr::Variable(inside_lexeme.to_owned());
+                                let expr_id = self.ast.add_expr(expr);
+                                Ok(expr_id)
                             }
-                            let expr = Expr::Variable(inside_lexeme.to_owned());
-                            let expr_id = self.ast.add_expr(expr);
-                            Ok(expr_id)
                         }
                     }
                 } else {
@@ -397,28 +412,47 @@ impl<'m> Parser<'m> {
                 let expr = Expr::Grouping(inside_paren);
                 Ok(self.ast.add_expr(expr))
             }
-            _s => Err(Error::new_while_parsing(
-                format!("Received unknown token while parsing code: {:?}", _s).as_str(),
-                CodeSpan::new(previous_line, self.current_line),
-            )),
+            _s => {
+                 
+                err_fatal!(
+                    src: self.ast.file,
+                    span: inside.span,
+                    title: "Unknown Token",
+                    msg: "\n未知のトークンを受け付けました。処理できません。\n未知のトークン: {:?}", inside
+                );
+                code_line!(
+                    src: self.ast.file,
+                    span: inside.span,
+                    pad: 1
+                );
+
+                Err(())
+            }
         };
 
         result
     }
 
-    fn consume(&mut self, until: TokenType) -> Result<&Token, Error> {
+    fn consume(&mut self, expected: TokenType) -> Result<&Token, ()> {
         // TODO - @DumbCode: 無駄なクローンを許すな
-        let x = until.clone();
-
-        if self.is(until) {
+        if self.is(expected) {
             return Ok(self.advance());
         }
-
-        let current = self.get_current();
-        let formatted = format!(
-            "Tried to consume {:?}, got {:?} at range {} - {}",
-            x, current.tokentype, current.span.start, current.span.end
+        let span = self.get_current().span;
+        let actual = self.get_current().tokentype;
+        err_fatal!(
+            src: self.ast.file,
+            span: span,
+            title: "Invalid Token",
+            msg: "想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
+            expected, actual
         );
-        Err(Error::new_while_parsing(formatted.as_str(), current.span))
+
+        code_line!(
+            src: self.ast.file,
+            span: span,
+            pad: 1
+        );
+        Err(())
     }
 }

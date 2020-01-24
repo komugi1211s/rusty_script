@@ -2,7 +2,7 @@ use std::fmt;
 
 use trace::position::CodeSpan;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
     // 予約語
     If,       // if expr {
