@@ -114,9 +114,9 @@ impl IsekaiLogger {
         println!("{} {}", lines, pad);
 
         let (start, end) = if lines.length() > pad+1 {
-            (lines.start_usize(), lines.end_usize())
+            (lines.start_usize(), std::cmp::min(lines.end_usize() + 1, codes.line))
         } else {
-            (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad, codes.line))
+            (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad + 1, codes.line))
         };
         println!("{} ~ {}", start, end);
         println!(" :: 指定ファイルのコード出力\n");

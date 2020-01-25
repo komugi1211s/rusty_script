@@ -105,15 +105,12 @@ impl<'m> Parser<'m> {
     fn parse_type_prefix(&mut self) -> ast::DeclPrefix {
         let mut prefix = ast::DeclPrefix::empty();
         loop {
-            if self.consume(TokenType::Constant).is_ok() {
-                prefix.insert(ast::DeclPrefix::Const);
-            } else if self.consume(TokenType::Public).is_ok() {
-                prefix.insert(ast::DeclPrefix::Public);
-            } else {
-                break;
+            match self.get_current().tokentype {
+                TokenType::Constant => { self.advance(); prefix.insert(ast::DeclPrefix::Const); },
+                TokenType::Public => { self.advance(); prefix.insert(ast::DeclPrefix::Public); },
+                _ => break,
             }
         }
-
         prefix
     }
 
