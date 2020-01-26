@@ -187,3 +187,24 @@ pub fn is_well_formed(cont: &TypeArena, t: &Type, depth: u16) -> bool {
         }
     }
 }
+
+
+
+
+/*
+
+Unknown Length Array: Currently x = Array(Existential);
+x.is_solved() == false;
+
+new_item := [];
+
+new_item.push(2);
+Currently x = Array(Numeric);
+x.is_solved() == false;
+x.determine() == Array(Int);
+
+new_item.push(2.5);
+Currently x == Array(Float);
+x.is_solved() == true;
+
+*/

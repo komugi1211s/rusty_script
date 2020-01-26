@@ -13,7 +13,7 @@ pub use log::{info, trace, warn, error, debug};
 pub static Logger: IsekaiLogger = IsekaiLogger;
 
 pub fn init_logger() {
-    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Trace)).unwrap();
+    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Info)).unwrap();
 }
 
 

@@ -14,6 +14,9 @@ use compiler::vm::VirtualMachine;
 
 use trace::{ error, err_internal, source::Module };
 
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
+
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
 }
@@ -75,8 +78,8 @@ pub fn start(module: Module, stage: u8) -> Result<(), ()> {
         "Total",
         || {
             let tokens = time_it("Tokenizer", || Tokenizer::new(&module).scan())?;
-            let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse()).unwrap();
-            let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed)).unwrap();
+            let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse())?;
+            let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed))?;
             Ok(chunk)
         }
     )?;
@@ -84,6 +87,22 @@ pub fn start(module: Module, stage: u8) -> Result<(), ()> {
     let mut vm = VirtualMachine::new(chunk);
     vm.run();
     Ok(())
+}
+
+fn interpret() -> bool {
+    let mut rl = Editor::<()>::new();
+    loop {
+        let readline = rl.readline("Isekai :: >");
+        match readline {
+            Ok(line) => {
+                let mods = Module::repl(&line);
+                start(mods, 0);
+            }
+            _ => break,
+        }
+    }
+
+    true
 }
 
 fn run_file(path: &str, stage: Option<&String>) -> bool {
@@ -109,7 +128,7 @@ fn main() {
     if arguments.len() <= 1 {
         // もし引数が無かったら
         println!("usage: isekai [filename].kai");
-        exit_process(true);
+        exit_process(interpret());
     }
     exit_process(run_file(arguments.get(1).unwrap(), arguments.get(2)))
 }
