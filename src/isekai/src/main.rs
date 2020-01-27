@@ -89,14 +89,27 @@ pub fn start(module: Module, stage: u8) -> Result<(), ()> {
     Ok(())
 }
 
+fn form_repl_line(s: &str) -> Option<&str> {
+    if s.len() == 0 {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 fn interpret() -> bool {
     let mut rl = Editor::<()>::new();
     loop {
-        let readline = rl.readline("Isekai :: >");
+        let readline = rl.readline("Isekai :: > ");
         match readline {
             Ok(line) => {
-                let mods = Module::repl(&line);
-                start(mods, 0);
+                if let Some(l) = form_repl_line(&line) {
+                    if l == "!exit" {
+                        break;
+                    }
+                    let mods = Module::repl(l);
+                    start(mods, 0);
+                }
             }
             _ => break,
         }

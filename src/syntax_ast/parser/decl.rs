@@ -60,7 +60,7 @@ impl<'m> Parser<'m> {
         }
 
         // TODO - @Broken: are you sure that there's no more prefix??
-        let mut core_type = {
+        let mut core_type = if self.is(TokenType::Iden) {
             let Token {
                 tokentype: _,
                 span: span,
@@ -87,6 +87,8 @@ impl<'m> Parser<'m> {
                 Some(x) => x,
                 None => ast::ParsedType::pUserdef(candidate.to_string()),
             }
+        } else {
+            ast::ParsedType::pUnknown
         };
         loop {
             match self.get_current().tokentype {

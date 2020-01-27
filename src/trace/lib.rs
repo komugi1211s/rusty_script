@@ -108,19 +108,21 @@ impl IsekaiLogger {
         codes: &Module,
         pad: usize
     ) {
-        println!("{} {}", lines, pad);
-
-        let (start, end) = if lines.length() > pad+1 {
-            (lines.start_usize(), std::cmp::min(lines.end_usize() + 1, codes.line))
-        } else {
-            (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad + 1, codes.line))
-        };
-        println!("{} ~ {}", start, end);
+        let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
         println!(" :: 指定ファイルのコード出力\n");
 
-        let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
-        for line in start .. end {
-            println!("   :: {} |: {}", line, code_lines.get(line-1).unwrap_or(&"~~~~~~~~~~~~~~"));
+        if lines.is_oneliner() {
+            let line = lines.start_usize();
+            println!("   :: {} |: {}", line, code_lines.get(line - 1).unwrap_or(&"~~~~~~~~~~~~~~"));
+        } else {
+            let (start, end) = if lines.length() > pad + 1 {
+                (lines.start_usize(), std::cmp::min(lines.end_usize() + 1, codes.line))
+            } else {
+                (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad + 1, codes.line))
+            };
+            for line in start .. end {
+                println!("   :: {} |: {}", line, code_lines.get(line-1).unwrap_or(&"~~~~~~~~~~~~~~"));
+            }
         }
     }
 }
