@@ -16,6 +16,16 @@ pub struct ParsedResult<'m> {
 }
 
 impl<'m> ParsedResult<'m> {
+    pub fn new(m: &'m Module) -> Self {
+        Self {
+            file: m,
+            ast: vec![],
+            stmt: vec![],
+            expr: vec![],
+            functions: vec![]
+        }
+    }
+
     pub fn add_stmt(&mut self, stmt: Statement) -> StmtId {
         let index = self.stmt.len();
         self.stmt.push(stmt);
@@ -48,10 +58,10 @@ impl<'m> ParsedResult<'m> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct StmtId(u32);
+pub struct StmtId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ExprId(u32);
+pub struct ExprId(pub u32);
 
 
 #[derive(Debug, Clone)]

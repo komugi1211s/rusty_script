@@ -170,22 +170,6 @@ impl log::Log for IsekaiLogger {
 mod tests {
     use super::*;
     use std::fs::File;
-    
-    
-
-
-    lazy_static! {
-        static ref file: String = {
-            let mut f = match File::open("test_file") {
-                Ok(n) => n,
-                _ => panic!(),
-            };
-
-            let mut string = String::new();
-            f.read_to_string(&mut string).expect("File open failed.");
-            string
-        };
-    } 
 
     #[test]
     fn log_file() {

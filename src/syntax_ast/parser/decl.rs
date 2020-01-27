@@ -25,7 +25,7 @@ fn is_suffix_banned(cand: &str) -> bool {
     }
 }
 
-impl<'m> Parser<'m> {
+impl<'m, 't> Parser<'m, 't> {
     fn parse_type(&mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
         // Separate Array Consumption to other function
         if self.is(TokenType::OpenSquareBracket) {
