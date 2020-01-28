@@ -15,10 +15,9 @@ pub struct TypeArena {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypeContext {
-    Var(String),
+    Variable(String),
     Existential(String),
     Solved(Type),
-    Annotated(Type),
 }
 
 pub trait Solve {
@@ -29,7 +28,7 @@ pub trait Solve {
 impl Solve for TypeContext {
     fn is_solved(&self) -> bool {
         match self {
-            Self::Solved(_) | Self::Annotated(_) => true,
+            Self::Solved(_) => true,
             _ => false
         }
     }
@@ -39,7 +38,6 @@ impl TypeContext {
     pub fn inner_ref(&self) -> Option<&Type> {
         match self {
             Self::Solved(ref x) => Some(x),
-            Self::Annotated(ref x) => Some(x),
             _ => None
         }
     }

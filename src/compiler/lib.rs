@@ -8,6 +8,7 @@ extern crate num_derive;
 // pub mod builtin_functions;
 pub mod bytecode;
 pub mod typecheck;
+pub mod opcode;
 pub mod vm;
 
 pub mod utils {

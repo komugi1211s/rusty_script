@@ -1,5 +1,5 @@
 use super::{BytecodeGenerator, OpCode};
-use crate::typecheck::{astconv, check as typeck};
+use crate::typecheck::{Solve, astconv, check as typeck};
 
 use types::{Type, TypeKind};
 
@@ -163,13 +163,42 @@ impl BytecodeGenerator {
                     panic!("Undeclared / defined variable!");
                 }
 
+
                 let expression_result = self.handle_expr(ast, expr, span);
-                let expression_type = expression_result._type;
-                
-                let opcode = self.get_store_opcode(&expression_type, is_global);
+                let exprtype = expression_result._type;
+
+                let mut undetermined = false;
+                // Close
+                {
+                    let deftype = if is_global {
+                        &self.defs.global[position].dtype
+                    } else {
+                        &self.defs.local[position].dtype
+                    };
+
+                    if deftype.is_solved() {
+                        if deftype.inner_ref() != Some(&exprtype) {
+                            panic!("Type mismatch");
+                        }
+                    } else {
+                        undetermined = true;
+                    }
+                }
+
+                if undetermined {
+                    if is_global {
+                        self.defs.determine_global(position, exprtype.clone())
+                    } else {
+                        self.defs.determine_local(position, exprtype.clone())
+                    }
+                } else {
+                    Ok(())
+                }.unwrap();
+
+                let opcode = self.get_store_opcode(&exprtype, is_global);
                 let operands = position as u16;
                 self.code.push_opcode(opcode, span);
-                handled_result._type = expression_type;
+                handled_result._type = exprtype;
                 handled_result.index = self
                     .code
                     .push_operands(operands.to_ne_bytes().to_vec(), span);

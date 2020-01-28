@@ -164,7 +164,7 @@ pub fn is_well_formed(cont: &TypeArena, t: &Type, depth: u16) -> bool {
                 } else {
                     &cont.local[pos].dtype 
                 };
-                dtype == &TypeContext::Var(name.to_string())
+                dtype == &TypeContext::Variable(name.to_string())
             }
         }
         Existential(ref name) => {

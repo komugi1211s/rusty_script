@@ -13,74 +13,9 @@ mod expr;
 mod stmt;
 
 use expr::ExpressionHandleResult;
-use stmt::{StatementHandleResult, StatementInfo};
+use stmt::{StatementHandleResult, StatementInfo}; 
+use super::opcode::{ OpCode, BC };
 
-#[derive(Debug, Clone, Hash, PartialEq, FromPrimitive)]
-#[repr(u8)]
-pub enum OpCode {
-    // Const       = 0b00010000,
-    Const8 = 0b0001_0001,   // usize分の大きさのオペランドを取る
-    Const16 = 0b0001_0010,  // usize分の大きさのオペランドを取る
-    Const32 = 0b0001_0011,  // usize分の大きさのオペランドを取る
-    Const64 = 0b0001_0100,  // usize分の大きさのオペランドを取る
-    ConstDyn = 0b0001_0111, // usize分の大きさのオペランドを取る
-
-    // Operational = 0b00100000,
-    Return = 0b0010_0000,
-    Push = 0b0010_0010,
-    PushPtr = 0b0001_1000, // usize分の大きさのオペランドを取る
-    Pop = 0b0010_0011,
-    BlockIn = 0b0010_0110,
-    BlockOut = 0b0010_0111,
-
-    // Arithmitic = 0b00110000,
-    Add = 0b0011_0001,
-    Sub = 0b0011_0010,
-    Mul = 0b0011_0011,
-    Div = 0b0011_0100,
-    Mod = 0b0011_0101,
-    Not = 0b0011_0111,
-
-    // Logical     = 0b01000000,
-    EqEq = 0b0100_0001,
-    NotEq = 0b0100_0010,
-    LessEq = 0b0100_0011,
-    MoreEq = 0b0100_0100,
-    Less = 0b0100_0101,
-    More = 0b0100_0111,
-    And = 0b0100_1000,
-    Or = 0b0100_1001,
-    Neg = 0b0100_1010,
-
-    // Branching   = 0b01010000,
-    Jump = 0b0101_0000,
-    JumpIfFalse = 0b0101_0010,
-    Call = 0b0101_0011,
-
-    // Globals = 0b01100000,
-    GILoad = 0b0110_0001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GIStore = 0b0110_0010, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GFLoad = 0b0110_0011,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GFStore = 0b0110_0100, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GSLoad = 0b0110_0101,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GSStore = 0b0110_0110, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GBLoad = 0b0110_0111,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-    GBStore = 0b0110_1000, // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
-
-    // Locals      = 0b01110000,
-    ILoad = 0b0111_0001,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    IStore = 0b0111_0010, // index(u16 - u8 + u8) の2つのオペランドを取る
-    FLoad = 0b0111_0011,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    FStore = 0b0111_0100, // index(u16 - u8 + u8) の2つのオペランドを取る
-    SLoad = 0b0111_0101,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    SStore = 0b0111_0110, // index(u16 - u8 + u8) の2つのオペランドを取る
-    BLoad = 0b0111_0111,  // index(u16 - u8 + u8) の2つのオペランドを取る
-    BStore = 0b0111_1000, // index(u16 - u8 + u8) の2つのオペランドを取る
-
-    // System     = 0b11110000,
-    Interrupt = 0b1111_1111,
-    DebugPrint = 0b1111_0001,
-}
 
 #[cfg(target_pointer_width = "32")]
 const USIZE_LENGTH: usize = 4;
@@ -434,11 +369,9 @@ impl BytecodeGenerator {
             info: StatementInfo::Nothing,
         };
 
-        // 引数のデータをコピーして数を保存
-
         // 関数自体の戻り値をグローバルに定義しておく
         let ret_ty = astconv::annotation_to_type(&decl_info.dectype);
-        let idx = self.defs.add_global(TypeContext::Annotated(ret_ty.as_ref().unwrap().clone()), &decl_info.name);
+        let idx = self.defs.add_global(TypeContext::Solved(ret_ty.as_ref().unwrap().clone()), &decl_info.name);
 
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -549,21 +482,26 @@ impl BytecodeGenerator {
 
 
         let declared_type = if decl.is_annotated() {
-            println!("Declared Type: {:?}", &decl.dectype);
             let annotation = astconv::annotation_to_type(&decl.dectype);
             match annotation {
-                Some(x) => TypeContext::Annotated(x),
-                None => TypeContext::Var(decl.name.clone())
+                Some(x) => TypeContext::Solved(x),
+                None => {
+                    if let (true, addr) = self.defs.find_global(&decl.name) {
+                        // TODO - @DumbCode; it's possible to copy the entire struct in here.
+                        // It could happen way often and it's expensive as hell.
+                        // it might be better to keep the position of the definition instead of whole data. 
+                        
+                        self.defs.global[addr].dtype.clone()
+                    } else {
+                        panic!();
+                    }
+                }
             }
         } else {
-            if !empty_expr { 
-                if actual_type.is_null() {
-                    panic!("Inferred Null");
-                }
-                TypeContext::Solved(actual_type)
-            } else {
-                // Kind of unreachable.
+            if empty_expr {
                 self.defs.new_existential()
+            } else {
+                TypeContext::Solved(actual_type)
             }
         };
 
@@ -595,33 +533,23 @@ impl BytecodeGenerator {
             return;
         }
 
-        // FIXME @Cleanup + @DumbCode - This can be super simplified
-        if self.is_local() {
-            if decl.kind == DeclKind::Argument {
-                out.index = self.code.current_length();
-                out.info = StatementInfo::Declaration {
-                    is_initialized: empty_expr,
-                    def: (def_position, !self.is_local()),
-                };
-                return;
-            } else {
-                let opcode = self.get_store_opcode(&dectype, false);
-                let operands = def_position as u16;
-
-                self.code.push_opcode(opcode, out.span);
-                out.index = self
-                    .code
-                    .push_operands(operands.to_ne_bytes().to_vec(), out.span);
-            }
-        } else {
-            let opcode = self.get_store_opcode(&dectype, true);
-            let operands = def_position as u16;
-
-            self.code.push_opcode(opcode, out.span);
-            out.index = self
-                .code
-                .push_operands(operands.to_ne_bytes().to_vec(), out.span);
+        if decl.kind == DeclKind::Argument {
+            out.index = self.code.current_length();
+            out.info = StatementInfo::Declaration {
+                is_initialized: empty_expr,
+                def: (def_position, !self.is_local()),
+            };
+            return;
         }
+
+        let opcode = self.get_store_opcode(&dectype, self.is_local());
+        let operands = def_position as u16;
+
+        self.code.push_opcode(opcode, out.span);
+        out.index = self
+            .code
+            .push_operands(operands.to_ne_bytes().to_vec(), out.span);
+
         out.info = StatementInfo::Declaration {
             is_initialized: empty_expr,
             def: (def_position, !self.is_local()),
