@@ -178,7 +178,18 @@ impl BytecodeGenerator {
 
                     if deftype.is_solved() {
                         if deftype.inner_ref() != Some(&exprtype) {
-                            panic!("Type mismatch");
+                            err_fatal!(
+                                src: ast.file,
+                                span: span,
+                                title: "Type Mismatch",
+                                msg: "\n\
+                                    違う型の変数に値を代入しようとしました。
+                                    検知: {0} = {1}\n\
+                                ",
+                                deftype.inner_ref().unwrap(),
+                                &exprtype,
+                            );
+                            code_line!(src: ast.file, span: span, pad: 2);
                         }
                     } else {
                         undetermined = true;

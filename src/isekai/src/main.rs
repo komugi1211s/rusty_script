@@ -84,6 +84,7 @@ pub fn start(module: Module, stage: u8) -> Result<(), ()> {
         }
     )?;
 
+    dump_chunk(&chunk);
     let mut vm = VirtualMachine::new(chunk);
     vm.run();
     Ok(())

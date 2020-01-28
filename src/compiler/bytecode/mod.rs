@@ -542,7 +542,7 @@ impl BytecodeGenerator {
             return;
         }
 
-        let opcode = self.get_store_opcode(&dectype, self.is_local());
+        let opcode = self.get_store_opcode(&dectype, !self.is_local());
         let operands = def_position as u16;
 
         self.code.push_opcode(opcode, out.span);
