@@ -116,10 +116,16 @@ impl TypeArena {
     #[inline]
     pub fn find_local(&self, name: &str, current_depth: u16) -> (bool, usize) {
         // We're reversing this, so index would be length - ind
+        let length = self.local.len();
         let is_exist = self.local.iter()
                                  .rev()
                                  .position(|x| &x.name == name && x.depth <= current_depth);
-        (is_exist.is_some(), is_exist.unwrap_or(0))
+        if is_exist.is_some() {
+            let reversed_pos = is_exist.unwrap();
+            (true, length - reversed_pos - 1)
+        } else {
+            (false, 0)
+        }
     }
 
     #[inline]

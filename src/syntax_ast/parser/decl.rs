@@ -121,8 +121,6 @@ impl<'m, 't> Parser<'m, 't> {
         baseinfo: ast::DeclarationData,
     ) -> Result<ast::StmtId, ()> {
         let args = self.parse_arguments()?;
-
-        self.consume(TokenType::OpenBrace);
         let func = self.block_statement()?;
 
         let data = ast::FunctionData {
@@ -166,8 +164,18 @@ impl<'m, 't> Parser<'m, 't> {
             } else if self.is(TokenType::Comma) {
                 args.push(decl_info);
                 self.consume(TokenType::Comma)?;
-            } else {
+            } else if self.is(TokenType::CloseParen) {
+                args.push(decl_info);
                 break;
+            } else {
+                err_fatal!(
+                    src: self.ast.file,
+                    span: _span,
+                    title: "Invalid Token",
+                    msg: "`)` を想定しましたが、それ以外のトークンを検知しました。"
+                );
+                code_line!(src: self.ast.file, span: _span);
+                panic!();
             }
         }
 

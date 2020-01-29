@@ -83,7 +83,11 @@ impl CodeSpan {
 
     #[inline(always)]
     pub fn length(&self) -> usize {
-        self.end_usize() - self.start_usize()
+        if self.is_invalid() {
+            0
+        } else {
+            self.end_usize() - self.start_usize()
+        }
     }
 }
 

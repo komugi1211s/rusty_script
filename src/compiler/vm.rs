@@ -52,7 +52,7 @@ impl VirtualMachine {
             let current_operation = current_operation.unwrap();
 
             match current_operation {
-                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
+                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div | OpCode::Mod => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
 
@@ -61,6 +61,7 @@ impl VirtualMachine {
                         OpCode::Sub => a - b,
                         OpCode::Mul => a * b,
                         OpCode::Div => a / b,
+                        OpCode::Mod => a % b,
                         _ => unreachable!(),
                     });
                     self.code_ip += 1;

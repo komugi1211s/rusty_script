@@ -24,6 +24,7 @@ impl BytecodeGenerator {
         let result_type = typeck::synthesize(&mut self.defs, ast, *expr, self.depth);
 
         let expr = ast.get_expr(*expr);
+        println!("EXPR: {:?}", &expr);
         let mut handled_result = ExpressionHandleResult {
             span,
             index: 0,
@@ -45,8 +46,15 @@ impl BytecodeGenerator {
                         }
                     }
                 };
+                println!("{:?}", self.defs);
 
                 if !exists { panic!("Undefined Variable"); }
+                println!("exists: {} - position: {} - is_global: {}", exists, position, is_global);
+                if is_global {
+                    println!("Given data: {:?}", &self.defs.global[position]);
+                } else {
+                    println!("Given data: {:?}", &self.defs.local[position]);
+                }
 
                 let defined_type = match is_global {
                     true  => &self.defs.global[position].dtype,
@@ -236,6 +244,7 @@ impl BytecodeGenerator {
                         let mut arguments = arguments.clone();
                         arguments.reverse();
 
+                        // FIXME - @DumbCode: Huh??
                         let argument_end = arg_count - 1;
                         for (i, arg) in arguments.iter().enumerate() {
                             let handled_type = self.handle_expr(ast, arg, span)._type;

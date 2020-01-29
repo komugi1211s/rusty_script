@@ -1,6 +1,6 @@
 use syntax_ast::{ast::*, tokenizer::token::TokenType};
 
-use crate::typecheck::{TypeArena, TypeContext, astconv, check};
+use crate::typecheck::{Solve, TypeArena, TypeContext, astconv, check};
 use crate::vm::VirtualMachine;
 use trace::position::{CodeSpan, EMPTY_SPAN};
 use types::{Type, TypeKind};
@@ -371,7 +371,11 @@ impl BytecodeGenerator {
 
         // 関数自体の戻り値をグローバルに定義しておく
         let ret_ty = astconv::annotation_to_type(&decl_info.dectype);
-        let idx = self.defs.add_global(TypeContext::Solved(ret_ty.as_ref().unwrap().clone()), &decl_info.name);
+        let idx = if let Some(x) = ret_ty.as_ref() {
+            self.defs.add_global(TypeContext::Solved(x.clone()), &decl_info.name)
+        } else {
+            self.defs.add_global(self.defs.new_existential(), &decl_info.name)
+        }.unwrap();
 
         // 現在のコードセクションとローカルセクションを保存し、
         // コールフレームを作るためローカル変数のインデックスをリセットした上で
@@ -389,18 +393,6 @@ impl BytecodeGenerator {
             self.handle_declaration_data(ast, &mut placeholder, arg_decl_info);
         }
 
-        let func_info = FuncInfo::new(
-            &decl_info.name,
-            function_starts_at,
-            arg_count,
-            argument_types,
-            ret_ty.clone().unwrap(),
-            false,
-        );
-        self.function_table.insert(idx.unwrap(), func_info);
-
-        let mut returned_type: Option<Type> = None;
-
         // コードセクションも上記と同様に処理する
         let block = ast.get_stmt(block_id);
         if let Statement::Block(ref blk) = block {
@@ -408,18 +400,13 @@ impl BytecodeGenerator {
                 let result = self.handle_stmt(ast, statement, EMPTY_SPAN);
                 match result.info {
                     StatementInfo::Return(dtype) => {
-                        if decl_info.is_inferred() {
-                            if returned_type.is_none() {
-                                returned_type = dtype;
-                            } else if returned_type.as_ref() != dtype.as_ref() {
-                                panic!("multiple return detected but the type is inconsistent: first return and what I expected was {:?}, then later got {:?}", returned_type, dtype);
+                        if self.defs.global[idx].is_not_solved() {
+                            if dtype.is_some() {
+                                self.defs.determine_global(idx, dtype.unwrap());
                             }
                         } else {
-                            if ret_ty.as_ref() != dtype.as_ref() {
-                                panic!(
-                                    "Return type does not match! expected {:?}, got {:?}",
-                                    decl_info.dectype, dtype
-                                );
+                            if self.defs.global[idx].dtype.inner_ref() != dtype.as_ref() {
+                                panic!("Type Mismatch");
                             }
                         }
                     }
@@ -436,15 +423,26 @@ impl BytecodeGenerator {
             panic!();
         }
 
-        if returned_type.is_none() {
-            if decl_info.dectype == ParsedType::pUnknown {
+        if self.defs.global[idx].is_not_solved() {
+            if decl_info.is_inferred() {
                 self.code.write_null(EMPTY_SPAN);
                 self.code.push_opcode(OpCode::Return, EMPTY_SPAN);
+                self.defs.determine_global(idx, Type::null());
             } else {
                 panic!("Return type specified but nothing returned");
             }
         }
 
+        let func_info = FuncInfo::new(
+            &decl_info.name,
+            function_starts_at,
+            arg_count,
+            argument_types,
+            self.defs.global[idx].dtype.inner_ref().unwrap().clone(),
+            false,
+        );
+
+        self.function_table.insert(idx, func_info);
         self.leave_local();
 
         // 元のコードを復活させ、後付けでマージする
@@ -480,7 +478,6 @@ impl BytecodeGenerator {
             }
         };
 
-
         let declared_type = if decl.is_annotated() {
             let annotation = astconv::annotation_to_type(&decl.dectype);
             match annotation {
@@ -509,7 +506,6 @@ impl BytecodeGenerator {
             Some(x) => x.clone(),
             None => panic!("I expected this to be solved, but instead got: {:?}", declared_type)
         };
-
 
         // TODO: Dumb Code
         let def_position = {
@@ -610,6 +606,7 @@ impl BytecodeGenerator {
                 "Unsupported opcode for here: opcode: {:?}, is_global: {}, is_load: {}",
                 _type, is_global, is_load
             ),
+
         }
     }
 }

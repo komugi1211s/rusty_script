@@ -113,7 +113,7 @@ impl IsekaiLogger {
 
         if lines.is_oneliner() {
             let line = lines.start_usize();
-            println!("   :: {} |: {}", line, code_lines.get(line - 1).unwrap_or(&"~~~~~~~~~~~~~~"));
+            println!("   :: {} |: {}", line, code_lines.get(line.saturating_sub(1)).unwrap_or(&"~~~~~~~~~~~~~~"));
         } else {
             let (start, end) = if lines.length() > pad + 1 {
                 (lines.start_usize(), std::cmp::min(lines.end_usize() + 1, codes.line))
