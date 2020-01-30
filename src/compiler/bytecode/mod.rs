@@ -609,4 +609,18 @@ impl BytecodeGenerator {
 
         }
     }
+
+    fn fetch_declared(&self, name: &str) -> Option<(usize, bool)> {
+        let (exists_in_local, lpos) = self.defs.find_local(&name, self.depth);
+        if exists_in_local {
+            return Some((lpos, false));
+        }
+
+        let (exists_globally, gpos) = self.defs.find_global(&name);
+
+        if exists_globally {
+            return Some((gpos, true));
+        }
+        None
+    }
 }

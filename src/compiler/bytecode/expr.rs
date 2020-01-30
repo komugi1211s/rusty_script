@@ -22,45 +22,37 @@ impl BytecodeGenerator {
         span: CodeSpan,
     ) -> ExpressionHandleResult {
         let result_type = typeck::synthesize(&mut self.defs, ast, *expr, self.depth);
-
         let expr = ast.get_expr(*expr);
-        println!("EXPR: {:?}", &expr);
+
+        println!("Expr Was: {:?}", expr);
+        println!("Type Inferred: {:?}", result_type);
+
         let mut handled_result = ExpressionHandleResult {
             span,
             index: 0,
             _type: Type::default(),
-        };
-
+        }; 
         match expr {
             Expr::Variable(name) => {
-                let (exists, position, is_global) = {
-                    let (lexists, lpos) = self.defs.find_local(&name, self.depth);
-                    if lexists {
-                        (lexists, lpos, false)
-                    } else {
-                        let (gexists, gpos) = self.defs.find_global(&name);
-                        if gexists {
-                            (gexists, gpos, true)
-                        } else {
-                            (false, 0, false)
-                        }
+                let (position, is_global) = match self.fetch_declared(name) {
+                    Some(x) => x,
+                    None    => {
+                        err_fatal!(
+                            src: ast.file, span: span,
+                            title: "Undefined Variable",
+                            msg: "変数 `{}` は未定義です。", name
+                        );
+
+                        code_line!(src: ast.file, span: span, pad: 1);
+                        panic!();
                     }
                 };
-                println!("{:?}", self.defs);
 
-                if !exists { panic!("Undefined Variable"); }
-                println!("exists: {} - position: {} - is_global: {}", exists, position, is_global);
-                if is_global {
-                    println!("Given data: {:?}", &self.defs.global[position]);
+                let defined_type = if is_global {
+                    &self.defs.global[position].dtype
                 } else {
-                    println!("Given data: {:?}", &self.defs.local[position]);
-                }
-
-                let defined_type = match is_global {
-                    true  => &self.defs.global[position].dtype,
-                    false => &self.defs.local[position].dtype,
+                    &self.defs.local[position].dtype
                 }.inner_ref().expect("I expected this type to be already solved.").clone();
-                println!("defined_type: {:?}", &defined_type);
 
                 if defined_type.is_compound() {
                     self.emit_opcode_for_compoundtype(&mut handled_result, defined_type);
@@ -148,34 +140,35 @@ impl BytecodeGenerator {
             }
             Expr::Grouping(group) => self.handle_expr(ast, group, span),
             Expr::Assign(name_id, expr) => {
-                let (exists, position, is_global) = {
-                    let name = ast.get_expr(name_id.clone());
-                    if let Expr::Variable(name) = name {
-                        let (lexists, lpos) = self.defs.find_local(&name, self.depth);
-                        if lexists {
-                            (lexists, lpos, false)
-                        } else {
-                            let (gexists, gpos) = self.defs.find_global(&name);
-                            if gexists {
-                                (gexists, gpos, true)
-                            } else {
-                                (false, 0, false)
-                            }
-                        }
-                    } else {
-                        (false, 0, false)
-                    }
+                let name = ast.get_expr(name_id.clone());
+                let decl_pos = if let Expr::Variable(name) = name {
+                    self.fetch_declared(name)
+                } else {
+                    None
                 };
 
-                if !exists {
-                    panic!("Undeclared / defined variable!");
+                if decl_pos.is_none() {
+                    err_fatal!(
+                        src: ast.file,
+                        span: span,
+                        title: "Undefined assigned target",
+                        msg: "未定義の変数に代入を行おうとしました。"
+                    );
+
+                    code_line!(
+                        src: ast.file,
+                        span: span
+                    );
+
+                    panic!();
                 }
 
+                let (position, is_global) = decl_pos.unwrap();
 
                 let expression_result = self.handle_expr(ast, expr, span);
                 let exprtype = expression_result._type;
 
-                let mut undetermined = false;
+                let undetermined: bool;
                 // Close
                 {
                     let deftype = if is_global {
@@ -185,6 +178,7 @@ impl BytecodeGenerator {
                     };
 
                     if deftype.is_solved() {
+                        undetermined = false;
                         if deftype.inner_ref() != Some(&exprtype) {
                             err_fatal!(
                                 src: ast.file,
@@ -260,6 +254,18 @@ impl BytecodeGenerator {
                         .push_operands((position as u16).to_ne_bytes().to_vec(), span);
                     handled_result._type = return_type.clone();
                     handled_result.index = jump_here;
+                } else {
+                    err_fatal!(
+                        src: ast.file,
+                        span: span,
+                        title: "Invalid Function Call",
+                        msg: "関数以外を呼び出そうとしています。"
+                    );
+                    code_line!(
+                        src: ast.file,
+                        span: span
+                    );
+                    panic!();
                 }
                 handled_result
             }
