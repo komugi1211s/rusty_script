@@ -185,8 +185,8 @@ impl Operator {
         // NOTE - @Improvement: Unaryのマイナスって計算式に入る？
         use Operator::*;
         match self {
-            Add | Sub | Div | Mul | Mod => true,
-            EqEq | NotEq | LessEq | MoreEq | Less | More | Neg | Not | Ref | Deref | Wrap
+            Add | Sub | Div | Mul | Mod | Neg => true,
+            EqEq | NotEq | LessEq | MoreEq | Less | More | Not | Ref | Deref | Wrap
             | Unwrap | And | Or | Asgn => false,
         }
     }

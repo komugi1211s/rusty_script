@@ -16,12 +16,7 @@ use expr::ExpressionHandleResult;
 use stmt::{StatementHandleResult, StatementInfo}; 
 use super::opcode::{ OpCode, BC };
 
-
-#[cfg(target_pointer_width = "32")]
-const USIZE_LENGTH: usize = 4;
-
-#[cfg(target_pointer_width = "64")]
-const USIZE_LENGTH: usize = 8;
+const USIZE_LENGTH: usize = mem::size_of::<usize>();
 
 #[derive(Default, Debug)]
 pub struct Code {
@@ -229,6 +224,7 @@ fn disassemble_pad(opcode: OpCode) -> usize {
     }
 }
 
+// TODO - @Cleanup
 pub struct FuncInfo {
     pub name: String,
     pub position: usize,
@@ -307,6 +303,7 @@ pub struct ByteChunk {
     pub functions: HashMap<usize, FuncInfo>,
 }
 
+
 #[derive(Debug)]
 pub struct BytecodeGenerator {
     // Things that we return
@@ -317,7 +314,6 @@ pub struct BytecodeGenerator {
     pub defs: TypeArena,
     pub function_table: HashMap<usize, FuncInfo>,
 
-    // Keep track of block nesting
     pub last_loop_start: usize,
     depth: u16,
     pub break_call: Vec<usize>,
@@ -356,7 +352,6 @@ impl BytecodeGenerator {
         };
         Ok(bytechunk)
     }
-
 
     fn prepare_function(&mut self, ast: &ParsedResult, function: &FunctionData) {
         let decl_info = &function.it;
