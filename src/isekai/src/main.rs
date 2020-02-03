@@ -35,18 +35,22 @@ fn dump_chunk(chunk: &ByteChunk) {
 fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
     let start = Instant::now();
     let result = fun();
+    let elapsed = start.elapsed();
+    let time = {
+        elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9
+    };
 
     if result.is_ok() {
         println!(
-            " {0:<12} Finished :: \x1b[32m{1} micros\x1b[39m",
+            " {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m",
             step,
-            start.elapsed().as_micros()
+            time
         );
     } else {
         println!(
-            " {0:<12} Error :: \x1b[31m{1} micros\x1b[39m",
+            " {0:<12} Error :: \x1b[31m{1} secs\x1b[39m",
             step,
-            start.elapsed().as_micros()
+            time
         );
     }
 

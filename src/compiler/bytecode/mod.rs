@@ -14,7 +14,7 @@ mod stmt;
 
 use expr::ExpressionHandleResult;
 use stmt::{StatementHandleResult, StatementInfo}; 
-use super::opcode::{ OpCode, BC };
+use super::opcode::{ OpCode };
 
 const USIZE_LENGTH: usize = mem::size_of::<usize>();
 
@@ -165,7 +165,7 @@ pub fn disassemble(code: &Code, start: usize, max_len: usize) -> Vec<String> {
         let opbyte = code.bytes[current];
         let mut opcode = format!("{:?}", OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
         opcode.make_ascii_uppercase();
-        let padding = disassemble_pad(OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt));
+        let padding = OpCode::from_u8(opbyte).unwrap_or(OpCode::Interrupt).len();
         if 0 < padding {
             current += 1;
 
@@ -205,24 +205,6 @@ fn get_disassemble_operand(code: &Code, current: usize, padding: usize) -> Strin
     formatted.join(" ")
 }
 
-fn disassemble_pad(opcode: OpCode) -> usize {
-    match opcode {
-        OpCode::Const8 | OpCode::Const16 | OpCode::Const32 | OpCode::Const64 | OpCode::ConstDyn => {
-            USIZE_LENGTH
-        }
-
-        OpCode::JumpIfFalse | OpCode::Jump => USIZE_LENGTH,
-        OpCode::Call => 2,
-        OpCode::PushPtr | OpCode::Push => USIZE_LENGTH,
-
-        OpCode::GILoad | OpCode::GFLoad | OpCode::GSLoad | OpCode::GBLoad => 2,
-        OpCode::GIStore | OpCode::GFStore | OpCode::GSStore | OpCode::GBStore => 2,
-
-        OpCode::ILoad | OpCode::FLoad | OpCode::SLoad | OpCode::BLoad => 2,
-        OpCode::IStore | OpCode::FStore | OpCode::SStore | OpCode::BStore => 2,
-        _ => 0,
-    }
-}
 
 // TODO - @Cleanup
 pub struct FuncInfo {

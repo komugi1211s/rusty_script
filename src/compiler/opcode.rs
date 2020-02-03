@@ -1,6 +1,6 @@
 use num_traits::FromPrimitive;
 
-#[derive(Debug, Clone, Hash, PartialEq, FromPrimitive)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, FromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
     // Const       = 0b00010000,
@@ -67,41 +67,42 @@ pub enum OpCode {
     DebugPrint = 0b1111_0001,
 }
 
-pub struct BC {
-    code: Option<OpCode>,
-    oper: Option<usize>,
-    addr: Option<usize>,
-}
+impl OpCode {
+    pub fn len(&self) -> usize {
+        match self {
+            OpCode::Const8 
+            | OpCode::Const16 
+            | OpCode::Const32 
+            | OpCode::Const64 
+            | OpCode::ConstDyn => std::mem::size_of::<usize>(),
 
-impl BC {
-    pub fn simple(code: OpCode) -> Self {
-        Self {
-            code: Some(code),
-            oper: None,
-            addr: None,
+            | OpCode::JumpIfFalse
+            | OpCode::Jump
+            | OpCode::PushPtr 
+            | OpCode::Push => std::mem::size_of::<usize>(),
+
+            OpCode::GILoad  
+            | OpCode::GFLoad 
+            | OpCode::GSLoad 
+            | OpCode::GBLoad => 2,
+
+            OpCode::GIStore 
+            | OpCode::GFStore 
+            | OpCode::GSStore 
+            | OpCode::GBStore => 2,
+
+            OpCode::ILoad 
+            | OpCode::FLoad 
+            | OpCode::SLoad 
+            | OpCode::BLoad => 2,
+
+            OpCode::IStore 
+            | OpCode::FStore 
+            | OpCode::SStore 
+            | OpCode::BStore => 2,
+
+            OpCode::Call => 2,
+            _ => 0,
         }
-    }
-
-    pub fn new() -> Self {
-        Self {
-            code: None,
-            oper: None,
-            addr: None,
-        }
-    }
-
-    pub fn code(&mut self, code: OpCode) -> &mut Self {
-        self.code = Some(code);
-        self
-    }
-
-    pub fn oper(&mut self, oper: usize) -> &mut Self {
-        self.oper = Some(oper);
-        self
-    }
-
-    pub fn addr(&mut self, addr: usize) -> &mut Self {
-        self.addr = Some(addr);
-        self
     }
 }
