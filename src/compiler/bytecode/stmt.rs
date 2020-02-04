@@ -155,7 +155,7 @@ impl BytecodeGenerator {
         self.handle_expr(ast, expr, span);
 
         // ジャンプ用のインデックスを作っておく
-        let jump_opcode_index = self.code.push_opcode(OpCode::JumpIfFalse, span);
+        let jump_opcode_index = self.code.push_opcode(OpCode::JNT, span);
         self.code
             .push_operands(usize::max_value().to_ne_bytes().to_vec(), span);
 
@@ -231,9 +231,7 @@ impl BytecodeGenerator {
 
         let before_expr = self.code.current_length();
         self.handle_expr(ast, expr, span);
-        self.code.push_opcode(OpCode::Not, span);
-
-        self.code.push_opcode(OpCode::JumpIfFalse, span);
+        self.code.push_opcode(OpCode::JT, span);
         let end_of_loop = self
             .code
             .push_operands(after_jump_conditional.to_ne_bytes().to_vec(), span);

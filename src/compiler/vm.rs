@@ -114,56 +114,59 @@ impl VirtualMachine {
                     self.code_ip += 1;
                 }
                 OpCode::Const8 => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.chunk.constants.read_data_8(index);
+                    let (const_index, after_consume): (usize, usize) = self.consume_const_index(self.code_ip);
+                    let (value, _type) = self.chunk.constants.read_data_8(const_index);
                     self.stack.push((value != 0).into());
-                    self.code_ip = new_end;
+                    self.code_ip = after_consume;
                 }
                 OpCode::PushPtr => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    if index == 0
+                    let (const_index, after_consume): (usize, usize) = self.consume_const_index(self.code_ip);
+                    if const_index == 0
                     // Null Pointer
                     {
                         self.stack.push(Value::Null);
                     } else {
-                        self.stack.push(Value::Pointer(index));
+                        self.stack.push(Value::Pointer(const_index));
                     }
-                    self.code_ip = new_end;
+                    self.code_ip = after_consume;
                 }
                 OpCode::Const64 => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.chunk.constants.read_data_64(index);
+                    let (const_index, after_consume): (usize, usize) = self.consume_const_index(self.code_ip);
+                    let (value, _type) = self.chunk.constants.read_data_64(const_index);
                     // GET_TYPE
                     self.stack.push(match _type.kind {
                         TypeKind::Int => i64::from_ne_bytes(value).into(),
                         TypeKind::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
                         _ => unreachable!(),
                     });
-                    self.code_ip = new_end;
+                    self.code_ip = after_consume;
                 }
                 OpCode::ConstDyn => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    let (value, _type) = self.chunk.constants.read_data_dyn(index);
+                    let (const_index, after_consume): (usize, usize) = self.consume_const_index(self.code_ip);
+                    let (value, _type) = self.chunk.constants.read_data_dyn(const_index);
 
                     self.stack.push(match _type.kind {
                         TypeKind::Str => Value::Str(String::from_utf8(value).unwrap()),
                         _ => unreachable!(),
                     });
-                    self.code_ip = new_end;
+                    self.code_ip = after_consume;
                 }
-                OpCode::JumpIfFalse => {
-                    let (index, new_end): (usize, usize) = self.consume_const_index(self.code_ip);
+                OpCode::JT | OpCode::JNT => {
+                    let (const_index, after_consume): (usize, usize) = self.consume_const_index(self.code_ip);
                     let test_value = self.stack.pop().unwrap();
 
-                    self.code_ip = if test_value.is_truthy() {
-                        new_end
-                    } else {
-                        index
+                    self.code_ip = match (current_operation, test_value.is_truthy()) {
+                        (OpCode::JT, true) => const_index,
+                        (OpCode::JNT, false) => const_index,
+
+                        (OpCode::JT, false) => after_consume,
+                        (OpCode::JNT, true) => after_consume,
+                        (_, _) => unreachable!(),
                     };
                 }
                 OpCode::Jump => {
-                    let (index, _new_end): (usize, usize) = self.consume_const_index(self.code_ip);
-                    self.code_ip = index;
+                    let (const_index, _): (usize, usize) = self.consume_const_index(self.code_ip);
+                    self.code_ip = const_index;
                 }
                 OpCode::BlockIn => {
                     stack_frame.push(self.stack_pointer);
@@ -270,16 +273,16 @@ impl VirtualMachine {
     pub fn consume_const_index(
         &mut self,
         start: usize,
-    ) -> (/* result */ usize, /* new_end */ usize) {
+    ) -> (/* const_index */ usize, /* after_consume */ usize) {
         let start = start + 1;
-        let mut new_end = start;
-        let mut result: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
+        let mut after_consume = start;
+        let mut consumed_operand: [u8; USIZE_LENGTH] = [0; USIZE_LENGTH];
         for i in 0..USIZE_LENGTH {
-            result[i] = self.chunk.code.bytes[start + i];
-            new_end += 1;
+            consumed_operand[i] = self.chunk.code.bytes[start + i];
+            after_consume += 1;
         }
 
-        let result: usize = usize::from_ne_bytes(result);
-        (result, new_end)
+        let consumed_operand: usize = usize::from_ne_bytes(consumed_operand);
+        (consumed_operand, after_consume)
     }
 }

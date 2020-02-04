@@ -63,8 +63,7 @@ pub struct Context {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BranchMode {
     Empty,
-    If,
-    Else,
+    IfElse,
     While,
     For,
     Finalized,
@@ -73,23 +72,50 @@ pub enum BranchMode {
 pub struct ConditionalBranch {
     mode: BranchMode,
     code: Vec<Instruction>,
-    start_address: usize,
+    finalized: bool,
+    start_byte_offset: usize,
     true_route_pos: usize,
     false_route_pos: usize,
 }
 
 impl ConditionalBranch {
+    fn new(addr: usize) -> Self {
+        Self {
+            mode: BranchMode::Empty,
+            code: Vec::new(),
+            finalized: false,
+            start_byte_offset: addr,
+            true_route_pos: 0,
+            false_route_pos: 0,
+        }
+    }
+
     fn mode_if(&mut self) -> Result<(), ()> {
-        self.true_route_pos = self.code.len();
-        self.emit_op(OpCode::JumpIfFalse);
-        self.set_mode(BranchMode::If)
+        if self.mode != BranchMode::Empty {
+            return Err(())
+        }
+
+        let entered_if_mode = self.true_route_pos != 0;
+        let entered_else_mode = self.false_route_pos != 0;
+        if entered_if_mode || entered_else_mode {
+            return Err(());
+        }
+
+        self.true_route_pos = self.inst_len();
+        self.emit_op(OpCode::JNT);
+        self.set_mode(BranchMode::IfElse)
     }
 
     fn mode_else(&mut self) -> Result<(), ()> {
-        if self.mode == BranchMode::If {
+        let already_entered_else_mode = self.false_route_pos != 0;
+        if already_entered_else_mode {
+            return Err(());
+        }
+
+        if self.mode == BranchMode::IfElse {
+            self.false_route_pos = self.inst_len();
             self.emit_op(OpCode::Jump);
-            self.false_route_pos = self.code.len();
-            self.set_mode(BranchMode::Else)
+            Ok(())
         } else {
             Err(())
         }
@@ -123,8 +149,12 @@ impl CodeGen for ConditionalBranch {
         self.code.clone().into_iter().flatten().collect()
     }
 
-    fn len(&self) -> usize {
+    fn byte_len(&self) -> usize {
         self.code.iter().map(|&x| x.code.len()).sum()
+    }
+
+    fn inst_len(&self) -> usize {
+        self.code.len()
     }
 }
 
@@ -139,7 +169,7 @@ impl Branch for ConditionalBranch {
     }
 
     fn is_finalized(&self) -> bool {
-        self.mode == BranchMode::Finalized
+        self.finalized
     }
 
     fn finalize(&mut self) -> Result<(), ()> {
@@ -147,26 +177,47 @@ impl Branch for ConditionalBranch {
             return Err(());
         }
 
+        // Adjust and patch addresses.
         for inst in self.code.iter_mut() {
             if let Some(ref mut x) = inst.operand {
                 let v = usize::from_ne_bytes(*x);
-                *x = (v + self.start_address).to_ne_bytes();
+                *x = (v + self.start_byte_offset).to_ne_bytes();
             }
         }
 
-        self.set_mode(BranchMode::Finalized)
+        match self.mode {
+            BranchMode::IfElse => {
+                let else_is_empty = self.false_route_pos == 0;
+                let bytelength_of_if: usize = self.code.as_slice()[self.true_route_pos .. self.false_route_pos].iter().map(|&x| x.code.len()).sum();
+                let bytelength_of_else: usize = self.code.as_slice()[self.false_route_pos .. self.inst_len()-1].iter().map(|&x| x.code.len()).sum();
+
+                // patches where to jump if expression is true.
+                {
+                    let bytelen = self.byte_len();
+                    let falselen = self.false_route_pos;
+                    match self.code.get_mut(self.true_route_pos) {
+                        Some(ref mut if_pos_inst) => {
+                            if else_is_empty {
+                                if_pos_inst.operand = Some(bytelen.to_ne_bytes());
+                            } else {
+                                if_pos_inst.operand = Some(falselen.to_ne_bytes());
+                            }
+                        },
+                        None => return Err(()),
+                    }
+                    // 
+                }
+            }
+            _ => (),
+        }
+        self.finalized = true;
+        Err(())
     }
 }
 
 impl Branchable for ConditionalBranch {
     fn new_branch(&self) -> ConditionalBranch {
-        ConditionalBranch {
-            mode: BranchMode::Empty,
-            code: Vec::new(),
-            start_address: self.len() + self.start_address,
-            true_route_pos  : 0,
-            false_route_pos : 0,
-        }
+        Self::new(self.byte_len() + self.start_byte_offset)
     }
 
     fn accept(&mut self, branch: impl Branch) -> Result<(), ()> {
@@ -190,7 +241,8 @@ pub trait Branch: CodeGen {
 }
 
 pub trait CodeGen {
-    fn len(&self) -> usize;
+    fn inst_len(&self) -> usize;
+    fn byte_len(&self) -> usize;
     fn eject(&self) -> Vec<Instruction>;
     fn compile(&self) -> Vec<u8>;
 
@@ -264,20 +316,18 @@ impl CodeGen for Context {
         self.codes.clone().into_iter().flatten().collect()
     }
 
-    fn len(&self) -> usize {
+    fn byte_len(&self) -> usize {
         self.codes.iter().map(|&x| x.code.len()).sum()
+    }
+
+    fn inst_len(&self) -> usize {
+        self.codes.len()
     }
 }
 
 impl Branchable for Context {
     fn new_branch(&self) -> ConditionalBranch {
-        ConditionalBranch {
-            mode: BranchMode::Empty,
-            code: Vec::new(),
-            start_address: self.len(),
-            true_route_pos  : 0,
-            false_route_pos : 0,
-        }
+        ConditionalBranch::new(self.byte_len())
     }
 
     fn accept(&mut self, branch: impl Branch) -> Result<(), ()> {

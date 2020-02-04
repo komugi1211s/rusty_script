@@ -39,8 +39,9 @@ pub enum OpCode {
 
     // Branching   = 0b01010000,
     Jump = 0b0101_0000,
-    JumpIfFalse = 0b0101_0010,
-    Call = 0b0101_0011,
+    JT   = 0b0101_0010, // jumps if previous expr is true.
+    JNT  = 0b0101_0011, // jumps if previous expr is false.
+    Call = 0b0101_0100,
 
     // Globals = 0b01100000,
     GILoad =  0b0110_0001,  // 名前のu16(1) 名前のu16(2) の2つのオペランドを取る
@@ -76,7 +77,8 @@ impl OpCode {
             | OpCode::Const64 
             | OpCode::ConstDyn => std::mem::size_of::<usize>(),
 
-            | OpCode::JumpIfFalse
+            | OpCode::JT
+            | OpCode::JNT
             | OpCode::Jump
             | OpCode::PushPtr 
             | OpCode::Push => std::mem::size_of::<usize>(),
