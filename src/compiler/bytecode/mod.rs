@@ -1,22 +1,29 @@
 
 use trace::SourceFile;
-use syntax_ast::ast::{ ASTree, Statement, Expr, StmtId, ExprId, Literal, LiteralKind };
+use syntax_ast::ast::{ ASTree, AstNode, Statement, Expr, StmtId, ExprId, Literal, LiteralKind };
 
 use super::ir::IRCode;
 use super::context::{ CodeGen, BranchMode, ConditionalBranch, Context };
+use super::typecheck::TypeArena;
 
 pub struct CompiledCode {
 }
 
-struct GeneratorState {
-}
-
 pub fn generate_bytecode(module: &SourceFile, ast: &ASTree) -> Result<CompiledCode, ()> {
+    let mut ctx = Context::new();
+    let mut defn = TypeArena::new();
+
+    for node in ast.ast.iter() {
+        traverse_statement(&mut ctx, &mut defn, ast, node.stmt_id);
+    }
+
     Ok(CompiledCode{})
 }
 
+
 fn traverse_statement(
     ctx: &mut impl CodeGen,
+    defn: &mut TypeArena,
     ast: &ASTree,
     statement_id: StmtId,
 ) {
