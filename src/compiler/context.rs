@@ -1,62 +1,8 @@
-use super::opcode::{ OpCode };
+use super::ir::{ IRCode, print_ir_vec };
 use syntax_ast::ast::{ Operator };
 
-#[derive(Debug, Clone, Copy)]
-pub struct Instruction {
-    code: OpCode,
-    operand: Option<[u8; 8]>,
-    _c: u8,
-}
-
-impl Instruction {
-    fn single(code: OpCode) -> Self {
-        Self { 
-            code,
-            operand: None,
-            _c: 0,
-        }
-    }
-
-    fn operand(code: OpCode, oper: usize) -> Self {
-        Self {
-            code,
-            operand: Some(oper.to_ne_bytes()),
-            _c: 0,
-        }
-    }
-}
-
-impl From<OpCode> for Instruction {
-     fn from(x: OpCode) -> Instruction {
-     	Instruction::single(x)
-     }
-}
-
-impl Iterator for Instruction {
-    type Item=u8;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self._c == 0 {
-            self._c += 1;
-            Some(self.code as u8)
-        } else {
-            match self.operand {
-                None => None,
-                Some(addr) => {
-                    if self._c > 9 {
-                        None
-                    } else {
-                        let elem = addr[self._c as usize];
-                        self._c += 1;
-                        Some(elem)
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub struct Context {
-    codes: Vec<Instruction>,
+    codes: Vec<IRCode>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -80,22 +26,22 @@ pub struct ConditionalBranch {
 
     // used when "finalize" gets called.
     // contains offset from parent branch / context.
-    start_byte_offset: usize,
+    offset: usize,
 
     // used when finalized.
     // other true_code / false_code vector must get
     // emptied when it's finalized.
-    finalized_code: Vec<Instruction>,
+    finalized_code: Vec<IRCode>,
 
     // used when branch_mode is "If" "While" "For".
     // everything that's evaluated when initialized expression is true
     // goes into this vector.
-    true_code : Vec<Instruction>,
+    true_code : Vec<IRCode>,
 
     // used when branch_mode is "Else".
     // everything that's evaluated when initialized expression is false
     // goes into this vector.
-    false_code: Vec<Instruction>,
+    false_code: Vec<IRCode>,
 
     // used when branch_mode is While / For.
     break_call    : Vec<usize>,
@@ -106,7 +52,7 @@ pub struct ConditionalBranch {
 impl ConditionalBranch {
     fn new(addr: usize) -> Self {
         Self {
-            start_byte_offset: addr,
+            offset: addr,
             .. Default::default()
         }
     }
@@ -149,7 +95,7 @@ impl ConditionalBranch {
 
 impl CodeGen for ConditionalBranch {
     fn new_branch(&self) -> ConditionalBranch {
-        Self::new(self.byte_len() + self.start_byte_offset)
+        Self::new(self.len() + self.offset)
     }
 
     fn accept(&mut self, branch: impl Branch) -> Result<(), ()> {
@@ -164,69 +110,26 @@ impl CodeGen for ConditionalBranch {
         Ok(())
     }
 
-    fn emit_instruction(&mut self, inst: Instruction) -> Result<(), ()> {
+    fn emit_op(&mut self, code: IRCode) -> Result<(), ()> {
         if self.is_finalized() || self.mode == BranchMode::Empty {
             Err(())
         } else {
             if self.mode == BranchMode::Else {
-                self.false_code.push(inst);
+                self.false_code.push(code);
             } else {
-                self.true_code.push(inst);
+                self.true_code.push(code);
             }
             Ok(())
         }
     }
 
-    fn emit_simple(&mut self, code: OpCode) -> Result<(), ()> {
-        self.emit_instruction(code.into())
-    }
-
-    fn emit_operand(&mut self, code: OpCode, addr: usize) -> Result<(), ()> {
-        self.emit_instruction(Instruction::operand(code, addr))
-    }
-
-    fn eject(&self) -> Vec<Instruction> {
+    fn eject(&self) -> Vec<IRCode> {
         self.finalized_code.clone()
     }
 
-    fn compile(&self) -> Vec<u8> {
-        self.finalized_code.clone().into_iter().flatten().collect()
-    }
-
-    fn byte_len(&self) -> usize {
-        // Byte length is calculated as follows:
-        //
-        // Code is "if(expr) {}" 
-        //      - 9(1 jump opcode + 8 operand, JT jump) + true_code bytelength.
-
-        // Code is "if(expr) {} else {}" 
-        //      - 9 (1 jump opcode + 8 operand, conditional JT jump) 
-        //      + true_code bytelength
-        //      + 9 (1 jump opcode + 8 operand, end of if)
-        //      + false_code bytelength
-        
-        //  Code is "while(expr) {}"
-        //      - 9 (1 jump opcode + 8 operand, conditional JNT jump)
-        //      + true_code bytelength
-        //      + 9 (1 jump opcode + 8 operand, re-evaluate conditional)
-        
-        //  Code is "while(expr) {} else {}"
-        //      - 9 (1 jump opcode + 8 operand, conditional JNT jump)
-        //      + true_code bytelength
-        //      + 9 (1 jump opcode + 8 operand, re-evaluate conditional)
-        //      + false_code bytelength
-
-        // padding for jump opcode + usize operand.
-        let JUMP_PADDING: usize = 9;
-        let true_path_length: usize = self.true_code.iter().map(|&x| x.code.len()).sum();
-        let false_path_length: usize = self.false_code.iter().map(|&x| x.code.len()).sum();
-
-        match (self.prev_mode, self.mode) {
-            (_, If)       => JUMP_PADDING + true_path_length,
-            (If, Else)    => JUMP_PADDING + true_path_length + JUMP_PADDING + false_path_length,
-            (_, While)    => JUMP_PADDING + true_path_length + JUMP_PADDING,
-            (While, Else) => JUMP_PADDING + true_path_length + JUMP_PADDING + false_path_length, 
-        }
+    fn len(&self) -> usize {
+        /* Depends on the mode!! */
+        unimplemented!()
     }
 }
 
@@ -250,33 +153,46 @@ impl Branch for ConditionalBranch {
             return Err(());
         }
 
-        // Adjust and patch addresses.
-        // FIXME - @Bug: is it really required ??????????????
-        // what you patch??? is there something that is relative to an address??
-        // Is there something that needs to be absolute???
-        //
-        // 
-        for inst in self.true_code.iter_mut() {
-            if let Some(ref mut x) = inst.operand {
-                let v = usize::from_ne_bytes(*x);
-                *x = (v + self.start_byte_offset).to_ne_bytes();
-            }
-        }
-
-        for inst in self.false_code.iter_mut() {
-            if let Some(ref mut x) = inst.operand {
-                let v = usize::from_ne_bytes(*x);
-                *x = (v + self.start_byte_offset).to_ne_bytes();
-            }
-        }
-
         use BranchMode::*;
         match (self.prev_mode, self.mode) {
-            (_,  If)       => { /* If Code goes here. */ },
-            (If, Else)     => { /* If Else Code goes here. */ },
+            (_,  If)       => { 
+                assert!(self.false_code.len() == 0);
+                
+                let jump_padding = 1;
+                let length_true  = (self.offset + self.true_code.len()) as u32;
+                self.finalized_code.push(IRCode::JNT(length_true + jump_padding));
+                self.finalized_code.extend(self.true_code.drain(..));
+            },
+            (If, Else)     => { 
+                let length_true  = (self.offset + self.true_code.len()) as u32;
+                let length_false = (self.offset + self.false_code.len()) as u32;
 
-            (_, While)     => { /* While Code goes here. */ },
-            (While, Else)  => { /* While Else Code goes here. */ },
+                let jump_padding = 2;
+                self.finalized_code.push(IRCode::JNT(length_true + jump_padding));
+                self.finalized_code.extend(self.true_code.drain(..));
+                self.finalized_code.push(IRCode::Jump(length_true + length_false + jump_padding));
+
+                self.finalized_code.extend(self.false_code.drain(..));
+            },
+
+            (_, While)     => { 
+                assert!(self.false_code.len() == 0);
+                let length_true = (self.offset + self.true_code.len()) as u32;
+
+                self.finalized_code.push(IRCode::JNT(length_true + 1));
+                self.finalized_code.extend(self.true_code.drain(..));
+                self.finalized_code.push(IRCode::Jump(self.offset as u32));
+            },
+            (While, Else)  => { 
+                let length_true  = (self.offset + self.true_code.len()) as u32;
+                let length_false = (self.offset + self.false_code.len()) as u32;
+
+                self.finalized_code.push(IRCode::JNT(length_true + 1));
+                self.finalized_code.extend(self.true_code.drain(..));
+                self.finalized_code.push(IRCode::Jump(self.offset as u32));
+
+                self.finalized_code.extend(self.false_code.drain(..));
+            },
 
             // For is unsupported.
             /*
@@ -286,7 +202,7 @@ impl Branch for ConditionalBranch {
             _ => (),
         }
         self.finalized = true;
-        Err(())
+        Ok(())
     }
 }
 
@@ -298,32 +214,29 @@ pub trait Branch: CodeGen {
 }
 
 pub trait CodeGen {
-    fn byte_len(&self) -> usize;
-    fn eject(&self) -> Vec<Instruction>;
-    fn compile(&self) -> Vec<u8>;
+    fn eject(&self) -> Vec<IRCode>;
+    fn len(&self) -> usize;
 
     fn new_branch(&self) -> ConditionalBranch;
     fn accept(&mut self, _: impl Branch) -> Result<(), ()>;
 
-    fn emit_simple(&mut self, _: OpCode) -> Result<(), ()>;
-    fn emit_operand(&mut self, _: OpCode, _: usize) -> Result<(), ()>;
-    fn emit_instruction(&mut self, _: Instruction) -> Result<(), ()>;
+    fn emit_op(&mut self, _: IRCode) -> Result<(), ()>;
     fn emit_arithmetic(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_arithmetic() {
             return Err(());
         }
 
         let code = match oper {
-            Operator::Add => OpCode::Add,
-            Operator::Sub => OpCode::Sub, 
-            Operator::Div => OpCode::Div, 
-            Operator::Mul => OpCode::Mul,
-            Operator::Mod => OpCode::Mod, 
-            Operator::Neg => OpCode::Neg,
+            Operator::Add => IRCode::Add,
+            Operator::Sub => IRCode::Sub, 
+            Operator::Div => IRCode::Div, 
+            Operator::Mul => IRCode::Mul,
+            Operator::Mod => IRCode::Mod, 
+            Operator::Neg => IRCode::Neg,
             _      => unreachable!(),
         };
 
-        self.emit_simple(code)
+        self.emit_op(code)
     }
     fn emit_comparison(&mut self, oper: Operator) -> Result<(), ()> { 
         if !oper.is_comparison() {
@@ -331,35 +244,35 @@ pub trait CodeGen {
         }
 
         let code = match oper {
-            Operator::EqEq   => OpCode::EqEq,
-            Operator::NotEq  => OpCode::NotEq,
-            Operator::LessEq => OpCode::LessEq, 
-            Operator::MoreEq => OpCode::MoreEq, 
-            Operator::Less   => OpCode::Less, 
-            Operator::More   => OpCode::More,
+            Operator::EqEq   => IRCode::EqEq,
+            Operator::NotEq  => IRCode::NotEq,
+            Operator::LessEq => IRCode::LessEq, 
+            Operator::MoreEq => IRCode::MoreEq, 
+            Operator::Less   => IRCode::Less, 
+            Operator::More   => IRCode::More,
             _ => unreachable!(),
         };
 
-        self.emit_simple(code)
+        self.emit_op(code)
     }
     fn emit_logical(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_logic() {
             return Err(());
         }
         let code = match oper {
-            Operator::And => OpCode::And,
-            Operator::Or  => OpCode::Or,
-            Operator::Not => OpCode::Not,
+            Operator::And => IRCode::And,
+            Operator::Or  => IRCode::Or,
+            Operator::Not => IRCode::Not,
             _ => unreachable!(),
         };
 
-        self.emit_simple(code)
+        self.emit_op(code)
     }
 }
 
 impl CodeGen for Context {
     fn new_branch(&self) -> ConditionalBranch {
-        ConditionalBranch::new(self.byte_len())
+        ConditionalBranch::new(self.len())
     }
 
     fn accept(&mut self, branch: impl Branch) -> Result<(), ()> {
@@ -370,31 +283,18 @@ impl CodeGen for Context {
         self.codes.extend(branch.eject());
         Ok(())
     }
-    
-    fn emit_instruction(&mut self, inst: Instruction) -> Result<(), ()> {
-        self.codes.push(inst);
+
+    fn emit_op(&mut self, code: IRCode) -> Result<(), ()> {
+        self.codes.push(code);
         Ok(())
     }
 
-    fn emit_simple(&mut self, code: OpCode) -> Result<(), ()> {
-        self.codes.push(code.into());
-        Ok(())
-    }
-
-    fn emit_operand(&mut self, code: OpCode, addr: usize) -> Result<(), ()> {
-        self.emit_instruction(Instruction::operand(code, addr))
-    }
-
-    fn eject(&self) -> Vec<Instruction> {
+    fn eject(&self) -> Vec<IRCode> {
         self.codes.clone()
     }
 
-    fn compile(&self) -> Vec<u8> {
-        self.codes.clone().into_iter().flatten().collect()
-    }
-
-    fn byte_len(&self) -> usize {
-        self.codes.iter().map(|&x| x.code.len()).sum()
+    fn len(&self) -> usize {
+        self.codes.len()
     }
 }
 
@@ -412,26 +312,37 @@ impl Context {
 mod test {
     use super::*;
     use crate::vm::VirtualMachine;
+
     #[test]
     fn context_binary() {
         let mut ctx = Context::new();
 
-        ctx.emit_operand(OpCode::ILoad, 0);
-        ctx.emit_operand(OpCode::ILoad, 1);
-        ctx.emit_simple(OpCode::Add);
-        ctx.emit_simple(OpCode::DebugPrint);
-
-        assert_eq!(vec![113, 113, 49], ctx.compile());
+        ctx.emit_op(IRCode::ILoad(0));
+        ctx.emit_op(IRCode::ILoad(1));
+        ctx.emit_op(IRCode::Add);
+        ctx.emit_op(IRCode::DebugPrint);
     }
 
+    #[test]
     fn context_branch_binary() {
         let mut ctx = Context::new();
         let mut branch = ctx.new_branch();
 
         branch.mode_if();
+            branch.emit_op(IRCode::ILoad(0));
+            branch.emit_op(IRCode::ILoad(1));
+            branch.emit_op(IRCode::Add);
+            branch.emit_op(IRCode::DebugPrint);
         branch.mode_else();
+            branch.emit_op(IRCode::ILoad(0));
+            branch.emit_op(IRCode::ILoad(1));
+            branch.emit_op(IRCode::Add);
+            branch.emit_op(IRCode::DebugPrint);
         branch.finalize();
 
         ctx.accept(branch);
+
+        let vec = ctx.eject();
+        print_ir_vec(&vec);
     }
 }

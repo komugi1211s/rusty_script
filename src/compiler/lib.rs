@@ -1,9 +1,5 @@
 #[macro_use]
 extern crate bitflags;
-#[macro_use]
-extern crate num_traits;
-#[macro_use]
-extern crate num_derive;
 
 // pub mod builtin_functions;
 // pub mod bytecode;
@@ -19,5 +15,5 @@ extern crate num_derive;
 //
 pub mod context;
 pub mod bytecode;
-pub mod opcode;
+pub mod ir;
 pub mod vm;

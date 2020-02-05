@@ -212,7 +212,7 @@ impl Operator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
-    pub tok: Token,
+    pub tok : Token,
     pub kind: LiteralKind,
 }
 

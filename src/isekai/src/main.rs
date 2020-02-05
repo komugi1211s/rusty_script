@@ -72,49 +72,6 @@ impl TimeCount {
     }
 }
 
-fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
-    let start = Instant::now();
-    let result = fun();
-    let elapsed = start.elapsed();
-    let time = {
-        elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9
-    };
-
-    if result.is_ok() {
-        println!(
-            " {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m",
-            step,
-            time
-        );
-    } else {
-        println!(
-            " {0:<12} Error :: \x1b[31m{1} secs\x1b[39m",
-            step,
-            time
-        );
-    }
-
-    result
-}
-
-/*
-fn run_module(
-    core: SourceFile,
-    stage: Stage
-) -> Result<(), ()> {
-    let mut tokenizer  = Tokenizer::new();
-    let mut parser     = Parser::new();
-    let mut codegen    = BytecodeGenerator::new();
-    let mut vmachine   = VirtualMachine::new();
-
-
-    let tokens = tokenizer.from_module(core).scan().unwrap();
-    let parsed = parser.tokens(tokens).parse().unwrap();
-    let chunk = codegen.traverse_ast(parsed).unwrap();
-}
-
-*/
-
 pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let mut timer = TimeCount { messages: RefCell::new(Vec::with_capacity(4)) };
 
@@ -123,8 +80,9 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
         || {
             let tokens  = timer.time("Tokenizer", || Tokenizer::new().scan(&module))?;
             let parsed  = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
+            println!("{:?}", parsed);
             let binary  = timer.time("CodeGen",   || bytecode::generate_bytecode(&module, &parsed))?;
-            Ok(())
+            Ok(binary)
         }
     )?;
 
