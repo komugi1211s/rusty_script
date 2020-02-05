@@ -1,14 +1,14 @@
 use crate::tokenizer::token::Token;
 
 use trace::position::CodeSpan;
-use trace::Module;
+use trace::SourceFile;
 
 pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
 pub struct ASTree<'m> {
-    pub file: &'m Module,
+    pub file: &'m SourceFile,
     pub ast: Vec<AstNode>,
     pub stmt: Vec<Statement>,
     pub expr: Vec<Expr>,
@@ -16,7 +16,7 @@ pub struct ASTree<'m> {
 }
 
 impl<'m> ASTree<'m> {
-    pub fn new(m: &'m Module) -> Self {
+    pub fn new(m: &'m SourceFile) -> Self {
         Self {
             file: m,
             ast      : vec![],

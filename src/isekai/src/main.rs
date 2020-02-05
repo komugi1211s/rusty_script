@@ -11,7 +11,7 @@ use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
 use compiler::{ bytecode, vm };
 
-use trace::{ error, err_internal, source::Module };
+use trace::{ error, err_internal, source::SourceFile };
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -99,7 +99,7 @@ fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U>
 
 /*
 fn run_module(
-    core: Module,
+    core: SourceFile,
     stage: Stage
 ) -> Result<(), ()> {
     let mut tokenizer  = Tokenizer::new();
@@ -115,7 +115,7 @@ fn run_module(
 
 */
 
-pub fn start(module: Module, stage: u8) -> Result<(), ()> {
+pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let mut timer = TimeCount { messages: RefCell::new(Vec::with_capacity(4)) };
 
     let binary = timer.time(
@@ -153,7 +153,7 @@ fn interpret() -> bool {
                     if l == "!exit" {
                         break;
                     }
-                    let mods = Module::repl(l);
+                    let mods = SourceFile::repl(l);
                     start(mods, 0);
                 }
             }
@@ -165,7 +165,7 @@ fn interpret() -> bool {
 }
 
 fn run_file(path: &str, stage: Option<&String>) -> bool {
-    let module = match Module::open(path) {
+    let module = match SourceFile::open(path) {
         Ok(n) => n,
         Err(_) => {
             err_internal!("ファイルが読み込めませんでした。");

@@ -2,7 +2,7 @@
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{ position::CodeSpan, Error, source::Module };
+use trace::{ position::CodeSpan, Error, source::SourceFile };
 use trace::{ err_fatal, err_internal, code_line };
 
 pub struct Tokenizer {
@@ -30,7 +30,7 @@ impl Tokenizer {
         }
     }
 
-    pub fn scan(&mut self, modu: &Module) -> Result<Vec<Token>, ()> {
+    pub fn scan(&mut self, modu: &SourceFile) -> Result<Vec<Token>, ()> {
         self.source.extend(modu.code.chars());
         while !self.is_at_end() {
             self.start = self.current;
@@ -43,7 +43,7 @@ impl Tokenizer {
         Ok(self.tokens.to_owned())
     }
 
-    fn scan_next_token(&mut self, module: &Module) -> TResult {
+    fn scan_next_token(&mut self, module: &SourceFile) -> TResult {
         let c: char = self.advance();
         match c {
             '(' => self.add_simple(TokenType::OpenParen),
@@ -156,7 +156,7 @@ impl Tokenizer {
         Ok(())
     }
 
-    fn add_string(&mut self, module: &Module) -> TResult {
+    fn add_string(&mut self, module: &SourceFile) -> TResult {
         let starting_line = self.line;
 
         while !self.is_at_end() && self.peek() != '"' {
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn tokenizer_arithmetic() {
-        let code = Module::repl("10 + 2 - 5.2 * 10 / 12 % 9");
+        let code = SourceFile::repl("10 + 2 - 5.2 * 10 / 12 % 9");
         let result = Tokenizer::new(&code).scan();
 
         assert!(result.is_ok());
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn tokenize_string() {
-        let correct = Module::repl(r#" "Hello World." "#);
+        let correct = SourceFile::repl(r#" "Hello World." "#);
 
         let correct_result = Tokenizer::new(&correct).scan();
         assert!(correct_result.is_ok());
@@ -322,36 +322,36 @@ mod tests {
 
     #[test]
     fn ignore_comments() {
-        let only_comment = Module::repl(r"// Oh Hey mark.");
+        let only_comment = SourceFile::repl(r"// Oh Hey mark.");
         let result = Tokenizer::new(&only_comment).scan().unwrap();
         assert_eq!(result.len(), 1);
     }
 
     #[test]
     fn ignore_block_comments() {
-        let only_comment = Module::repl(r"/* Hello there */ /* general reposti */");
+        let only_comment = SourceFile::repl(r"/* Hello there */ /* general reposti */");
         let result = Tokenizer::new(&only_comment).scan().unwrap();
         assert_eq!(result.len(), 1);
     }
 
     #[test]
     fn reject_unterminated_string() {
-        let invalid = Module::repl(r#" "This string is unterminated "#);
+        let invalid = SourceFile::repl(r#" "This string is unterminated "#);
         let invalid_result = Tokenizer::new(&invalid).scan();
         assert!(invalid_result.is_err());
     }
 
     #[test]
     fn reject_unknown_char() {
-        let unknown = Module::repl("🌔");
+        let unknown = SourceFile::repl("🌔");
         let invalid_result = Tokenizer::new(&unknown).scan();
         assert!(invalid_result.is_err());
     }
 
     #[test]
     fn different_line_break() {
-        let windows_style = Module::repl("100\r\n");
-        let unix_style = Module::repl("100\n");
+        let windows_style = SourceFile::repl("100\r\n");
+        let unix_style = SourceFile::repl("100\n");
         let windows_result = Tokenizer::new(&windows_style).scan();
         let unix_result = Tokenizer::new(&unix_style).scan();
         assert!(windows_result.is_ok());

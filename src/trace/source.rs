@@ -4,13 +4,13 @@ use std::io::{ BufRead, BufReader };
 
 
 #[derive(Clone, Debug)]
-pub struct Module {
+pub struct SourceFile {
     pub filename: String,
     pub code: String,
     pub line: usize,
 }
 
-impl Module {
+impl SourceFile {
     pub fn open(name: &str) -> Result<Self, ()> {
 
         let file = match fs::File::open(name) {
@@ -29,7 +29,7 @@ impl Module {
             }
         }
 
-        Ok(Module {
+        Ok(SourceFile {
             filename: name.to_string(),
             code: string,
             line: line
@@ -37,7 +37,7 @@ impl Module {
     }
 
     pub fn new(name: &str, code: &str) -> Self {
-        Module {
+        SourceFile {
             filename: name.to_string(),
             code: code.to_string(),
             line: code.lines().collect::<Vec<&'_ str>>().len(),

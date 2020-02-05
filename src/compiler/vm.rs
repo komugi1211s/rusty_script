@@ -1,5 +1,5 @@
 
-use trace::Module;
+use trace::SourceFile;
 
 #[derive(Debug)]
 pub struct VirtualMachine {
@@ -11,5 +11,5 @@ impl VirtualMachine {
     }
 }
 
-pub fn start_vm(vm: &mut VirtualMachine, module: &Module, code: &()) -> () {
+pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, code: &()) -> () {
 }

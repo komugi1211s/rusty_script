@@ -1,7 +1,10 @@
 
-use trace::Module;
+use trace::SourceFile;
 use syntax_ast::ast::ASTree;
 
-pub fn generate_bytecode(module: &Module, ast: &ASTree) -> Result<(), ()> {
+pub struct CompiledCode {
+}
+
+pub fn generate_bytecode(module: &SourceFile, ast: &ASTree) -> Result<(), ()> {
     Ok(())
 }

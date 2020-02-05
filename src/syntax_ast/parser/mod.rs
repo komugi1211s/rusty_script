@@ -7,7 +7,7 @@ use super::ast::{
 
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
-use trace::{ err_fatal, err_internal, code_line, Module };
+use trace::{ err_fatal, err_internal, code_line, SourceFile };
 
 mod decl;
 mod stmt;
@@ -22,7 +22,7 @@ pub struct Parser<'m, 't> {
 }
 
 impl<'m, 't> Parser<'m, 't> {
-    pub fn new(modu: &'m Module, _tok: &'t Vec<Token>) -> Self {
+    pub fn new(modu: &'m SourceFile, _tok: &'t Vec<Token>) -> Self {
         Self {
             tokens: _tok,
             ast: ASTree {

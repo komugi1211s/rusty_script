@@ -3,7 +3,7 @@ extern crate lazy_static;
 pub extern crate log;
 
 pub mod source;
-pub use source::{ Module };
+pub use source::{ SourceFile };
 pub mod position;
 pub mod macros;
 
@@ -105,7 +105,7 @@ impl IsekaiLogger {
     pub fn spit_line(
         &self,
         lines: CodeSpan,
-        codes: &Module,
+        codes: &SourceFile,
         pad: usize
     ) {
         let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
