@@ -45,7 +45,7 @@ pub enum StatementInfo {
 impl BytecodeGenerator {
     pub(super) fn handle_stmt(
         &mut self,
-        ast: &ParsedResult,
+        ast: &ASTree,
         data: &StmtId,
         span: CodeSpan,
     ) -> StatementHandleResult {
@@ -141,7 +141,7 @@ impl BytecodeGenerator {
 
     fn handle_if_statement(
         &mut self,
-        ast: &ParsedResult,
+        ast: &ASTree,
         expr: &ExprId,
         if_id: &StmtId,
         opt_else_id: Option<&StmtId>,
@@ -190,7 +190,7 @@ impl BytecodeGenerator {
 
     fn handle_while_statement(
         &mut self,
-        ast: &ParsedResult,
+        ast: &ASTree,
         expr: &ExprId,
         while_id: &StmtId,
         span: CodeSpan,

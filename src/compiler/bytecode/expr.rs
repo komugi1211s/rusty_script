@@ -17,7 +17,7 @@ pub struct ExpressionHandleResult {
 impl BytecodeGenerator {
     pub(super) fn handle_expr(
         &mut self,
-        ast: &ParsedResult,
+        ast: &ASTree,
         expr: &ExprId,
         span: CodeSpan,
     ) -> ExpressionHandleResult {

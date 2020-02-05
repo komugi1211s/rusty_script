@@ -38,7 +38,7 @@ pub fn is_str_builtin_type(candidate: &str) -> bool {
 }
 
 // TODO - @DumbCode: Depth thing is stupid
-pub fn synthesize(cont: &mut TypeArena, ast: &ParsedResult, expr: ExprId, depth: u16) -> Result<Type, ()> {
+pub fn synthesize(cont: &mut TypeArena, ast: &ASTree, expr: ExprId, depth: u16) -> Result<Type, ()> {
     let is_global = depth > 0;
     use Expr::*;
     match ast.get_expr(expr) {
@@ -118,7 +118,7 @@ pub fn synthesize(cont: &mut TypeArena, ast: &ParsedResult, expr: ExprId, depth:
     }
 }
 
-pub fn check_against(cont: &mut TypeArena, ast: &ParsedResult, expr: &ExprId, req_type: &Type, depth: u16) -> bool {
+pub fn check_against(cont: &mut TypeArena, ast: &ASTree, expr: &ExprId, req_type: &Type, depth: u16) -> bool {
     let is_global = depth > 0;
     use Expr::*;
 

@@ -7,7 +7,7 @@ pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
-pub struct ParsedResult<'m> {
+pub struct ASTree<'m> {
     pub file: &'m Module,
     pub ast: Vec<AstNode>,
     pub stmt: Vec<Statement>,
@@ -15,7 +15,7 @@ pub struct ParsedResult<'m> {
     pub functions: Vec<FunctionData>,
 }
 
-impl<'m> ParsedResult<'m> {
+impl<'m> ASTree<'m> {
     pub fn new(m: &'m Module) -> Self {
         Self {
             file: m,

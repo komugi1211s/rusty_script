@@ -321,7 +321,7 @@ impl BytecodeGenerator {
         }
     }
 
-    pub fn traverse_ast(mut self, ast: ParsedResult) -> Result<ByteChunk, ()> {
+    pub fn traverse_ast(mut self, ast: ASTree) -> Result<ByteChunk, ()> {
         // use super::builtin_functions::apply_native_functions;
         // apply_native_functions(&mut self);
 
@@ -342,7 +342,7 @@ impl BytecodeGenerator {
         Ok(bytechunk)
     }
 
-    fn prepare_function(&mut self, ast: &ParsedResult, function: &FunctionData) {
+    fn prepare_function(&mut self, ast: &ASTree, function: &FunctionData) {
         let decl_info = &function.it;
         let block_id = function.block_id;
 
@@ -437,13 +437,13 @@ impl BytecodeGenerator {
         placeholder.index = self.code.current_length();
     }
 
-    fn handle_astnode(&mut self, ast: &ParsedResult, node: &AstNode) -> StatementHandleResult {
+    fn handle_astnode(&mut self, ast: &ASTree, node: &AstNode) -> StatementHandleResult {
         self.handle_stmt(ast, &node.stmt_id, node.span)
     }
 
     fn handle_declaration_data(
         &mut self,
-        ast: &ParsedResult,
+        ast: &ASTree,
         out: &mut StatementHandleResult,
         decl: &DeclarationData,
     ) {

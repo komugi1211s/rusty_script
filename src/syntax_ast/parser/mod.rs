@@ -2,7 +2,7 @@ use trace::Error;
 
 use super::ast::{
     self, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData, Literal,
-    Operator, ParsedResult, Statement, StmtId,
+    Operator, ASTree, Statement, StmtId,
 };
 
 use crate::tokenizer::token::{Token, TokenType};
@@ -36,7 +36,7 @@ const MAX_IDENTIFIER_LENGTH: usize = 530;
 
 pub struct Parser<'m, 't> {
     tokens: &'t Vec<Token>,
-    ast: ParsedResult<'m>,
+    ast: ASTree<'m>,
     current: usize,
     assign_count: usize,
     block_count: usize,
@@ -46,7 +46,7 @@ impl<'m, 't> Parser<'m, 't> {
     pub fn new(modu: &'m Module, _tok: &'t Vec<Token>) -> Self {
         Self {
             tokens: _tok,
-            ast: ParsedResult {
+            ast: ASTree {
                 file: modu,
                 ast: vec![],
                 stmt: vec![],
@@ -60,7 +60,7 @@ impl<'m, 't> Parser<'m, 't> {
 
     }
 
-    pub fn parse(mut self) -> Result<ParsedResult<'m>, ()> {
+    pub fn parse(mut self) -> Result<ASTree<'m>, ()> {
         while !self.is_at_end() {
             let start_line = self.get_current().span.start_usize();
             let declaration = self.declaration()?;

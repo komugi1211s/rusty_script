@@ -71,9 +71,7 @@ fn run_module(
 
 
     let tokens = tokenizer.from_module(core).scan().unwrap();
-
     let parsed = parser.tokens(tokens).parse().unwrap();
-
     let chunk = codegen.traverse_ast(parsed).unwrap();
 }
 
@@ -84,7 +82,7 @@ pub fn start(module: Module, stage: u8) -> Result<(), ()> {
     let chunk = time_it(
         "Total",
         || {
-            let tokens = time_it("Tokenizer", || Tokenizer::new(&module).scan())?;
+            let tokens = time_it("Tokenizer", || Tokenizer::new().scan(&module))?;
             let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse())?;
             // let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed))?;
             Ok(())

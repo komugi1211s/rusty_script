@@ -5,8 +5,7 @@ use token::{match_identity, Token, TokenType};
 use trace::{ position::CodeSpan, Error, source::Module };
 use trace::{ err_fatal, err_internal, code_line };
 
-pub struct Tokenizer<'m> {
-    module: &'m Module,
+pub struct Tokenizer {
     source: Vec<char>,
     tokens: Vec<Token>,
     start: usize,
@@ -18,11 +17,10 @@ pub struct Tokenizer<'m> {
 
 type TResult = Result<(), ()>;
 
-impl<'m> Tokenizer<'m> {
-    pub fn new(modu: &'m Module) -> Self {
+impl Tokenizer {
+    pub fn new() -> Self {
         Tokenizer {
-            module: modu,
-            source: modu.code.chars().collect::<Vec<char>>(),
+            source: Vec::new(),
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -32,11 +30,12 @@ impl<'m> Tokenizer<'m> {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, ()> {
+    pub fn scan(&mut self, modu: &Module) -> Result<Vec<Token>, ()> {
+        self.source.extend(modu.code.chars());
         while !self.is_at_end() {
             self.start = self.current;
             self.start_line = self.line;
-            self.scan_next_token()?;
+            self.scan_next_token(modu)?;
         }
 
         self.tokens
@@ -44,7 +43,7 @@ impl<'m> Tokenizer<'m> {
         Ok(self.tokens.to_owned())
     }
 
-    fn scan_next_token(&mut self) -> TResult {
+    fn scan_next_token(&mut self, module: &Module) -> TResult {
         let c: char = self.advance();
         match c {
             '(' => self.add_simple(TokenType::OpenParen),
@@ -119,7 +118,7 @@ impl<'m> Tokenizer<'m> {
             '\n' => self.add_newline(),
 
             // 文字列を追加
-            '"' => self.add_string(),
+            '"' => self.add_string(module),
 
             // 数字全般を単発で判定
             '0'..='9' => self.add_digit(),
@@ -130,12 +129,12 @@ impl<'m> Tokenizer<'m> {
             def => {
                 let span = CodeSpan::new(self.start_line, self.line);
                 err_fatal!(
-                    src: self.module,
+                    src: module,
                     span: span,
                     title: "Unknown Token",
                     msg: "未知のトークン {} を発見しました。", def
                 );
-                code_line!(src: self.module, span: span, pad: 1);
+                code_line!(src: module, span: span, pad: 1);
 
                 Err(())
             },
@@ -157,7 +156,7 @@ impl<'m> Tokenizer<'m> {
         Ok(())
     }
 
-    fn add_string(&mut self) -> TResult {
+    fn add_string(&mut self, module: &Module) -> TResult {
         let starting_line = self.line;
 
         while !self.is_at_end() && self.peek() != '"' {
@@ -171,12 +170,12 @@ impl<'m> Tokenizer<'m> {
         if self.is_at_end() {
             let span = CodeSpan::oneline(starting_line);
             err_fatal!(
-                src: self.module,
+                src: module,
                 span: span,
                 title: "Unterminated String",
                 msg: "\n文字列が閉じられていません。\n"
             );
-            code_line!(src: self.module, span: span, pad: 1);
+            code_line!(src: module, span: span, pad: 1);
             return Err(());
         }
 
