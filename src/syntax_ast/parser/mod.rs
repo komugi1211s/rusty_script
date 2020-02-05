@@ -12,28 +12,7 @@ use trace::{ err_fatal, err_internal, code_line, Module };
 mod decl;
 mod stmt;
 
-// TODO:
-// All clone call to a lifetime management
-// More refined Match system™
-// Refactor
-
-// FIXME:
-// Primary + ; does not work ( 10; spits error ) -> I think it fixed?
-
-/*
-    NOTE:
-    Identifierとして使える最高の文字列の長さ
-    そもそもIdentifierとして使える文字(a~Z, _)のうち、u8にした時最も大きい文字(z, 122)を
-    u16の範囲内で繰り返せるのが537文字 ( 122 * 537 = 65514 ) なので、
-    それより少し小さい530文字を許容できる最大値として使う
-
-    理由としては単にVMがバイトコードを生成する際に
-    いちいちu64の大きさでIdentifierを保存してほしくないから
-    u16範囲内で抑えられる文字列の長さを指定しておけば変数名を保存する際u16で足りる
-
-*/
-const MAX_IDENTIFIER_LENGTH: usize = 530;
-
+const MAX_IDENTIFIER_LENGTH: usize = 255;
 pub struct Parser<'m, 't> {
     tokens: &'t Vec<Token>,
     ast: ASTree<'m>,
@@ -47,10 +26,10 @@ impl<'m, 't> Parser<'m, 't> {
         Self {
             tokens: _tok,
             ast: ASTree {
-                file: modu,
-                ast: vec![],
-                stmt: vec![],
-                expr: vec![],
+                file     : modu,
+                ast      : vec![],
+                stmt     : vec![],
+                expr     : vec![],
                 functions: vec![],
             },
             current: 0,
@@ -62,10 +41,10 @@ impl<'m, 't> Parser<'m, 't> {
 
     pub fn parse(mut self) -> Result<ASTree<'m>, ()> {
         while !self.is_at_end() {
-            let start_line = self.get_current().span.start_usize();
+            let start_line = self.get_current().span.clone();
             let declaration = self.declaration()?;
-            let end_line = self.get_current().span.start_usize();
-            let codespan = CodeSpan::new(start_line, end_line);
+            let end_line = self.get_current().span.clone();
+            let codespan = CodeSpan::combine(&start_line, &end_line);
             self.ast.add_ast(declaration, codespan);
         }
         Ok(self.ast)

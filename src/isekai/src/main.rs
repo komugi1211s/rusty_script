@@ -9,8 +9,7 @@ use std::time::Instant;
 
 use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
-use compiler::bytecode::{disassemble_all};  // BytecodeGenerator, ByteChunk};
-use compiler::vm::VirtualMachine;
+use compiler::{ bytecode, vm };
 
 use trace::{ error, err_internal, source::Module };
 
@@ -22,6 +21,7 @@ fn exit_process(success: bool) -> ! {
 }
 
 type Stage = u8;
+use std::cell::RefCell;
 
 /*
 fn dump_chunk(chunk: &ByteChunk) {
@@ -33,6 +33,44 @@ fn dump_chunk(chunk: &ByteChunk) {
     file.flush().expect("File Flushing Failed.");
 }
 */
+
+struct TimeCount {
+    messages: RefCell<Vec<String>>
+}
+
+impl TimeCount {
+    fn time<T, U>(&self, step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
+        let start = Instant::now();
+        let result = fun();
+        let elapsed = start.elapsed();
+        let time = {
+            elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9
+        };
+
+        let elapsed_msg = if result.is_ok() {
+            format!(
+                " {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m",
+                step,
+                time
+            )
+        } else {
+            format!(
+                " {0:<12} Error :: \x1b[31m{1} secs\x1b[39m",
+                step,
+                time
+            )
+        };
+        self.messages.borrow_mut().push(elapsed_msg);
+
+        result
+    }
+
+    fn report(&self) {
+        for x in self.messages.borrow().iter() {
+            println!("{}", x);
+        }
+    }
+}
 
 fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
     let start = Instant::now();
@@ -78,20 +116,22 @@ fn run_module(
 */
 
 pub fn start(module: Module, stage: u8) -> Result<(), ()> {
+    let mut timer = TimeCount { messages: RefCell::new(Vec::with_capacity(4)) };
 
-    let chunk = time_it(
+    let binary = timer.time(
         "Total",
         || {
-            let tokens = time_it("Tokenizer", || Tokenizer::new().scan(&module))?;
-            let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse())?;
-            // let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed))?;
+            let tokens  = timer.time("Tokenizer", || Tokenizer::new().scan(&module))?;
+            let parsed  = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
+            let binary  = timer.time("CodeGen",   || bytecode::generate_bytecode(&module, &parsed))?;
             Ok(())
         }
     )?;
 
-    // dump_chunk(&chunk);
-    // let mut vm = VirtualMachine::new(chunk);
-    // vm.run();
+    timer.report();
+
+    let mut vm = vm::VirtualMachine::new();
+    vm::start_vm(&mut vm, &module, &binary);
     Ok(())
 }
 

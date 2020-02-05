@@ -19,9 +19,9 @@ impl<'m> ASTree<'m> {
     pub fn new(m: &'m Module) -> Self {
         Self {
             file: m,
-            ast: vec![],
-            stmt: vec![],
-            expr: vec![],
+            ast      : vec![],
+            stmt     : vec![],
+            expr     : vec![],
             functions: vec![]
         }
     }
@@ -66,7 +66,7 @@ pub struct ExprId(pub u32);
 
 #[derive(Debug, Clone)]
 pub struct AstNode {
-    pub span: CodeSpan,
+    pub span   : CodeSpan,
     pub stmt_id: StmtId,
 }
 
