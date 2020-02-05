@@ -280,7 +280,7 @@ impl fmt::Display for FuncInfo {
 #[derive(Debug)]
 pub struct ByteChunk {
     pub entry_point: usize,
-    pub code: Code,
+    pub code     : Code,
     pub constants: ConstantTable,
     pub functions: HashMap<usize, FuncInfo>,
 }
@@ -300,6 +300,13 @@ pub struct BytecodeGenerator {
     depth: u16,
     pub break_call: Vec<usize>,
 }
+
+pub struct CodeState {
+    pub constants: ConstantTable,
+    pub types:     TypeArena,
+    pub depth:     u16,
+}
+
 
 impl BytecodeGenerator {
     pub fn new() -> Self {

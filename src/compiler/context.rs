@@ -34,7 +34,6 @@ impl From<OpCode> for Instruction {
 
 impl Iterator for Instruction {
     type Item=u8;
-
     fn next(&mut self) -> Option<Self::Item> {
         if self._c == 0 {
             self._c += 1;
@@ -178,17 +177,12 @@ impl CodeGen for ConditionalBranch {
         }
     }
 
-    fn emit_op(&mut self, code: OpCode) -> Result<(), ()> {
-        if self.is_finalized() || self.mode == BranchMode::Empty {
-            Err(())
-        } else {
-            if self.mode == BranchMode::Else {
-                self.false_code.push(code.into());
-            } else {
-                self.true_code.push(code.into());
-            }
-            Ok(())
-        }
+    fn emit_simple(&mut self, code: OpCode) -> Result<(), ()> {
+        self.emit_instruction(code.into())
+    }
+
+    fn emit_operand(&mut self, code: OpCode, addr: usize) -> Result<(), ()> {
+        self.emit_instruction(Instruction::operand(code, addr))
     }
 
     fn eject(&self) -> Vec<Instruction> {
@@ -311,7 +305,8 @@ pub trait CodeGen {
     fn new_branch(&self) -> ConditionalBranch;
     fn accept(&mut self, _: impl Branch) -> Result<(), ()>;
 
-    fn emit_op(&mut self, _: OpCode) -> Result<(), ()>;
+    fn emit_simple(&mut self, _: OpCode) -> Result<(), ()>;
+    fn emit_operand(&mut self, _: OpCode, _: usize) -> Result<(), ()>;
     fn emit_instruction(&mut self, _: Instruction) -> Result<(), ()>;
     fn emit_arithmetic(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_arithmetic() {
@@ -328,7 +323,7 @@ pub trait CodeGen {
             _      => unreachable!(),
         };
 
-        self.emit_op(code)
+        self.emit_simple(code)
     }
     fn emit_comparison(&mut self, oper: Operator) -> Result<(), ()> { 
         if !oper.is_comparison() {
@@ -345,7 +340,7 @@ pub trait CodeGen {
             _ => unreachable!(),
         };
 
-        self.emit_op(code)
+        self.emit_simple(code)
     }
     fn emit_logical(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_logic() {
@@ -358,7 +353,7 @@ pub trait CodeGen {
             _ => unreachable!(),
         };
 
-        self.emit_op(code)
+        self.emit_simple(code)
     }
 }
 
@@ -381,9 +376,13 @@ impl CodeGen for Context {
         Ok(())
     }
 
-    fn emit_op(&mut self, code: OpCode) -> Result<(), ()> {
+    fn emit_simple(&mut self, code: OpCode) -> Result<(), ()> {
         self.codes.push(code.into());
         Ok(())
+    }
+
+    fn emit_operand(&mut self, code: OpCode, addr: usize) -> Result<(), ()> {
+        self.emit_instruction(Instruction::operand(code, addr))
     }
 
     fn eject(&self) -> Vec<Instruction> {
@@ -412,13 +411,15 @@ impl Context {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::vm::VirtualMachine;
     #[test]
     fn context_binary() {
         let mut ctx = Context::new();
 
-        ctx.emit_op(OpCode::ILoad);
-        ctx.emit_op(OpCode::ILoad);
-        ctx.emit_op(OpCode::Add);
+        ctx.emit_operand(OpCode::ILoad, 0);
+        ctx.emit_operand(OpCode::ILoad, 1);
+        ctx.emit_simple(OpCode::Add);
+        ctx.emit_simple(OpCode::DebugPrint);
 
         assert_eq!(vec![113, 113, 49], ctx.compile());
     }
@@ -428,13 +429,7 @@ mod test {
         let mut branch = ctx.new_branch();
 
         branch.mode_if();
-            branch.emit_op(OpCode::ILoad);
-            branch.emit_op(OpCode::ILoad);
-            branch.emit_op(OpCode::ILoad);
         branch.mode_else();
-            branch.emit_op(OpCode::SLoad);
-            branch.emit_op(OpCode::SLoad);
-            branch.emit_op(OpCode::SLoad);
         branch.finalize();
 
         ctx.accept(branch);

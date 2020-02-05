@@ -46,7 +46,6 @@ impl VirtualMachine {
                     self.chunk.code.bytes[self.code_ip], self.chunk.code.span[self.code_ip]
                 );
             }
-            let _current_line = self.chunk.code.span[self.code_ip];
             // println!("Current Stack: {:?}", self.stack);
             // println!("Current Environment: {:?}", self.globals);
             let current_operation = current_operation.unwrap();
@@ -135,7 +134,7 @@ impl VirtualMachine {
                     let (value, _type) = self.chunk.constants.read_data_64(const_index);
                     // GET_TYPE
                     self.stack.push(match _type.kind {
-                        TypeKind::Int => i64::from_ne_bytes(value).into(),
+                        TypeKind::Int   => i64::from_ne_bytes(value).into(),
                         TypeKind::Float => f64::from_bits(u64::from_ne_bytes(value)).into(),
                         _ => unreachable!(),
                     });

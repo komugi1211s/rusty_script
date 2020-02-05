@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
-use compiler::bytecode::{disassemble_all, BytecodeGenerator, ByteChunk };
+use compiler::bytecode::{disassemble_all};  // BytecodeGenerator, ByteChunk};
 use compiler::vm::VirtualMachine;
 
 use trace::{ error, err_internal, source::Module };
@@ -23,6 +23,7 @@ fn exit_process(success: bool) -> ! {
 
 type Stage = u8;
 
+/*
 fn dump_chunk(chunk: &ByteChunk) {
     let disassembled = disassemble_all(&chunk.code);
     let mut file = File::create("dump").expect("Dump File failed to create.");
@@ -31,6 +32,7 @@ fn dump_chunk(chunk: &ByteChunk) {
     }
     file.flush().expect("File Flushing Failed.");
 }
+*/
 
 fn time_it<T, U>(step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
     let start = Instant::now();
@@ -78,19 +80,20 @@ fn run_module(
 */
 
 pub fn start(module: Module, stage: u8) -> Result<(), ()> {
+
     let chunk = time_it(
         "Total",
         || {
             let tokens = time_it("Tokenizer", || Tokenizer::new(&module).scan())?;
             let parsed = time_it("Parser",    || Parser::new(&module, &tokens).parse())?;
-            let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed))?;
-            Ok(chunk)
+            // let chunk  = time_it("CodeGen",   || BytecodeGenerator::new().traverse_ast(parsed))?;
+            Ok(())
         }
     )?;
 
-    dump_chunk(&chunk);
-    let mut vm = VirtualMachine::new(chunk);
-    vm.run();
+    // dump_chunk(&chunk);
+    // let mut vm = VirtualMachine::new(chunk);
+    // vm.run();
     Ok(())
 }
 

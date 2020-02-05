@@ -1,10 +1,13 @@
 use num_traits::FromPrimitive;
 
+
+// オペランドを持つ類のものは全てu32のオペランドを持つ
+// usizeとかu16とか使い分けたかったけど無理
 #[derive(Debug, Clone, Copy, Hash, PartialEq, FromPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
     // Const       = 0b00010000,
-    // Const系統は全て8バイトのオペランドを取る。
+    // Const系統は全て4バイトのオペランドを取る。
     // このオペランドはCONST値の収められた配列の絶対インデックスとして動作する
     Const8   = 0b0001_0001, 
     Const16  = 0b0001_0010, 
@@ -13,14 +16,14 @@ pub enum OpCode {
     ConstDyn = 0b0001_0111, 
 
     // Operational = 0b00100000,
-    Return  = 0b0010_0000,
-    Push    = 0b0010_0010,
-    Pop     = 0b0010_0011,
-    BlockIn = 0b0010_0110,
+    Return   = 0b0010_0000,
+    Push     = 0b0010_0010,
+    Pop      = 0b0010_0011,
+    BlockIn  = 0b0010_0110,
     BlockOut = 0b0010_0111,
 
     // スタック内の特定の位置へのポインタをオペランドとして持つ
-    // ポインタは8バイト
+    // ポインタは4バイト
     // FIXME - @DumbCode: 本来のポインタの動作の仕方と全く違うので
     // 修正されるべき
     PushPtr = 0b0001_1000, 
@@ -52,7 +55,7 @@ pub enum OpCode {
 
     // Globals = 0b01100000,
     // グローバル変数の変数名の数をコンパイル時にカウントし、それをオペランドとして指定する
-    // オペランドは2バイト(u16)
+    // オペランドは4バイト(u32)
     GILoad  = 0b0110_0001,  
     GIStore = 0b0110_0010, 
     GFLoad  = 0b0110_0011,  
@@ -64,14 +67,14 @@ pub enum OpCode {
 
     // Locals      = 0b01110000,
     // コンパイル時のスタックポインタがオペランドとして入る
-    // オペランドは2バイト(u16)
-    ILoad = 0b0111_0001,  
+    // オペランドは2バイト(u32)
+    ILoad  = 0b0111_0001,  
     IStore = 0b0111_0010, 
-    FLoad = 0b0111_0011,  
+    FLoad  = 0b0111_0011,  
     FStore = 0b0111_0100, 
-    SLoad = 0b0111_0101,  
+    SLoad  = 0b0111_0101,  
     SStore = 0b0111_0110, 
-    BLoad = 0b0111_0111,  
+    BLoad  = 0b0111_0111,  
     BStore = 0b0111_1000, 
 
     // System     = 0b11000000,
@@ -81,7 +84,8 @@ pub enum OpCode {
 
 impl OpCode {
     pub fn len(&self) -> usize {
-        match self {
+        // 1 = OpCode自体の長さ
+        1 + match self {
             OpCode::Const8 
             | OpCode::Const16 
             | OpCode::Const32 
@@ -109,7 +113,7 @@ impl OpCode {
             | OpCode::SLoad 
             | OpCode::BLoad => 2,
 
-            OpCode::IStore 
+              OpCode::IStore 
             | OpCode::FStore 
             | OpCode::SStore 
             | OpCode::BStore => 2,
