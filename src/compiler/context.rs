@@ -57,7 +57,7 @@ impl ConditionalBranch {
         }
     }
 
-    fn mode_if(&mut self) -> Result<(), ()> {
+    pub fn mode_if(&mut self) -> Result<(), ()> {
         if self.mode != BranchMode::Empty {
             return Err(())
         }
@@ -65,7 +65,7 @@ impl ConditionalBranch {
         self.set_mode(BranchMode::If)
     }
 
-    fn mode_while(&mut self) -> Result<(), ()> {
+    pub fn mode_while(&mut self) -> Result<(), ()> {
         if self.mode != BranchMode::Empty {
             return Err(())
         }
@@ -85,7 +85,7 @@ impl ConditionalBranch {
     }
     */
 
-    fn mode_else(&mut self) -> Result<(), ()> {
+    pub fn mode_else(&mut self) -> Result<(), ()> {
         if self.mode == BranchMode::Else {
             return Err(())
         }

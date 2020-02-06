@@ -8,7 +8,7 @@ use trace::{
 use syntax_ast::ast::{ ASTree, AstNode, Statement, Expr, StmtId, ExprId, Literal, LiteralKind, Operator };
 
 use super::ir::IRCode;
-use super::context::{ CodeGen, BranchMode, ConditionalBranch, Context };
+use super::context::{ CodeGen, BranchMode, Branch, ConditionalBranch, Context };
 use super::typecheck::{ TypeArena, TypeContext };
 
 use types::{ Value, Type };
@@ -90,6 +90,33 @@ fn traverse_statement(
         Print(expr_id)      => {
             traverse_expression(env, ctx, ast, *expr_id);
             ctx.emit_op(IRCode::DebugPrint);
+        }
+        
+        If(cond_expr, if_block, else_block) => { 
+            traverse_expression(env, ctx, ast, *cond_expr);
+            let mut if_branch = ctx.new_branch();
+            if_branch.mode_if();
+            traverse_statement(env, &mut if_branch, ast, *if_block);
+
+            if let Some(else_id) = else_block {
+                if_branch.mode_else();
+                traverse_statement(env, &mut if_branch, ast, *else_id);
+            }
+
+            if_branch.finalize();
+            ctx.accept(if_branch);
+        }
+
+        While(expr_id, inner_stmt) {
+            traverse_expression(env, ctx, ast, *cond_expr);
+            let mut while_branch = ctx.new_branch();
+            while_branch.mode_while();
+            traverse_statement(env, &mut while_branch, ast, *inner_stmt);
+            while_branch.finalize();
+            ctx.accept(while_branch);
+        }
+
+        Block(innerblock) => {
         }
 
         _ => unimplemented!(),

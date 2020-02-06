@@ -57,6 +57,19 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
                 vm.stack.push(result);
             }
 
+            IRCode::JT(to) => {
+                vm.IP = *to as usize;
+                continue;
+            }
+
+            IRCode::JNT(to) => {
+                let cond = vm.stack.pop().unwrap();
+                if !cond.is_truthy() {
+                    vm.IP = *to as usize;
+                    continue;
+                }
+            }
+
             IRCode::DebugPrint => {
                 let value = vm.stack.pop().unwrap();
                 println!("{}", value);
