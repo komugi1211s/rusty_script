@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
-use compiler::{ bytecode, vm };
+use compiler::{ bytecode, vm, ir::print_ir_vec };
 
 use trace::{ error, err_internal, source::SourceFile };
 
@@ -80,8 +80,9 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
         || {
             let tokens  = timer.time("Tokenizer", || Tokenizer::new().scan(&module))?;
             let parsed  = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
-            println!("{:?}", parsed);
             let binary  = timer.time("CodeGen",   || bytecode::generate_bytecode(&module, &parsed))?;
+            println!("{:?}", binary);
+            print_ir_vec(&binary.code);
             Ok(binary)
         }
     )?;

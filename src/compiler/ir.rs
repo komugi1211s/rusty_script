@@ -12,6 +12,7 @@ use serde::{Serialize, Deserialize};
     Deserialize
 )]
 pub enum IRCode {
+    
     Const8(u32),
     Const16(u32),
     Const32(u32),

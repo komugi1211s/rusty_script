@@ -14,6 +14,7 @@ path = "lib.rs"
 bitflags = "*"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.2.1"
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "llvm8-0" }
 
 types = { path = "../types" }
 syntax_ast = { path = "../syntax_ast" }

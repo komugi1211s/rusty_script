@@ -221,53 +221,33 @@ pub trait CodeGen {
     fn accept(&mut self, _: impl Branch) -> Result<(), ()>;
 
     fn emit_op(&mut self, _: IRCode) -> Result<(), ()>;
-    fn emit_arithmetic(&mut self, oper: Operator) -> Result<(), ()> {
+    fn emit_from_oper(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_arithmetic() {
             return Err(());
         }
 
         let code = match oper {
-            Operator::Add => IRCode::Add,
-            Operator::Sub => IRCode::Sub, 
-            Operator::Div => IRCode::Div, 
-            Operator::Mul => IRCode::Mul,
-            Operator::Mod => IRCode::Mod, 
-            Operator::Neg => IRCode::Neg,
-            _      => unreachable!(),
-        };
-
-        self.emit_op(code)
-    }
-    fn emit_comparison(&mut self, oper: Operator) -> Result<(), ()> { 
-        if !oper.is_comparison() {
-            return Err(());
-        }
-
-        let code = match oper {
-            Operator::EqEq   => IRCode::EqEq,
+            Operator::Add    => IRCode::Add,
+            Operator::Sub    => IRCode::Sub, 
+            Operator::Div    => IRCode::Div, 
+            Operator::Mul    => IRCode::Mul,
+            Operator::Mod    => IRCode::Mod, 
+            Operator::Neg    => IRCode::Neg,
+	    Operator::EqEq   => IRCode::EqEq,
             Operator::NotEq  => IRCode::NotEq,
             Operator::LessEq => IRCode::LessEq, 
             Operator::MoreEq => IRCode::MoreEq, 
             Operator::Less   => IRCode::Less, 
             Operator::More   => IRCode::More,
-            _ => unreachable!(),
+            Operator::And    => IRCode::And,
+            Operator::Or     => IRCode::Or,
+            Operator::Not    => IRCode::Not,
+            _      => unreachable!(),
         };
 
         self.emit_op(code)
     }
-    fn emit_logical(&mut self, oper: Operator) -> Result<(), ()> {
-        if !oper.is_logic() {
-            return Err(());
-        }
-        let code = match oper {
-            Operator::And => IRCode::And,
-            Operator::Or  => IRCode::Or,
-            Operator::Not => IRCode::Not,
-            _ => unreachable!(),
-        };
 
-        self.emit_op(code)
-    }
 }
 
 impl CodeGen for Context {
