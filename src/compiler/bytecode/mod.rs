@@ -5,7 +5,7 @@ use trace::{
     code_line,
 };
 
-use syntax_ast::ast::{ ASTree, AstNode, Statement, Expr, StmtId, ExprId, Literal, LiteralKind, Operator };
+use syntax_ast::ast::*;
 
 use super::ir::IRCode;
 use super::context::{ CodeGen, BranchMode, Branch, ConditionalBranch, Context };
@@ -74,10 +74,9 @@ pub fn generate_bytecode(module: &SourceFile, ast: &ASTree) -> Result<CompiledCo
     })
 }
 
-
-fn traverse_statement(
+fn traverse_statement<T: CodeGen>(
     env: &mut Env,
-    ctx: &mut impl CodeGen,
+    ctx: &mut T,
     ast: &ASTree,
     statement_id: StmtId,
 ) {
@@ -107,8 +106,8 @@ fn traverse_statement(
             ctx.accept(if_branch);
         }
 
-        While(expr_id, inner_stmt) {
-            traverse_expression(env, ctx, ast, *cond_expr);
+        While(expr_id, inner_stmt) => {
+            traverse_expression(env, ctx, ast, *expr_id);
             let mut while_branch = ctx.new_branch();
             while_branch.mode_while();
             traverse_statement(env, &mut while_branch, ast, *inner_stmt);
@@ -116,9 +115,10 @@ fn traverse_statement(
             ctx.accept(while_branch);
         }
 
-        Block(innerblock) => {
-        }
+        Block(innerblock) => traverse_block(env, ctx, ast, innerblock),
 
+	Break    => ctx.emit_break(),
+	Continue => ctx.emit_continue(),
         _ => unimplemented!(),
     };
 }

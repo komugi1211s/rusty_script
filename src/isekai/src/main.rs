@@ -74,15 +74,16 @@ impl TimeCount {
 
 pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let mut timer = TimeCount { messages: RefCell::new(Vec::with_capacity(4)) };
-
+    // 実際の所謂「文字の数」ではなくバイト列の長さを確認している
+    // 今回の場合は最低でもこれだけを確保しておきたいという長さなのでこれで問題ない
+    let byte_length = module.code.as_str().len();
+    
     let binary = timer.time(
         "Total",
         || {
-            let tokens  = timer.time("Tokenizer", || Tokenizer::new().scan(&module))?;
+            let tokens  = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
             let parsed  = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
             let binary  = timer.time("CodeGen",   || bytecode::generate_bytecode(&module, &parsed))?;
-            println!("{:?}", binary);
-            print_ir_vec(&binary.code);
             Ok(binary)
         }
     )?;

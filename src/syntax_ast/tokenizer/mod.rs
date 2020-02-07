@@ -18,10 +18,10 @@ pub struct Tokenizer {
 type TResult = Result<(), ()>;
 
 impl Tokenizer {
-    pub fn new() -> Self {
+    pub fn new(reserve_length: usize) -> Self {
         Tokenizer {
-            source: Vec::new(),
-            tokens: Vec::new(),
+            source: Vec::with_capacity(reserve_length),
+            tokens: Vec::with_capacity(reserve_length),
             start: 0,
             current: 0,
             start_line: 0,

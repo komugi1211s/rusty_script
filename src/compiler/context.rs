@@ -1,3 +1,4 @@
+
 use super::ir::{ IRCode, print_ir_vec };
 use syntax_ast::ast::{ Operator };
 
@@ -12,6 +13,12 @@ pub enum BranchMode {
     Else,
     While,
     // For,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PatchInfo {
+    Break(usize),
+    Continue(usize),
 }
 
 impl Default for BranchMode {
@@ -43,10 +50,9 @@ pub struct ConditionalBranch {
     // goes into this vector.
     false_code: Vec<IRCode>,
 
-    // used when branch_mode is While / For.
-    break_call    : Vec<usize>,
-    continue_call : Vec<usize>,
-
+    // used when branch mode is "While" "For".
+    // will get copied around when new branch gets created.
+    patchinfo: Vec<PatchInfo>,
 }
 
 impl ConditionalBranch {
@@ -102,6 +108,11 @@ impl CodeGen for ConditionalBranch {
         if self.is_finalized() || !branch.is_finalized() {
             return Err(());
         }
+
+	if self.is_loop() && branch.has_patch_info() {
+	    self.patchinfo.extend(branch.get_patch_info());
+	}
+
         if self.mode == BranchMode::Else {
             self.false_code.extend(branch.eject());
         } else {
@@ -128,9 +139,20 @@ impl CodeGen for ConditionalBranch {
     }
 
     fn len(&self) -> usize {
-        /* Depends on the mode!! */
-        unimplemented!()
+	if self.is_finalized() {
+	    return self.finalized_code.len();
+	}
+	
+	use BranchMode::*;
+	match (self.prev_mode, self.mode) {
+	    (_, If)    => self.true_code.len() + 1, // Conditional Jump + True route length
+	    (If, Else) => self.true_code.len() + self.false_code.len() + 2, // Conditional Jump + True route Length + Unconditional Jump + False Code Length
+	    (_, While) => self.true_code.len() + 2, // Conditional Jump + True route Length + unconditional jump
+	    (While, Else) => self.true_code.len() + self.false_code.len() + 2, // Conditional Jump + True route Length + Unconditional Jump + False Code Length
+	    _ => unimplemented!(),
+	}
     }
+
 }
 
 impl Branch for ConditionalBranch {
@@ -144,8 +166,18 @@ impl Branch for ConditionalBranch {
         Ok(())
     }
 
+    #[inline(always)]
     fn is_finalized(&self) -> bool {
         self.finalized
+    }
+
+    #[inline(always)]
+    fn has_patch_info(&self) -> bool {
+	self.patchinfo.is_empty()
+    }
+
+    fn get_patch_info<'a>(&'a self) -> &'a [PatchInfo] {
+	&self.patchinfo
     }
 
     fn finalize(&mut self) -> Result<(), ()> {
@@ -165,8 +197,8 @@ impl Branch for ConditionalBranch {
             },
             (If, Else)     => { 
                 let length_true  = (self.offset + self.true_code.len()) as u32;
-                let length_false = (self.offset + self.false_code.len()) as u32;
-
+		let length_false = self.false_code.len() as u32;
+		
                 let jump_padding = 2;
                 self.finalized_code.push(IRCode::JNT(length_true + jump_padding));
                 self.finalized_code.extend(self.true_code.drain(..));
@@ -185,7 +217,7 @@ impl Branch for ConditionalBranch {
             },
             (While, Else)  => { 
                 let length_true  = (self.offset + self.true_code.len()) as u32;
-                let length_false = (self.offset + self.false_code.len()) as u32;
+		let length_false = self.false_code.len() as u32;
 
                 self.finalized_code.push(IRCode::JNT(length_true + 1));
                 self.finalized_code.extend(self.true_code.drain(..));
@@ -204,13 +236,23 @@ impl Branch for ConditionalBranch {
         self.finalized = true;
         Ok(())
     }
-}
 
+    #[inline(always)]
+    fn is_loop(&self) -> bool {
+	self.mode == BranchMode::While
+	    || self.prev_mode == BranchMode::While
+	    // || self.mode == BranchMode::For
+	    // || self.prev_mode == BranchMode::For
+    }
+}
 
 pub trait Branch: CodeGen {
     fn set_mode(&mut self, mode: BranchMode) -> Result<(), ()>;
     fn is_finalized(&self) -> bool;
     fn finalize(&mut self) -> Result<(), ()>;
+    fn is_loop(&self) -> bool;
+    fn has_patch_info(&self) -> bool;
+    fn get_patch_info<'a>(&'a self) -> &'a [PatchInfo];
 }
 
 pub trait CodeGen {
@@ -219,8 +261,11 @@ pub trait CodeGen {
 
     fn new_branch(&self) -> ConditionalBranch;
     fn accept(&mut self, _: impl Branch) -> Result<(), ()>;
-
+    
     fn emit_op(&mut self, _: IRCode) -> Result<(), ()>;
+    fn emit_break(&mut self) -> Result<(), ()>    { unimplemented!() }
+    fn emit_continue(&mut self) -> Result<(), ()> { unimplemented!() }
+
     fn emit_from_oper(&mut self, oper: Operator) -> Result<(), ()> {
         if !oper.is_arithmetic() {
             return Err(());
@@ -247,7 +292,6 @@ pub trait CodeGen {
 
         self.emit_op(code)
     }
-
 }
 
 impl CodeGen for Context {
@@ -259,6 +303,10 @@ impl CodeGen for Context {
         if !branch.is_finalized() {
             return Err(());
         }
+
+	if branch.has_patch_info() {
+	    return Err(());
+	}
 
         self.codes.extend(branch.eject());
         Ok(())

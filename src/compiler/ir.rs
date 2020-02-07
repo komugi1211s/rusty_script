@@ -64,7 +64,7 @@ pub enum IRCode {
     FStore(u32),
     SStore(u32),
     BStore(u32),
-
+    
     Interrupt,
     DebugPrint,
 }
