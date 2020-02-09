@@ -1,16 +1,27 @@
 
 use super::ir::{ IRCode, print_ir_vec };
 use syntax_ast::ast::{ Operator };
+use std::cell::RefCell;
+use std::rc::Rc;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Context {
-    codes: Vec<IRCode>,
+    codes: Rc<RefCell<Vec<IRCode>>>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Branch {
+    mode:      BranchMode,
+    has_else:  bool,
+    codes: Rc<RefCell<Vec<IRCode>>>,
+    patches: Vec<PatchInfo>
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BranchMode {
     Empty,
     If,
-    Else,
     While,
     // For,
 }
@@ -25,41 +36,10 @@ impl Default for BranchMode {
     fn default() -> Self { Self::Empty }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ConditionalBranch {
-    mode: BranchMode,
-    prev_mode: BranchMode,
-    finalized: bool,
-
-    // used when "finalize" gets called.
-    // contains offset from parent branch / context.
-    offset: usize,
-
-    // used when finalized.
-    // other true_code / false_code vector must get
-    // emptied when it's finalized.
-    finalized_code: Vec<IRCode>,
-
-    // used when branch_mode is "If" "While" "For".
-    // everything that's evaluated when initialized expression is true
-    // goes into this vector.
-    true_code : Vec<IRCode>,
-
-    // used when branch_mode is "Else".
-    // everything that's evaluated when initialized expression is false
-    // goes into this vector.
-    false_code: Vec<IRCode>,
-
-    // used when branch mode is "While" "For".
-    // will get copied around when new branch gets created.
-    patchinfo: Vec<PatchInfo>,
-}
-
-impl ConditionalBranch {
-    fn new(addr: usize) -> Self {
+impl Branch {
+    fn new(ref_vec: Rc<RefCell<Vec<IRCode>>>) -> Self {
         Self {
-            offset: addr,
-            .. Default::default()
+         
         }
     }
 
