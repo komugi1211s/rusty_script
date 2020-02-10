@@ -29,6 +29,7 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
 
     while code_length > vm.IP {
         let instruction = &bin.code[vm.IP];
+
         match instruction {
             IRCode::Const8(idx) => {
                 let value = bin.consts.values[*idx as usize].clone();
@@ -63,11 +64,11 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             }
 
             IRCode::JT(to) => {
-		let cond = vm.stack.pop().unwrap();
-		if cond.is_truthy() {
-		    vm.IP = *to as usize;
+        		let cond = vm.stack.pop().unwrap();
+        		if cond.is_truthy() {
+        		    vm.IP = *to as usize;
                     continue;
-		}
+        		}
             }
 
             IRCode::JNT(to) => {

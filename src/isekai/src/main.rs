@@ -88,6 +88,7 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
         }
     )?;
 
+    // print_ir_vec(&binary.code);
     timer.report();
 
     let mut vm = vm::VirtualMachine::new();
