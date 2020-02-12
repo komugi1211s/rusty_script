@@ -7,9 +7,11 @@ use trace::{
 
 use syntax_ast::ast::*;
 
-use super::ir::IRCode;
-use super::typecheck::{ TypeArena, TypeContext };
+use crate::ir::IRCode;
+use crate::typecheck::{ TypeArena, TypeContext };
 use types::{ Value, Type };
+
+use super::{ Env, Context };
 
 pub fn traverse_expression(
     env: &mut Env,
@@ -108,6 +110,11 @@ fn emit_constants(
 	    let index = env.consts.add_const(Value::Float(value));
 	    ctx.emit_op(IRCode::Const64(index as u32));
 	}
+
+        LiteralKind::Str => {
+            let index = env.consts.add_const(Value::Str(lexeme.to_string()));
+            ctx.emit_op(IRCode::ConstDyn(index as u32));
+        }
 	_ => unimplemented!(),
     }
 }

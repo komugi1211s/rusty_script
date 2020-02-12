@@ -49,6 +49,7 @@ impl Constants {
 #[derive(Debug)]
 pub struct Env<'a> {
     source: &'a SourceFile,
+    depth: u16,
     defn:   TypeArena,
     consts: Constants,
 }
@@ -57,9 +58,19 @@ impl<'a> Env<'a> {
     fn new(source: &'a SourceFile) -> Self {
         Env {
 	    source,
+            depth:  0,
             defn:   TypeArena::new(),
             consts: Constants::new(),
         }
+    }
+
+    fn deepen_nest(&mut self) {
+        self.depth += 1;
+    }
+
+    fn shallowen_nest(&mut self) {
+        self.depth -= 1;
+        self.defn.ditch_out_of_scope(self.depth);
     }
 }
 

@@ -56,27 +56,43 @@ pub fn traverse_statement(
             let jnt_patch = ctx.reserve_one();
             let captured = capture_patch(ctx, |enclosed| {
                 traverse_statement(env, enclosed, ast, *inner_stmt);
-                emit_jump_to(enclosed, before_expr);
+                enclosed.emit_op(IRCode::Jump(before_expr as u32));
             
                 let end_of_while = enclosed.codes.len();
                 enclosed.patch(jnt_patch, IRCode::JNT(end_of_while as u32));
             });
-            let end_of_while = enclosed.codes.len();
+
+            let end_of_while = ctx.codes.len();
             for patch in &captured {
                 match patch.kind {
-                    PatchKind::Break => ctx.patch(*patch, IRCode::Jump(end_of_while as u32)),
-                    PatchKind::Continue => ctx.patch(*patch, IRCode::Jump(before_expr as u32)),
+                    PatchKind::Generic  => unreachable!(),
+                    PatchKind::Break    => ctx.patch(*patch, IRCode::Jump(end_of_while as u32)),
+                    PatchKind::Continue => ctx.patch(*patch, IRCode::Jump(before_expr  as u32)),
                 }
             }
         }
 
-        // Block(innerblock) => traverse_block(env, ctx, ast, innerblock),
+        Block(innerblock) => traverse_block(env, ctx, ast, innerblock),
 
         Break    => { ctx.mark_break(); },
         Continue => { ctx.mark_continue(); },
         _ => unimplemented!(),
     };
 }
+
+fn traverse_block(
+    env: &mut Env,
+    ctx: &mut Context,
+    ast: &ASTree,
+    inner: &BlockData
+) {
+    env.deepen_nest();
+    for (stmt_id) in &inner.statements {
+        traverse_statement(env, ctx, ast, *stmt_id);
+    }
+    env.shallowen_nest();
+}
+    
 
 use std::mem;
 fn capture_patch(ctx: &mut Context, func: impl FnOnce(&mut Context)) -> Vec<Patch> {

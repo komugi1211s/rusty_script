@@ -31,12 +31,18 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
         let instruction = &bin.code[vm.IP];
 
         match instruction {
+            // TODO: redundant const difference
             IRCode::Const8(idx) => {
                 let value = bin.consts.values[*idx as usize].clone();
                 vm.stack.push(value);
             }
 
             IRCode::Const64(idx) => {
+                let value = bin.consts.values[*idx as usize].clone();
+                vm.stack.push(value);
+            }
+            
+            IRCode::ConstDyn(idx) => {
                 let value = bin.consts.values[*idx as usize].clone();
                 vm.stack.push(value);
             }
