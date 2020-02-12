@@ -8,9 +8,7 @@ use trace::{
 use syntax_ast::ast::*;
 
 use crate::ir::IRCode;
-use crate::typecheck::{ TypeArena, TypeContext };
 use types::{ Value, Type };
-
 use super::{ Env, Context };
 
 pub fn traverse_expression(
@@ -18,7 +16,7 @@ pub fn traverse_expression(
     ctx: &mut Context,
     ast: &ASTree,
     expression_id: ExprId,
-) {
+) /* -> Type */ {
     let expression = ast.get_expr(expression_id);
 
     use Expr::*;

@@ -31,6 +31,7 @@ pub enum TypeKind {
     Existential(String),
 }
 
+
 // const TInt: TypeKind     = TypeKind::Variable("Int", vec![]);
 // const TFloat: TypeKind   = TypeKind::Variable("Float", vec![]);
 // const TBoolean: TypeKind = TypeKind::Variable("Boolean", vec![]);

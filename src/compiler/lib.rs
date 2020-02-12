@@ -14,7 +14,7 @@ extern crate bitflags;
 // }
 //
 pub mod bytecode;
-pub mod typecheck;
+// pub mod typecheck;
 pub mod llvm;
 pub mod ir;
 pub mod vm;

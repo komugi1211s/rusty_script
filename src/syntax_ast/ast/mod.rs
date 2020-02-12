@@ -109,7 +109,7 @@ pub enum Statement {
     Return(Option<ExprId>),
     Expression(ExprId),
     // Defer(Expr),
-    Decralation(DeclarationData),
+    Declaration(DeclarationData),
     If(ExprId, StmtId, Option<StmtId>),
     While(ExprId, StmtId),
     For(StmtId, ExprId, ExprId, StmtId),

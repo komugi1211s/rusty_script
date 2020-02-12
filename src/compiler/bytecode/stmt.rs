@@ -8,7 +8,6 @@ use trace::{
 use syntax_ast::ast::*;
 
 use crate::ir::IRCode;
-use crate::typecheck::{ TypeArena, TypeContext };
 use types::{ Value, Type };
 use super::{ Constants, Env, Context, PatchKind, Patch };
 use super::expr::traverse_expression;
@@ -72,8 +71,10 @@ pub fn traverse_statement(
             }
         }
 
-        Block(innerblock) => traverse_block(env, ctx, ast, innerblock),
-
+        Block(innerblock)     => traverse_block(env, ctx, ast, innerblock),
+//        Function(func_idx)    => declare_function(env, ctx, ast, func_idx),
+        Declaration(ref decl) => declare_variable(env, ctx, decl),
+        
         Break    => { ctx.mark_break(); },
         Continue => { ctx.mark_continue(); },
         _ => unimplemented!(),
@@ -92,7 +93,32 @@ fn traverse_block(
     }
     env.shallowen_nest();
 }
+/*    
+fn declare_function(
+    env: &mut Env,
+    ctx: &mut Context,
+    ast: &ASTree,
+    idx: usize
+) {
+    let func_decl = ast.functions.get(idx).expect("Undefined Function");
+    declare_variable(env, ctx, &func_decl.it);
+
+    env.deepen_nest();
+    for arg in &func_decl.args {
+        declare_variable(env, ctx, arg);
+    }
+
+    env.shallowen_nest();
+}
+ */
+
+fn declare_variable(
+    env:  &mut Env,
+    ctx:  &mut Context,
+    decl: &DeclarationData
+) {
     
+}
 
 use std::mem;
 fn capture_patch(ctx: &mut Context, func: impl FnOnce(&mut Context)) -> Vec<Patch> {
@@ -102,3 +128,4 @@ fn capture_patch(ctx: &mut Context, func: impl FnOnce(&mut Context)) -> Vec<Patc
     mem::swap(&mut old_vec, &mut ctx.patch);
     old_vec
 }
+

@@ -1,4 +1,5 @@
- 
+
+use std::collections::HashMap; 
 use trace::{
     SourceFile,
     err_fatal,
@@ -8,7 +9,6 @@ use trace::{
 use syntax_ast::ast::*;
 
 use super::ir::IRCode;
-use super::typecheck::{ TypeArena, TypeContext };
 use types::{ Value, Type };
 
 mod stmt;
@@ -47,10 +47,18 @@ impl Constants {
 }
 
 #[derive(Debug)]
+struct Local {
+    name: String,
+    dtype: Type,
+    depth: u16
+}
+
+#[derive(Debug)]
 pub struct Env<'a> {
     source: &'a SourceFile,
-    depth: u16,
-    defn:   TypeArena,
+    depth:  u16,
+    global: HashMap<String, Type>,
+    local:  Vec<Local>,
     consts: Constants,
 }
 
@@ -59,7 +67,8 @@ impl<'a> Env<'a> {
         Env {
 	    source,
             depth:  0,
-            defn:   TypeArena::new(),
+            global: HashMap::new(),
+            local:  Vec::with_capacity(255),
             consts: Constants::new(),
         }
     }
@@ -70,7 +79,8 @@ impl<'a> Env<'a> {
 
     fn shallowen_nest(&mut self) {
         self.depth -= 1;
-        self.defn.ditch_out_of_scope(self.depth);
+        let depth = self.depth;
+        self.local.retain(|x| x.depth <= depth);
     }
 }
 
@@ -96,9 +106,9 @@ pub struct Patch {
 impl Context {
     fn new() -> Self {
 	Self {
-	    codes: Vec::with_capacity(30000),
+	    codes: Vec::with_capacity(5000),
 	    patch: Vec::with_capacity(255),
-	}
+     	}
     }
 
     #[inline(always)]
@@ -144,7 +154,7 @@ impl Context {
 pub fn generate_bytecode(module: &SourceFile, ast: &ASTree) -> Result<CompiledCode, ()> {
     let mut ctx = Context::new();
     let mut env = Env::new(module);
-
+    
     for node in ast.ast.iter() {
         traverse_statement(&mut env, &mut ctx, ast, node.stmt_id);
     }

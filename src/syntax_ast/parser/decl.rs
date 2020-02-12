@@ -206,10 +206,10 @@ impl<'m, 't> Parser<'m, 't> {
             decl_info.expr = Some(item);
 
             self.consume(TokenType::SemiColon)?;
-            Ok(self.ast.add_stmt(ast::Statement::Decralation(decl_info)))
+            Ok(self.ast.add_stmt(ast::Statement::Declaration(decl_info)))
         } else if self.is(TokenType::SemiColon) {
             self.advance();
-            Ok(self.ast.add_stmt(ast::Statement::Decralation(decl_info)))
+            Ok(self.ast.add_stmt(ast::Statement::Declaration(decl_info)))
         } else if self.is(TokenType::OpenParen) {
             self.parse_function_decl(decl_info)
         } else {
