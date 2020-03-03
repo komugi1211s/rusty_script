@@ -70,7 +70,7 @@ pub enum IRCode {
 }
 
 
-pub fn print_ir_vec(ir_vec: &Vec<IRCode>) {
+pub fn print_ir_vec(ir_vec: &[IRCode]) {
     for (i, ir) in ir_vec.iter().enumerate() {
         println!("{} | {:?}", i, ir);
     }
