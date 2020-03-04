@@ -1,13 +1,13 @@
 use trace::Error;
 
 use super::ast::{
-    self, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData, Literal,
-    Operator, ASTree, Statement, StmtId,
+    self, ASTree, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData,
+    Literal, Operator, Statement, StmtId,
 };
 
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
-use trace::{ err_fatal, err_internal, code_line, SourceFile };
+use trace::{code_line, err_fatal, err_internal, SourceFile};
 
 mod decl;
 mod stmt;
@@ -26,17 +26,16 @@ impl<'m, 't> Parser<'m, 't> {
         Self {
             tokens: _tok,
             ast: ASTree {
-                file     : modu,
-                ast      : vec![],
-                stmt     : vec![],
-                expr     : vec![],
+                file: modu,
+                ast: vec![],
+                stmt: vec![],
+                expr: vec![],
                 functions: vec![],
             },
             current: 0,
             assign_count: 0,
             block_count: 0,
         }
-
     }
 
     pub fn parse(mut self) -> Result<ASTree<'m>, ()> {
@@ -107,7 +106,7 @@ impl<'m, 't> Parser<'m, 't> {
                     src: self.ast.file,
                     span: span,
                     title: "Invalid Assignment Target",
-                    msg: "\n値の割当を行う対象が不正です。", 
+                    msg: "\n値の割当を行う対象が不正です。",
                 );
                 code_line!(src: self.ast.file, span: span, pad: 1);
                 return Err(());
@@ -360,13 +359,13 @@ impl<'m, 't> Parser<'m, 't> {
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
                                 err_fatal!(
-                                    src: self.ast.file,
-                                    span: inside.span,
-                                    title: "Maximum Identifier Length Exceeded",
-                                    msg: "\n識別子の長さ( {} )が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。",
-                                        inside_lexeme.len(),
-                                        MAX_IDENTIFIER_LENGTH
-                                    );
+                                src: self.ast.file,
+                                span: inside.span,
+                                title: "Maximum Identifier Length Exceeded",
+                                msg: "\n識別子の長さ( {} )が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。",
+                                    inside_lexeme.len(),
+                                    MAX_IDENTIFIER_LENGTH
+                                );
 
                                 code_line!(
                                     src: self.ast.file,
@@ -392,7 +391,6 @@ impl<'m, 't> Parser<'m, 't> {
                 Ok(self.ast.add_expr(expr))
             }
             _s => {
-                 
                 err_fatal!(
                     src: self.ast.file,
                     span: inside.span,

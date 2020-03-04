@@ -1,22 +1,22 @@
-#[macro_use] 
+#[macro_use]
 extern crate lazy_static;
 pub extern crate log;
 
 pub mod source;
-pub use source::{ SourceFile };
-pub mod position;
+pub use source::SourceFile;
 pub mod macros;
+pub mod position;
 
+pub use log::{debug, error, info, trace, warn};
 use position::CodeSpan;
-pub use log::{info, trace, warn, error, debug};
 
 pub static Logger: IsekaiLogger = IsekaiLogger;
 
 pub fn init_logger() {
-    log::set_logger(&Logger).map(|()| log::set_max_level(log::LevelFilter::Info)).unwrap();
+    log::set_logger(&Logger)
+        .map(|()| log::set_max_level(log::LevelFilter::Info))
+        .unwrap();
 }
-
-
 
 /*
 
@@ -54,8 +54,6 @@ pub fn init_logger() {
     XX  |
 
 */
-
-
 
 #[derive(Debug)]
 pub struct Error {
@@ -100,28 +98,38 @@ pub enum ErrorKind {
 
 pub struct IsekaiLogger;
 
-
 impl IsekaiLogger {
-    pub fn spit_line(
-        &self,
-        lines: CodeSpan,
-        codes: &SourceFile,
-        pad: usize
-    ) {
+    pub fn spit_line(&self, lines: CodeSpan, codes: &SourceFile, pad: usize) {
         let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
         println!(" :: 指定ファイルのコード出力\n");
 
         if lines.is_oneliner() {
             let line = lines.start_usize();
-            println!("   :: {} |: {}", line, code_lines.get(line.saturating_sub(1)).unwrap_or(&"~~~~~~~~~~~~~~"));
+            println!(
+                "   :: {} |: {}",
+                line,
+                code_lines
+                    .get(line.saturating_sub(1))
+                    .unwrap_or(&"~~~~~~~~~~~~~~")
+            );
         } else {
             let (start, end) = if lines.length() > pad + 1 {
-                (lines.start_usize(), std::cmp::min(lines.end_usize() + 1, codes.line))
+                (
+                    lines.start_usize(),
+                    std::cmp::min(lines.end_usize() + 1, codes.line),
+                )
             } else {
-                (lines.start_usize().saturating_sub(pad), std::cmp::min(lines.end_usize() + pad + 1, codes.line))
+                (
+                    lines.start_usize().saturating_sub(pad),
+                    std::cmp::min(lines.end_usize() + pad + 1, codes.line),
+                )
             };
-            for line in start .. end {
-                println!("   :: {} |: {}", line, code_lines.get(line-1).unwrap_or(&"~~~~~~~~~~~~~~"));
+            for line in start..end {
+                println!(
+                    "   :: {} |: {}",
+                    line,
+                    code_lines.get(line - 1).unwrap_or(&"~~~~~~~~~~~~~~")
+                );
             }
         }
     }
@@ -142,7 +150,10 @@ impl log::Log for IsekaiLogger {
             return;
         }
 
-        println!("{:-<50}", format!("[Isekai :: {}] {} ", rec.level(), rec.target()));
+        println!(
+            "{:-<50}",
+            format!("[Isekai :: {}] {} ", rec.level(), rec.target())
+        );
 
         println!("{}", rec.args());
 
@@ -151,10 +162,16 @@ impl log::Log for IsekaiLogger {
                 println!("エラーの位置が分かりません！");
             }
             (None, Some(line)) => {
-                println!("{} 行目で発生していますが、発生元のファイルが提供されませんでした。", line);
+                println!(
+                    "{} 行目で発生していますが、発生元のファイルが提供されませんでした。",
+                    line
+                );
             }
             (Some(file_name), None) => {
-                println!("ファイル {} で発生していますが、原因の行目が提供されませんでした。", file_name);
+                println!(
+                    "ファイル {} で発生していますが、原因の行目が提供されませんでした。",
+                    file_name
+                );
             }
             (Some(file), Some(line)) => {
                 println!("{} 行目 :: ファイル {}", line, file);
@@ -164,7 +181,6 @@ impl log::Log for IsekaiLogger {
 
     fn flush(&self) {}
 }
-
 
 #[cfg(test)]
 mod tests {

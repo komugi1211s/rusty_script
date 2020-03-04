@@ -19,10 +19,10 @@ impl<'m> ASTree<'m> {
     pub fn new(m: &'m SourceFile) -> Self {
         Self {
             file: m,
-            ast      : vec![],
-            stmt     : vec![],
-            expr     : vec![],
-            functions: vec![]
+            ast: vec![],
+            stmt: vec![],
+            expr: vec![],
+            functions: vec![],
         }
     }
 
@@ -63,10 +63,9 @@ pub struct StmtId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ExprId(pub u32);
 
-
 #[derive(Debug, Clone)]
 pub struct AstNode {
-    pub span   : CodeSpan,
+    pub span: CodeSpan,
     pub stmt_id: StmtId,
 }
 
@@ -152,32 +151,35 @@ pub enum Operator {
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use Operator::*;
-        write!(f, "{}", match self {
-            Add    => "+",
-            Sub    => "-",
-            Div    => "/",
-            Mul    => "*",
-            Mod    => "%",
-            EqEq   => "==",
-            NotEq  => "!=",
-            LessEq => "<=",
-            MoreEq => ">=",
-            Less   => ">",
-            More   => "<",
-            Not    => "!",
-            Neg    => "-",
-            And    => "and",
-            Or     => "or",
-            Ref    => "^",
-            Deref  => "^",
-            Wrap   => "?",
-            Unwrap => "!",
-            Asgn   => "=",
-            _      => "??"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Add => "+",
+                Sub => "-",
+                Div => "/",
+                Mul => "*",
+                Mod => "%",
+                EqEq => "==",
+                NotEq => "!=",
+                LessEq => "<=",
+                MoreEq => ">=",
+                Less => ">",
+                More => "<",
+                Not => "!",
+                Neg => "-",
+                And => "and",
+                Or => "or",
+                Ref => "^",
+                Deref => "^",
+                Wrap => "?",
+                Unwrap => "!",
+                Asgn => "=",
+                _ => "??",
+            }
+        )
     }
-} 
-
+}
 
 impl Operator {
     // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
@@ -186,8 +188,8 @@ impl Operator {
         use Operator::*;
         match self {
             Add | Sub | Div | Mul | Mod | Neg => true,
-            EqEq | NotEq | LessEq | MoreEq | Less | More | Not | Ref | Deref | Wrap
-            | Unwrap | And | Or | Asgn => false,
+            EqEq | NotEq | LessEq | MoreEq | Less | More | Not | Ref | Deref | Wrap | Unwrap
+            | And | Or | Asgn => false,
         }
     }
 
@@ -212,7 +214,7 @@ impl Operator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
-    pub tok : Token,
+    pub tok: Token,
     pub kind: LiteralKind,
 }
 

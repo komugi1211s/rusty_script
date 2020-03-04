@@ -1,7 +1,6 @@
-
-use trace::SourceFile;
 use super::bytecode::CompiledCode;
 use super::ir::IRCode;
+use trace::SourceFile;
 
 use types::Value;
 
@@ -9,9 +8,9 @@ use types::Value;
 pub struct VirtualMachine {
     // Instruction Pointer :: current instruction.
     IP: usize,
-    callst   : Vec<usize>,
+    callst: Vec<usize>,
 
-    stack    : Vec<Value>,
+    stack: Vec<Value>,
 }
 
 impl VirtualMachine {
@@ -19,7 +18,7 @@ impl VirtualMachine {
         Self {
             IP: 0,
             callst: Vec::with_capacity(65535),
-            stack : Vec::with_capacity(65535),
+            stack: Vec::with_capacity(65535),
         }
     }
 }
@@ -41,16 +40,13 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
                 let value = bin.consts.values[*idx as usize].clone();
                 vm.stack.push(value);
             }
-            
+
             IRCode::ConstDyn(idx) => {
                 let value = bin.consts.values[*idx as usize].clone();
                 vm.stack.push(value);
             }
 
-            IRCode::Add
-            | IRCode::Sub 
-            | IRCode::Mul
-            | IRCode::Div => {
+            IRCode::Add | IRCode::Sub | IRCode::Mul | IRCode::Div => {
                 let rhs = vm.stack.pop().unwrap();
                 let lhs = vm.stack.pop().unwrap();
 
@@ -70,11 +66,11 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             }
 
             IRCode::JT(to) => {
-        		let cond = vm.stack.pop().unwrap();
-        		if cond.is_truthy() {
-        		    vm.IP = *to as usize;
+                let cond = vm.stack.pop().unwrap();
+                if cond.is_truthy() {
+                    vm.IP = *to as usize;
                     continue;
-        		}
+                }
             }
 
             IRCode::JNT(to) => {
@@ -94,6 +90,5 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
         }
 
         vm.IP += 1;
-    };
-
+    }
 }

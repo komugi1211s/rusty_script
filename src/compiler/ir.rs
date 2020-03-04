@@ -1,18 +1,9 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 // オペランドを持つ類のものは全てu32のオペランドを持つ
 // usizeとかu16とか使い分けたかったけど無理
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Serialize,
-    Deserialize
-)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Serialize, Deserialize)]
 pub enum IRCode {
-    
     Const8(u32),
     Const16(u32),
     Const32(u32),
@@ -64,11 +55,10 @@ pub enum IRCode {
     FStore(u32),
     SStore(u32),
     BStore(u32),
-    
+
     Interrupt,
     DebugPrint,
 }
-
 
 pub fn print_ir_vec(ir_vec: &[IRCode]) {
     for (i, ir) in ir_vec.iter().enumerate() {
@@ -79,7 +69,7 @@ pub fn print_ir_vec(ir_vec: &[IRCode]) {
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     #[test]
     fn serializer() {
         let code = vec![

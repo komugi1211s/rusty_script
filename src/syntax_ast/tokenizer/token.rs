@@ -15,7 +15,7 @@ pub enum TokenType {
     Print,    // print "message"
     Return,   // return "";
     Constant, // const int;
-    Public, // public int;
+    Public,   // public int;
 
     // 括弧とか文字とか
     DoubleQuote,        // ""

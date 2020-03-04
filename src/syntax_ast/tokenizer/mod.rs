@@ -1,9 +1,8 @@
-
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{ position::CodeSpan, Error, source::SourceFile };
-use trace::{ err_fatal, err_internal, code_line };
+use trace::{code_line, err_fatal, err_internal};
+use trace::{position::CodeSpan, source::SourceFile, Error};
 
 pub struct Tokenizer {
     source: Vec<char>,
@@ -137,7 +136,7 @@ impl Tokenizer {
                 code_line!(src: module, span: span, pad: 1);
 
                 Err(())
-            },
+            }
         }
     }
 

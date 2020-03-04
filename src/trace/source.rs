@@ -1,7 +1,5 @@
 use std::fs;
-use std::io::{ BufRead, BufReader };
-
-
+use std::io::{BufRead, BufReader};
 
 #[derive(Clone, Debug)]
 pub struct SourceFile {
@@ -12,7 +10,6 @@ pub struct SourceFile {
 
 impl SourceFile {
     pub fn open(name: &str) -> Result<Self, ()> {
-
         let file = match fs::File::open(name) {
             Ok(x) => x,
             Err(_) => return Err(()),
@@ -32,7 +29,7 @@ impl SourceFile {
         Ok(SourceFile {
             filename: name.to_string(),
             code: string,
-            line: line
+            line: line,
         })
     }
 
@@ -50,5 +47,3 @@ impl SourceFile {
         Self::new("-- repl --", code)
     }
 }
-
-

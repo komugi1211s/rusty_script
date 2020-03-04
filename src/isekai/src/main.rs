@@ -2,16 +2,16 @@
 //extern crate test;
 
 use std::env;
+use std::fs::{self, File};
 use std::io::prelude::*;
-use std::fs::{ self, File };
 
 use std::time::Instant;
 
+use compiler::{bytecode, ir::print_ir_vec, vm};
 use syntax_ast::parser::Parser;
 use syntax_ast::tokenizer::Tokenizer;
-use compiler::{ bytecode, vm, ir::print_ir_vec };
 
-use trace::{ error, err_internal, source::SourceFile };
+use trace::{err_internal, error, source::SourceFile};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -35,7 +35,7 @@ fn dump_chunk(chunk: &ByteChunk) {
 */
 
 struct TimeCount {
-    messages: RefCell<Vec<String>>
+    messages: RefCell<Vec<String>>,
 }
 
 impl TimeCount {
@@ -43,22 +43,12 @@ impl TimeCount {
         let start = Instant::now();
         let result = fun();
         let elapsed = start.elapsed();
-        let time = {
-            elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9
-        };
+        let time = { elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9 };
 
         let elapsed_msg = if result.is_ok() {
-            format!(
-                " {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m",
-                step,
-                time
-            )
+            format!(" {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m", step, time)
         } else {
-            format!(
-                " {0:<12} Error :: \x1b[31m{1} secs\x1b[39m",
-                step,
-                time
-            )
+            format!(" {0:<12} Error :: \x1b[31m{1} secs\x1b[39m", step, time)
         };
         self.messages.borrow_mut().push(elapsed_msg);
 
@@ -73,20 +63,19 @@ impl TimeCount {
 }
 
 pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
-    let mut timer = TimeCount { messages: RefCell::new(Vec::with_capacity(4)) };
+    let mut timer = TimeCount {
+        messages: RefCell::new(Vec::with_capacity(4)),
+    };
     // 実際の所謂「文字の数」ではなくバイト列の長さを確認している
     // 今回の場合は最低でもこれだけを確保しておきたいという長さなのでこれで問題ない
     let byte_length = module.code.as_str().len();
-    
-    let binary = timer.time(
-        "Total",
-        || {
-            let tokens  = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
-            let parsed  = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
-            let binary  = timer.time("CodeGen",   || bytecode::generate_bytecode(&module, &parsed))?;
-            Ok(binary)
-        }
-    )?;
+
+    let binary = timer.time("Total", || {
+        let tokens = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
+        let parsed = timer.time("Parser", || Parser::new(&module, &tokens).parse())?;
+        let binary = timer.time("CodeGen", || bytecode::generate_bytecode(&module, &parsed))?;
+        Ok(binary)
+    })?;
 
     // print_ir_vec(&binary.code);
     timer.report();
@@ -131,7 +120,7 @@ fn run_file(path: &str, stage: Option<&String>) -> bool {
         Err(_) => {
             err_internal!("ファイルが読み込めませんでした。");
             return false;
-        },
+        }
     };
     let mut stage_u8: u8 = 0;
     if let Some(stage_) = stage {

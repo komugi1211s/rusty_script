@@ -9,7 +9,7 @@ use crate::tokenizer::token::{Token, TokenType};
 
 use trace::position::CodeSpan;
 use trace::Error;
-use trace::{info, warn, err_fatal, err_internal, code_line};
+use trace::{code_line, err_fatal, err_internal, info, warn};
 
 fn is_prefix_banned(cand: &str) -> bool {
     match cand {
@@ -52,10 +52,10 @@ impl<'m, 't> Parser<'m, 't> {
                 // TODO: do not use unwrap
                 let length = number_inside.parse::<u32>().unwrap();
                 self.consume(TokenType::CloseSquareBracket)?;
-                return Ok(ast::ParsedType::pArray(Box::new(inner_type), Some(length)))
+                return Ok(ast::ParsedType::pArray(Box::new(inner_type), Some(length)));
             } else {
                 self.consume(TokenType::CloseSquareBracket)?;
-                return Ok(ast::ParsedType::pArray(Box::new(inner_type), None))
+                return Ok(ast::ParsedType::pArray(Box::new(inner_type), None));
             }
         }
 
@@ -69,14 +69,14 @@ impl<'m, 't> Parser<'m, 't> {
 
             let candidate = candidate.as_ref().unwrap();
             if is_prefix_banned(candidate) && !prefix.is_empty() {
-                    err_fatal!(
-                        src: self.ast.file,
-                        span: span,
-                        title: "Invalid Prefix placement",
-                        msg: "Prefix {:?} はこの定義では使用できません。", prefix
-                    );
-                    code_line!(src: self.ast.file, span: span);
-                    return Err(());
+                err_fatal!(
+                    src: self.ast.file,
+                    span: span,
+                    title: "Invalid Prefix placement",
+                    msg: "Prefix {:?} はこの定義では使用できません。", prefix
+                );
+                code_line!(src: self.ast.file, span: span);
+                return Err(());
             }
 
             if candidate == "struct" {
@@ -92,8 +92,14 @@ impl<'m, 't> Parser<'m, 't> {
         };
         loop {
             match self.get_current().tokentype {
-                TokenType::Caret => { self.advance(); core_type = ast::ParsedType::pPointer(Box::new(core_type)); }, 
-                TokenType::Question => { self.advance(); core_type = ast::ParsedType::pOptional(Box::new(core_type)); }, 
+                TokenType::Caret => {
+                    self.advance();
+                    core_type = ast::ParsedType::pPointer(Box::new(core_type));
+                }
+                TokenType::Question => {
+                    self.advance();
+                    core_type = ast::ParsedType::pOptional(Box::new(core_type));
+                }
                 _ => break,
             }
         }
@@ -108,8 +114,14 @@ impl<'m, 't> Parser<'m, 't> {
         let mut prefix = ast::DeclPrefix::empty();
         loop {
             match self.get_current().tokentype {
-                TokenType::Constant => { self.advance(); prefix.insert(ast::DeclPrefix::Const); },
-                TokenType::Public => { self.advance(); prefix.insert(ast::DeclPrefix::Public); },
+                TokenType::Constant => {
+                    self.advance();
+                    prefix.insert(ast::DeclPrefix::Const);
+                }
+                TokenType::Public => {
+                    self.advance();
+                    prefix.insert(ast::DeclPrefix::Public);
+                }
                 _ => break,
             }
         }

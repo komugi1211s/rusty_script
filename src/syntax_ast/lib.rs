@@ -1,4 +1,5 @@
-#[macro_use] extern crate bitflags;
+#[macro_use]
+extern crate bitflags;
 
 pub mod ast;
 pub mod parser;

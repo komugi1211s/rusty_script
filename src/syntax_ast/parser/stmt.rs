@@ -1,11 +1,8 @@
 use trace::Error;
 
-use super::ast::{
-    Statement, StmtId, BlockData
-};
+use super::ast::{BlockData, Statement, StmtId};
 
-use crate::tokenizer::token::{TokenType};
-
+use crate::tokenizer::token::TokenType;
 
 use super::Parser;
 

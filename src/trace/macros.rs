@@ -1,6 +1,3 @@
-
-
-
 #[macro_export(local_inner_macros)]
 macro_rules! err_fatal {
     (src: $src:expr, span: $span:expr, title: $tgt:expr, msg: $($msg:tt)+) => (
@@ -10,7 +7,7 @@ macro_rules! err_fatal {
             if !$span.is_invalid() {
                 __x.line(Some($span.start));
             }
-                
+
 
             $crate::Logger.log(
                 &__x.level($crate::log::Level::Error)
@@ -35,26 +32,23 @@ macro_rules! code_line {
     };
 }
 
-
 #[macro_export]
 macro_rules! err_rt {
-    (src: $src:expr, span: $span:expr, msg: $msg:expr) => {
-        {
-            let mut __x = RecordBuilder::new()
-                .level(log::Level::Error)
-                .target("RUNTIME ERROR")
-                .args(__l_args!($msg))
-                .file(Some(&$src.filename));
-                
-                if !$span.is_invalid() {
-                    __x.line(Some($span.start));
-                }
+    (src: $src:expr, span: $span:expr, msg: $msg:expr) => {{
+        let mut __x = RecordBuilder::new()
+            .level(log::Level::Error)
+            .target("RUNTIME ERROR")
+            .args(__l_args!($msg))
+            .file(Some(&$src.filename));
 
-                let __y = __x.build();
-
-            Logger.log(&__y);
+        if !$span.is_invalid() {
+            __x.line(Some($span.start));
         }
-    }
+
+        let __y = __x.build();
+
+        Logger.log(&__y);
+    }};
 }
 
 #[macro_export]
