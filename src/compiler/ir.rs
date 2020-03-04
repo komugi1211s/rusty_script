@@ -9,6 +9,9 @@ pub enum IRCode {
     Const32(u32),
     Const64(u32),
     ConstDyn(u32),
+    Null,
+    True,
+    False,
 
     Return,
     Push,

@@ -41,10 +41,10 @@ pub enum ParsedType {
 impl ParsedType {
     pub fn match_primitive(cand: &str) -> Option<Self> {
         match cand {
-            "int" => Some(Self::pInt),
+            "int"    => Some(Self::pInt),
             "string" => Some(Self::pStr),
-            "float" => Some(Self::pFloat),
-            "bool" => Some(Self::pBoolean),
+            "float"  => Some(Self::pFloat),
+            "bool"   => Some(Self::pBoolean),
             _ => None,
         }
     }

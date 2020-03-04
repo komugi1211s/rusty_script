@@ -17,6 +17,16 @@ pub fn traverse_expression(env: &mut Env, ctx: &mut Context, ast: &ASTree, expre
             emit_from_oper(ctx, *oper);
         }
 
+        Logical(lhs, rhs, oper) => {
+            traverse_expression(env, ctx, ast, *lhs);
+            traverse_expression(env, ctx, ast, *rhs);
+            emit_from_oper(ctx, *oper);
+        }
+
+        Assign(idenid, rhs) => {
+            traverse_expression(env, ctx, ast, *rhs);
+        }
+
         Unary(rhs, oper) => {
             traverse_expression(env, ctx, ast, *rhs);
             emit_from_oper(ctx, *oper);
@@ -49,8 +59,8 @@ fn emit_constants(env: &mut Env, ctx: &mut Context, literal: &Literal) {
         LiteralKind::Bool => {
             match lexeme {
                 // TODO - @DumbCode: Hardcoded Index.
-                "true" => ctx.emit_op(IRCode::Const8(1)),
-                "false" => ctx.emit_op(IRCode::Const8(2)),
+                "true"  => ctx.emit_op(IRCode::True),
+                "false" => ctx.emit_op(IRCode::False),
                 _ => unreachable!(),
             };
         }

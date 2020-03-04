@@ -11,24 +11,23 @@ const USIZE_LENGTH: usize = 4;
 #[cfg(target_pointer_width = "64")]
 const USIZE_LENGTH: usize = 8;
 
-#[derive(Debug, PartialEq, Clone, Hash)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub enum TypeKind {
+    // Primitives.
     Int,
     Float,
     Str,
     Boolean,
     Null,
-    Array(Box<Type>, Option<u32>),
-    Function { args: Vec<Type>, ret: Box<Type> },
-    Compound { field: Vec<Type> },
-    Variable(String),
-    Existential(String),
-}
 
-// const TInt: TypeKind     = TypeKind::Variable("Int", vec![]);
-// const TFloat: TypeKind   = TypeKind::Variable("Float", vec![]);
-// const TBoolean: TypeKind = TypeKind::Variable("Boolean", vec![]);
-// const TString: TypeKind  = TypeKind::Variable("String", vec![]);
+    // Non-Primitives.
+    Ptr,
+    Array,
+    Function,
+
+    // User_Defined.
+    Struct,
+}
 
 impl Default for TypeKind {
     fn default() -> Self {
@@ -36,71 +35,97 @@ impl Default for TypeKind {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Type {
     pub kind: TypeKind,
+
+    /// For Array :: Pointer's Inside.
+    pub pointer_to:     Option<Box<Type>>,
+
+    /// For Array :: Type of array's content.
+    pub array_type:     Option<Box<Type>>,
+
+    /// For Array :: Array's variable count.
+    pub array_size:     Option<u32>,
+
+    /// For Array :: Is array defined as a dynamic array??
+    pub is_array_dynamic: bool,
+
+    /// For Function :: Function's Return Type.
+    pub return_type:    Option<Box<Type>>,
+
+    /// For Function :: Function's argument type in left to right order.
+    pub arg_type:       Vec<Type>,
+
+    /// For Struct :: name of struct.
+    pub struct_name:    Option<String>,
+
+    /// For Struct :: type of struct member in top to bottom order.
+    pub struct_members: Vec<Type>,
 }
 
 impl Type {
     pub fn new(kind: TypeKind) -> Self {
-        Self { kind }
+        Self { kind, .. Default::default() }
     }
 
     pub fn boolean() -> Self {
         Self {
             kind: TypeKind::Boolean,
+            .. Default::default()
         }
     }
 
     pub fn float() -> Self {
         Self {
             kind: TypeKind::Float,
+            .. Default::default()
         }
     }
 
     pub fn int() -> Self {
         Self {
             kind: TypeKind::Int,
+            .. Default::default()
         }
     }
 
     pub fn string() -> Self {
         Self {
             kind: TypeKind::Str,
+            .. Default::default()
         }
     }
 
     pub fn array(of: &Self, size: Option<u32>) -> Self {
         Self {
-            kind: TypeKind::Array(Box::new(of.clone()), size),
+            kind: TypeKind::Array,
+            array_type: Some(Box::new(of.clone())),
+            array_size: size,
+            is_array_dynamic: size.is_none(),
+            .. Default::default()
         }
     }
 
     pub fn null() -> Self {
         Self {
             kind: TypeKind::Null,
+            .. Default::default()
         }
     }
 
     pub fn optional(of: Type) -> Self {
         Self {
             // TODO - @Broken: Move optional into TypeKind::Union
-            kind: TypeKind::Compound {
-                field: vec![of, Type::null()],
-            },
+            kind: TypeKind::Struct,
+            struct_name: Some(format!("Option<{}>", &of)),
+            struct_members: vec![of, Self::null()],
+            .. Default::default()
         }
     }
 
     pub fn is_null(&self) -> bool {
         self.kind == TypeKind::Null
-    }
-
-    pub fn is_compound(&self) -> bool {
-        if let TypeKind::Compound { .. } = self.kind {
-            true
-        } else {
-            false
-        }
     }
 }
 
@@ -111,30 +136,50 @@ impl std::fmt::Display for Type {
             f,
             "{}",
             match self.kind {
-                Int => "int".into(),
-                Float => "float".into(),
-                Str => "string".into(),
+                Int     => "int".into(),
+                Float   => "float".into(),
+                Str     => "string".into(),
                 Boolean => "boolean".into(),
-                Array(ref x, ref s) if s.is_none() => format!("[{}]", &*x),
-                Array(ref x, ref s) if s.is_some() => format!("[{}; {}]", &*x, s.as_ref().unwrap()),
-                Array(_, _) => "[?; ?]".into(),
-                Function { ref args, ref ret } => {
-                    let args = args
+                Array   => {
+                    if let Some(ref base) = self.array_type {
+                        match self.array_size {
+                            Some(size) => format!("[{}; {}]", &**base, size),
+                            None => format!("[{}]", &**base)
+                        }
+                    } else {
+                        unreachable!();
+                    }
+                }
+                Function => {
+                    let func_args = self.arg_type
                         .iter()
                         .map(|x| format!("{}", x))
                         .collect::<Vec<String>>()
-                        .connect(", ");
-                    format!("({}) {}", args, &*ret)
+                        .join(", ");
+
+                    if let Some(ref ret_type) = self.return_type {
+                        format!("({}) {}", func_args, &**ret_type)
+                    } else {
+                        format!("({}) void", func_args)
+                    }
                 }
-                Compound { ref field } => {
-                    field
-                        .iter()
-                        .map(|x| format!("{}", x))
-                        .collect::<Vec<String>>()
-                        .connect(", ")
+                Ptr => {
+                    if let Some(ref pointer_to) = self.pointer_to {
+                        format!("*{}", &**pointer_to)
+                    } else {
+                        String::from("nullptr")
+                    }
                 }
-                Variable(ref x) => x.clone(),
-                Existential(ref x) => x.clone(),
+                Struct => {
+                    let struct_name = if let Some(ref name) = self.struct_name {
+                        name.clone()
+                    } else {
+                        String::from("<NoNameStruct>")
+                    };
+
+                    let members = self.struct_members.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join("; ");
+                    format!("{}: struct {{ {} }}", struct_name, members)
+                }
                 Null => "null".into(),
             }
         )

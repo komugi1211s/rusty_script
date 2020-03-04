@@ -63,7 +63,7 @@ pub fn traverse_statement(env: &mut Env, ctx: &mut Context, ast: &ASTree, statem
 
         Block(innerblock) => traverse_block(env, ctx, ast, innerblock),
         //        Function(func_idx)    => declare_function(env, ctx, ast, func_idx),
-        Declaration(ref decl) => traverse_vardecl(env, ctx, decl),
+        Declaration(ref decl) => traverse_vardecl(env, ctx, ast, decl),
 
         Break => {
             ctx.mark_break();
@@ -83,31 +83,29 @@ fn traverse_block(env: &mut Env, ctx: &mut Context, ast: &ASTree, inner: &BlockD
     env.shallowen_nest();
 }
 
-/*
-fn declare_function(
-    env: &mut Env,
-    ctx: &mut Context,
-    ast: &ASTree,
-    idx: usize
-) {
-    let func_decl = ast.functions.get(idx).expect("Undefined Function");
-    declare_variable(env, ctx, &func_decl.it);
 
-    env.deepen_nest();
-    for arg in &func_decl.args {
-        declare_variable(env, ctx, arg);
+fn traverse_vardecl(env: &mut Env, ctx: &mut Context, ast: &ASTree, decl: &DeclarationData) {
+    let expr_type = if let Some(expr) = decl.expr {
+        traverse_expression(env, ctx, ast, expr)
+    } else {
+        
     }
 
-    env.shallowen_nest();
+    let declaration_type = if decl.is_inferred() {
+        parsedtype_to_type(decl); 
+    }
+    
+    
 }
- */
 
-fn traverse_vardecl(env: &mut Env, ctx: &mut Context, decl: &DeclarationData) {
-    // 1. solve variables type.
-    // 2. notify an existence of variable.
-    // 3. emit variable's expr if possible.
-    // 4. emit store.
-    unimplemented!();
+fn parsedtype_to_type(decl: &DeclarationData) -> Type {
+    use ParsedType::*;
+    match decl.dectype {
+        pInt     => Type::int(),
+        pStr     => Type::string(),
+        pFloat   => Type::float(),
+        pBoolean => Type::boolean(),
+    }
 }
 
 use std::mem;

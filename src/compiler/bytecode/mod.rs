@@ -26,11 +26,6 @@ impl Constants {
         let mut _self = Self {
             values: Vec::with_capacity(255), // TODO: change capacity
         };
-
-        _self.values.push(Value::Null);
-        _self.values.push(Value::Boolean(true));
-        _self.values.push(Value::Boolean(false));
-
         _self
     }
 
