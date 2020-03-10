@@ -13,27 +13,7 @@ use stmt::traverse_statement;
 #[derive(Debug)]
 pub struct CompiledCode {
     pub code: Vec<IRCode>,
-    pub consts: Constants,
-}
-
-#[derive(Debug)]
-pub struct Constants {
-    pub values: Vec<Value>,
-}
-
-impl Constants {
-    fn new() -> Self {
-        let mut _self = Self {
-            values: Vec::with_capacity(255), // TODO: change capacity
-        };
-        _self
-    }
-
-    fn add_const(&mut self, value: Value) -> usize {
-        let current = self.values.len();
-        self.values.push(value);
-        current
-    }
+    pub consts: Vec<Value>,
 }
 
 #[derive(Debug)]
@@ -44,23 +24,31 @@ struct Local {
 }
 
 #[derive(Debug)]
-pub struct Env<'a> {
-    source: &'a SourceFile,
+pub struct Compiler {
+    codes: Vec<IRCode>,
+    patch: Vec<Patch>,
     depth: u16,
     global: HashMap<String, Type>,
     local: Vec<Local>,
-    consts: Constants,
+    consts: Vec<Value>, 
 }
 
-impl<'a> Env<'a> {
-    fn new(source: &'a SourceFile) -> Self {
-        Env {
-            source,
+impl Compiler {
+    fn new() -> Self {
+        Compiler {
+            codes: Vec::with_capacity(5000),
+            patch: Vec::with_capacity(255),
             depth: 0,
             global: HashMap::new(),
             local: Vec::with_capacity(255),
-            consts: Constants::new(),
+            consts: Vec::with_capacity(255),
         }
+    }
+
+    fn add_const(&mut self, value: Value) -> usize {
+        let current = self.consts.len();
+        self.consts.push(value);
+        current
     }
 
     fn deepen_nest(&mut self) {
@@ -71,34 +59,6 @@ impl<'a> Env<'a> {
         self.depth -= 1;
         let depth = self.depth;
         self.local.retain(|x| x.depth <= depth);
-    }
-}
-
-#[derive(Debug)]
-pub struct Context {
-    codes: Vec<IRCode>,
-    patch: Vec<Patch>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PatchKind {
-    Generic,
-    Break,
-    Continue,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Patch {
-    kind: PatchKind,
-    position: usize,
-}
-
-impl Context {
-    fn new() -> Self {
-        Self {
-            codes: Vec::with_capacity(5000),
-            patch: Vec::with_capacity(255),
-        }
     }
 
     #[inline(always)]
@@ -149,16 +109,28 @@ impl Context {
     }
 }
 
-pub fn generate_bytecode(module: &SourceFile, ast: &ASTree) -> Result<CompiledCode, ()> {
-    let mut ctx = Context::new();
-    let mut env = Env::new(module);
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PatchKind {
+    Generic,
+    Break,
+    Continue,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Patch {
+    kind: PatchKind,
+    position: usize,
+}
+
+pub fn generate_bytecode(ast: &ASTree) -> Result<CompiledCode, ()> {
+    let mut compiler = Compiler::new();
 
     for node in ast.ast.iter() {
-        traverse_statement(&mut env, &mut ctx, ast, node.stmt_id);
+        traverse_statement(&mut compiler, ast, node.stmt_id);
     }
 
     Ok(CompiledCode {
-        code: ctx.codes.clone(),
-        consts: env.consts,
+        code: compiler.codes,
+        consts: compiler.consts,
     })
 }

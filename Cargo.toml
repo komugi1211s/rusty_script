@@ -5,4 +5,5 @@ members = [
     "src/compiler",
     "src/types",
     "src/trace",
+    "src/semantic",
 ]

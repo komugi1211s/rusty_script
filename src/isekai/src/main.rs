@@ -1,20 +1,34 @@
 //#![feature(test)]
 //extern crate test;
 
-use std::env;
-use std::fs::{self, File};
-use std::io::prelude::*;
+use std::{
+    env,
+    fs::{self, File},
+    io::prelude::*,
+    time::Instant
+};
 
-use std::time::Instant;
+// Phase 1 & 2 - Tokenizing, Parsing
+use syntax_ast::{
+    parser::Parser,
+    tokenizer::Tokenizer
+};
 
-use compiler::{bytecode, ir::print_ir_vec, vm};
-use syntax_ast::parser::Parser;
-use syntax_ast::tokenizer::Tokenizer;
+// Phase 3  - semantic analysis
+use semantic;
+
+// Phase 4  - bytecode gen | llvm gen(TODO)
+use compiler::{bytecode, ir::print_ir_vec};
+
+// Phase 5a - VM
+use compiler::vm;
 
 use trace::{err_internal, error, source::SourceFile};
 
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+
 
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
@@ -71,9 +85,10 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let byte_length = module.code.as_str().len();
 
     let binary = timer.time("Total", || {
-        let tokens = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
-        let parsed = timer.time("Parser", || Parser::new(&module, &tokens).parse())?;
-        let binary = timer.time("CodeGen", || bytecode::generate_bytecode(&module, &parsed))?;
+        let tokens        = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
+        let parsed        = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
+        // let sema_analyzed = timer.time("Parser",    || semantic::analysis(&parsed))?;
+        let binary        = timer.time("CodeGen",   || bytecode::generate_bytecode(&parsed))?;
         Ok(binary)
     })?;
 

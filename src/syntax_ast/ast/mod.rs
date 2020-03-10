@@ -15,6 +15,7 @@ pub struct ASTree<'m> {
     pub functions: Vec<FunctionData>,
 }
 
+
 impl<'m> ASTree<'m> {
     pub fn new(m: &'m SourceFile) -> Self {
         Self {
@@ -87,6 +88,35 @@ pub struct BlockData {
     pub local_count: usize,
     pub statements: Vec<StmtId>,
 }
+
+/*
+struct Expression {
+    type: ExprType,
+    name: Option<String>,
+    lhs: ExprId,
+    rhs: ExprId,
+    oper: Option<Operator>,
+
+    args: Vec<ExprId>,
+}
+
+struct Statement {
+    type: StmtType,
+    expr: Option<ExprId>,
+
+    condition: Option<ExprId>,
+
+    true_block:  Option<StmtId>,
+    false_block: Option<StmtId>,
+
+    for_initial_expr: Option<ExprId>,
+    for_step_expr: Option<ExprId>,
+
+    declaration: Option<DeclarationData>,
+    block: Option<BlockData>,
+
+}
+*/
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {

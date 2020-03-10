@@ -69,6 +69,14 @@ impl Type {
         Self { kind, .. Default::default() }
     }
 
+    pub fn ptr(of: Box<Self>) -> Self {
+        Self {
+            kind: TypeKind::Ptr,
+            pointer_to: Some(of),
+            .. Default::default()
+        }
+    }
+
     pub fn boolean() -> Self {
         Self {
             kind: TypeKind::Boolean,
@@ -97,12 +105,21 @@ impl Type {
         }
     }
 
-    pub fn array(of: &Self, size: Option<u32>) -> Self {
+    pub fn array(of: Box<Self>, size: Option<u32>) -> Self {
         Self {
             kind: TypeKind::Array,
-            array_type: Some(Box::new(of.clone())),
+            array_type: Some(of),
             array_size: size,
             is_array_dynamic: size.is_none(),
+            .. Default::default()
+        }
+    }
+
+    pub fn function(returns: Box<Self>, arg_require: Vec<Self>) -> Self {
+        Self {
+            kind: TypeKind::Function,
+            return_type: Some(returns),
+            arg_type: arg_require,
             .. Default::default()
         }
     }
