@@ -1,11 +1,12 @@
 use std::cmp;
 use std::fmt;
-use std::mem;
 
 // 意図的にInvalidなスパンを作ってそれをEmptyとして使う
 pub const EMPTY_SPAN: CodeSpan = CodeSpan {
-    start: u32::max_value(),
-    end: u32::min_value(),
+    row_start: 0,
+    row_len: 0,
+    col_start: 0,
+    col_len: 0,
 };
 
 // ソースコード内で特定の範囲を指定するStruct
@@ -13,84 +14,73 @@ pub const EMPTY_SPAN: CodeSpan = CodeSpan {
 // どっちもu32で固定
 #[derive(Clone, Copy, PartialEq, Debug, Hash)]
 pub struct CodeSpan {
-    pub start: u32,
-    pub end: u32,
+    pub row_start: u32,
+    pub row_len: u32,
+    pub col_start: u32,
+    pub col_len: u32,
 }
+
 
 impl fmt::Display for CodeSpan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "line {} ~ {}", self.start, self.end)
+        write!(f, "line {} ~ {}", self.row_start, self.row_start + self.row_len)
     }
 }
 
 impl CodeSpan {
-    pub fn new(mut st: usize, mut en: usize) -> Self {
-        // NOTE - @Improvement: 意図的な挙動でないので危険かも知れないのでは
-        if st > en {
-            mem::swap(&mut st, &mut en);
-        }
+    pub fn new(row_st: usize,
+               row_len: usize,
+               col_st: usize,
+               col_len: usize) -> Self 
+    {
         CodeSpan {
-            start: st as u32,
-            end: en as u32,
+            row_start: row_st as u32,
+            row_len:   row_len as u32,
+            col_start: col_st as u32,
+            col_len:   col_len as u32,
         }
     }
 
-    pub fn oneline(line: usize) -> Self {
-        CodeSpan {
-            start: line as u32,
-            end: line as u32,
-        }
+    pub fn oneline(row: usize, col_st: usize, col_len: usize) -> Self {
+        Self::new(row, 0, col_st, col_len)
     }
 
     pub fn combine(a: &CodeSpan, b: &CodeSpan) -> Self {
+        let new_rowstart = cmp::min(a.row_start, b.row_start);
+        let new_rowlen = cmp::max(a.row_len, b.row_len);
+
         Self {
-            start: cmp::min(a.start, b.start),
-            end: cmp::max(a.end, b.end),
+            row_start: new_rowstart,
+            row_len: new_rowlen,
+            col_start: if new_rowstart == a.row_start { a.col_start } else { b.col_start },
+            col_len: if new_rowlen == a.row_len { a.col_len } else { b.col_len },
         }
     }
 
-    #[inline]
-    pub fn contains(&self, other: &CodeSpan) -> bool {
-        self.start < other.start // self は other より前に始まって
-            && self.end > other.end // other が終わったあとに終わる => 完全に中に収まっている
-    }
-
-    #[inline]
-    pub fn intersects(&self, other: &CodeSpan) -> bool {
-        self.start < other.end // self は other が終わる前に始まって
-            && other.start < self.end // かつ other が始まった後に終わる => どこかが接触している
+    #[inline(always)]
+    pub fn cols(&self) -> (usize, usize) {
+        (self.col_start as usize, self.col_len as usize)
     }
 
     #[inline(always)]
-    pub fn start_usize(&self) -> usize {
-        self.start as usize
-    }
-
-    #[inline(always)]
-    pub fn end_usize(&self) -> usize {
-        self.end as usize
+    pub fn rows(&self) -> (usize, usize) {
+        (self.row_start as usize, self.row_len as usize)
     }
 
     #[inline(always)]
     pub fn is_oneliner(&self) -> bool {
-        self.end == self.start
+        self.row_len == 0
     }
 
     #[inline(always)]
     pub fn is_invalid(&self) -> bool {
-        self.end < self.start
-    }
-
-    #[inline(always)]
-    pub fn length(&self) -> usize {
-        if self.is_invalid() {
-            0
-        } else {
-            self.end_usize() - self.start_usize()
-        }
+        self.row_start == 0 && self.row_len == 0 && self.col_start == 0 && self.col_len == 0
     }
 }
-
+// This test is old and it's kind of pointless
+// So i'm partially removing it
+// FIXME - @DumbCode: Come back and fix this.
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,3 +127,4 @@ mod tests {
         assert_eq!(combined.end, b.end);
     }
 }
+*/

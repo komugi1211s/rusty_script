@@ -9,10 +9,3 @@ edition = "2018"
 name = "trace"
 path = "lib.rs"
 
-[dependencies]
-lazy_static = "1.4.0"
-
-[dependencies.log]
-version = "0.4"
-features = ["kv_unstable", "std"]
-

@@ -1,196 +1,68 @@
-#[macro_use]
-extern crate lazy_static;
-pub extern crate log;
-
 pub mod source;
 pub use source::SourceFile;
 pub mod macros;
 pub mod position;
 
-pub use log::{debug, error, info, trace, warn};
 use position::CodeSpan;
 
-pub static Logger: IsekaiLogger = IsekaiLogger;
+fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String {
+    let mut chars = string.chars();
 
-pub fn init_logger() {
-    log::set_logger(&Logger)
-        .map(|()| log::set_max_level(log::LevelFilter::Info))
-        .unwrap();
+    let left = chars.by_ref().take(col_start).collect::<String>();
+    let problematic_pos = chars.by_ref().take(col_len).collect::<String>();
+    let rest = chars.collect::<String>();
+
+    format!("{}\x1b[31m{}\x1b[39m{}", left, problematic_pos, rest)
 }
 
-/*
+pub fn spit_line(lines: &CodeSpan, file: &SourceFile) {
+    let code_lines = file.code.lines().collect::<Vec<&'_ str>>();
+    println!("{} 行目 :: ファイル {}", lines.row_start, file.filename);
 
-    Tokenizer
-    make...
+    let (col_start, col_len) = lines.cols();
+    if lines.is_oneliner() {
+        let line = lines.rows().0.saturating_sub(1);
+        let line_text = code_lines.get(line);
 
-    self.current_line = 15;
-    self.end_line = 16;
-    Token {
-        span: CodeSpan::new(self.current_line, self.end_line);
-    }
+        let decorated_text = if let Some(text) = line_text {
+            mark_by_red(text, col_start, col_len)
+        } else {
+            String::from("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        };
 
-    then when error happens...
-    if err {
-        TraceBuilder::error(ErrorKind::TokenizerError)
-            .message("Tokenizer knows what's up")
-            .caused_at(span)
-            .related_info(error)
-            .build()?;
-    }
+        println!(
+            "   :: {} |: {}",
+            line,
+            &decorated_text
+        );
+    } else {
+        let (start, len) = lines.rows();
+        let end = start + len;
 
-    this would result to...
-    TokenizerError: Tokenizer knows what's up.
-    14  | ...
-    15!!| ... .., ...
-    16!!| ... ...... .. .. . . . ...
-    17  | .. .. . . ...
-
-    Error related info provided:
-    XXXXX...
-
-    XX  |
-    XX  |
-    XX!!|
-    XX  |
-
-*/
-
-#[derive(Debug)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub msg: String,
-    pub span: CodeSpan,
-}
-
-impl Error {
-    pub fn new_while_tokenizing(msg: &str, span: CodeSpan) -> Self {
-        Self {
-            kind: ErrorKind::TokenError,
-            msg: String::from(msg),
-            span,
-        }
-    }
-
-    pub fn new_on_runtime(msg: &str, span: CodeSpan) -> Self {
-        Self {
-            kind: ErrorKind::RuntimeError,
-            msg: String::from(msg),
-            span,
-        }
-    }
-
-    pub fn new_while_parsing(msg: &str, span: CodeSpan) -> Self {
-        Self {
-            kind: ErrorKind::ParserError,
-            msg: String::from(msg),
-            span,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ErrorKind {
-    AssertionError,
-    ParserError,
-    TokenError,
-    RuntimeError,
-}
-
-pub struct IsekaiLogger;
-
-impl IsekaiLogger {
-    pub fn spit_line(&self, lines: CodeSpan, codes: &SourceFile, pad: usize) {
-        let code_lines = codes.code.lines().collect::<Vec<&'_ str>>();
-        println!(" :: 指定ファイルのコード出力\n");
-
-        if lines.is_oneliner() {
-            let line = lines.start_usize();
+        for line in start..end {
+            let line = line.saturating_sub(1);
             println!(
                 "   :: {} |: {}",
                 line,
-                code_lines
-                    .get(line.saturating_sub(1))
-                    .unwrap_or(&"~~~~~~~~~~~~~~")
+                code_lines.get(line).unwrap_or(&"~~~~~~~~~~~~~~")
             );
-        } else {
-            let (start, end) = if lines.length() > pad + 1 {
-                (
-                    lines.start_usize(),
-                    std::cmp::min(lines.end_usize() + 1, codes.line),
-                )
-            } else {
-                (
-                    lines.start_usize().saturating_sub(pad),
-                    std::cmp::min(lines.end_usize() + pad + 1, codes.line),
-                )
-            };
-            for line in start..end {
-                println!(
-                    "   :: {} |: {}",
-                    line,
-                    code_lines.get(line - 1).unwrap_or(&"~~~~~~~~~~~~~~")
-                );
-            }
         }
     }
 }
 
-impl log::Log for IsekaiLogger {
-    fn enabled(&self, meta: &log::Metadata) -> bool {
-        meta.level() <= log::Level::Trace
+pub fn report(
+    title: &str,
+    message: &str,
+) {
+    if title == "internal" {
+        println!("[Isekai :: 内部エラー] {}", message);
+        return;
     }
 
-    fn log(&self, rec: &log::Record) {
-        if !self.enabled(rec.metadata()) {
-            println!("Disabled.");
-        }
-
-        if rec.target() == "internal" {
-            println!("[Isekai :: {}] 内部エラー - {}", rec.level(), rec.args());
-            return;
-        }
-
-        println!(
-            "{:-<50}",
-            format!("[Isekai :: {}] {} ", rec.level(), rec.target())
-        );
-
-        println!("{}", rec.args());
-
-        match (rec.file(), rec.line()) {
-            (None, None) => {
-                println!("エラーの位置が分かりません！");
-            }
-            (None, Some(line)) => {
-                println!(
-                    "{} 行目で発生していますが、発生元のファイルが提供されませんでした。",
-                    line
-                );
-            }
-            (Some(file_name), None) => {
-                println!(
-                    "ファイル {} で発生していますが、原因の行目が提供されませんでした。",
-                    file_name
-                );
-            }
-            (Some(file), Some(line)) => {
-                println!("{} 行目 :: ファイル {}", line, file);
-            }
-        }
-    }
-
-    fn flush(&self) {}
+    println!(
+        "{:-<50}",
+        format!("[Isekai :: {}]", title)
+    );
+    println!("{}", message);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs::File;
-
-    #[test]
-    fn log_file() {
-        init_logger();
-        trace!("Hello world.");
-        assert!(true);
-    }
-}
