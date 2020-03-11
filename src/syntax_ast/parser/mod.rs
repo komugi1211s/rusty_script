@@ -1,37 +1,29 @@
-use trace::Error;
 
-use super::ast::{
-    self, ASTree, AstNode, BlockData, DeclKind, DeclarationData, Expr, ExprId, FunctionData,
-    Literal, Operator, Statement, StmtId,
-};
+use super::ast::*;
 
 use crate::tokenizer::token::{Token, TokenType};
-use trace::position::CodeSpan;
-use trace::{code_line, err_fatal, err_internal, SourceFile};
+use trace::prelude::*;
 
 mod decl;
 mod stmt;
 
 const MAX_IDENTIFIER_LENGTH: usize = 255;
-pub struct Parser<'m, 't> {
-    tokens: &'t Vec<Token>,
+pub struct Parser<'m> {
     ast: ASTree<'m>,
+    module: &'m SourceFile,
+    tokens: &'m Vec<Token<'m>>,
     current: usize,
     assign_count: usize,
     block_count: usize,
 }
 
-impl<'m, 't> Parser<'m, 't> {
-    pub fn new(modu: &'m SourceFile, _tok: &'t Vec<Token>) -> Self {
+impl<'m> Parser<'m> {
+    pub fn new(module: &'m SourceFile, tokens: &'m Vec<Token<'m>>) -> Self {
+        assert!(module == tokens[0].file);
         Self {
-            tokens: _tok,
-            ast: ASTree {
-                file: modu,
-                ast: vec![],
-                stmt: vec![],
-                expr: vec![],
-                functions: vec![],
-            },
+            module,
+            tokens,
+            ast: ASTree::new(),
             current: 0,
             assign_count: 0,
             block_count: 0,
@@ -40,11 +32,8 @@ impl<'m, 't> Parser<'m, 't> {
 
     pub fn parse(mut self) -> Result<ASTree<'m>, ()> {
         while !self.is_at_end() {
-            let start_line = self.get_current().span.clone();
             let declaration = self.declaration()?;
-            let end_line = self.get_current().span.clone();
-            let codespan = CodeSpan::combine(&start_line, &end_line);
-            self.ast.add_ast(declaration, codespan);
+            self.ast.add_root(declaration);
         }
         Ok(self.ast)
     }
@@ -58,9 +47,9 @@ impl<'m, 't> Parser<'m, 't> {
     }
 
     fn enter_block<T>(
-        &mut self,
+        &'m mut self,
         pass: &mut T,
-        wrapped_func: fn(&mut Parser<'m, 't>, &mut T) -> Result<(), ()>,
+        wrapped_func: fn(&mut Parser<'m>, &mut T) -> Result<(), ()>,
     ) -> usize {
         let previous_count = self.assign_count;
         self.assign_count = 0;
@@ -74,7 +63,7 @@ impl<'m, 't> Parser<'m, 't> {
         new_assign
     }
 
-    fn declaration(&mut self) -> Result<StmtId, ()> {
+    fn declaration(&'m mut self) -> Result<StmtId, ()> {
         if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
             return self.parse_variable();
         }
@@ -82,64 +71,88 @@ impl<'m, 't> Parser<'m, 't> {
         self.statement()
     }
 
-    fn expression(&mut self) -> Result<ExprId, ()> {
+    fn expression(&'m mut self) -> Result<ExprId, ()> {
         let x = self.assignment();
         x
     }
 
-    fn assignment(&mut self) -> Result<ExprId, ()> {
-        let expr = self.logical_or()?;
+    fn assignment(&'m mut self) -> Result<ExprId, ()> {
+        let left_hand = self.logical_or()?;
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
         if self.is(TokenType::Equal) {
-            let assign_span = self.advance().span;
+            let start_span = self.advance().span;
             let value = self.assignment()?;
+            let end_span = self.get_current().span;
 
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
-            if let Expr::Variable(_) = self.ast.get_expr(expr) {
-                let expr = self.ast.add_expr(Expr::Assign(expr, value));
-                return Ok(expr);
+            
+            let assign_target = self.ast.get_expr(left_hand);
+            if let Expr::Variable(_) = assign_target.data {
+                let assign = Expression { 
+                    module: self.module,
+                    span: CodeSpan::combine(&start_span, &end_span),
+                    data: Expr::Assign(left_hand, value),
+                    end_type: None,
+                };
+
+                let result = self.ast.add_expr(assign);
+                return Ok(result);
             } else {
-                let span = CodeSpan::oneline(assign_span.start_usize());
-                err_fatal!(
-                    src: self.ast.file,
-                    span: span,
-                    title: "Invalid Assignment Target",
-                    msg: "\n値の割当を行う対象が不正です。",
-                );
-                code_line!(src: self.ast.file, span: span, pad: 1);
+                assign_target.report("Invalid Assignment Target", "値の割当を行う対象が不正です.");
                 return Err(());
             }
         }
 
-        Ok(expr)
+        Ok(left_hand)
     }
 
-    pub fn logical_or(&mut self) -> Result<ExprId, ()> {
+    pub fn logical_or(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.logical_and()?;
 
         while self.is(TokenType::Or) {
             self.advance();
             let right = self.logical_and()?;
-            expr = self.ast.add_expr(Expr::Logical(expr, right, Operator::Or));
+            let end_span = self.get_current().span;
+
+            let span = CodeSpan::combine(&start_span, &end_span);
+            let expression = Expression {
+                module: self.module, 
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Logical(expr, right, Operator::Or),
+                end_type: None,
+            };
+            expr = self.ast.add_expr(expression);
         }
 
         Ok(expr)
     }
-    pub fn logical_and(&mut self) -> Result<ExprId, ()> {
+
+    pub fn logical_and(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.equality()?;
 
         while self.is(TokenType::And) {
             self.advance();
             let right = self.equality()?;
-            expr = self.ast.add_expr(Expr::Logical(expr, right, Operator::And));
+            let end_span = self.get_current().span;
+
+            let expression = Expression {
+                module: self.module, 
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Logical(expr, right, Operator::And),
+                end_type: None,
+            };
+            expr = self.ast.add_expr(expression);
         }
 
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<ExprId, ()> {
+    fn equality(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.comparison()?;
         while !self.is_at_end() {
             let operator = match self.get_current().tokentype {
@@ -149,12 +162,22 @@ impl<'m, 't> Parser<'m, 't> {
             };
             self.advance();
             let right = self.comparison()?;
-            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
+            let end_span = self.get_current().span;
+
+            let expression = Expression {
+                module: self.module, 
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Binary(expr, right, operator),
+                end_type: None,
+            };
+
+            expr = self.ast.add_expr(expression);
         }
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<ExprId, ()> {
+    fn comparison(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.addition()?;
 
         use TokenType::*;
@@ -167,15 +190,22 @@ impl<'m, 't> Parser<'m, 't> {
                 _ => break,
             };
             self.advance();
-
             let right = self.addition()?;
-            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
+            let end_span = self.get_current().span;
+
+            expr = self.ast.add_expr(Expression { 
+                module: self.module,
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Binary(expr, right, operator),
+                end_type: None,
+            });
         }
 
         Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<ExprId, ()> {
+    fn addition(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.multiplification()?;
 
         while !self.is_at_end() {
@@ -186,13 +216,21 @@ impl<'m, 't> Parser<'m, 't> {
             };
             self.advance();
             let right = self.multiplification()?;
-            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
+            let end_span = self.get_current().span;
+
+            expr = self.ast.add_expr(Expression { 
+                module: self.module,
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Binary(expr, right, operator),
+                end_type: None,
+            });
         }
 
         Ok(expr)
     }
 
-    fn multiplification(&mut self) -> Result<ExprId, ()> {
+    fn multiplification(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let mut expr = self.unary()?;
 
         while !self.is_at_end() {
@@ -204,14 +242,21 @@ impl<'m, 't> Parser<'m, 't> {
             };
             self.advance();
             let right = self.unary()?;
+            let end_span = self.get_current().span;
 
-            expr = self.ast.add_expr(Expr::Binary(expr, right, operator));
+            expr = self.ast.add_expr(Expression { 
+                module: self.module,
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Binary(expr, right, operator),
+                end_type: None,
+            });
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<ExprId, ()> {
+    fn unary(&'m mut self) -> Result<ExprId, ()> {
+        let start_span = self.get_current().span;
         let operator = match self.get_current().tokentype {
             TokenType::Bang => Some(Operator::Not),
             TokenType::Minus => Some(Operator::Neg),
@@ -222,7 +267,21 @@ impl<'m, 't> Parser<'m, 't> {
         if let Some(oper) = operator {
             self.advance();
             let right = self.unary()?;
-            let unary = self.ast.add_expr(Expr::Unary(right, oper));
+            let end_span = self.get_current().span;
+            let expression: Expression;
+            expression.module = self.module;
+            expression.span = CodeSpan::combine(&start_span, &end_span);
+            expression.data = Expr::Unary(right, oper);
+
+            let unary = self.ast.add_expr(expression);
+
+            /*
+            let unary = self.ast.add_expr(Expression {
+                module: self.module,
+                span: CodeSpan::combine(&start_span, &end_span),
+                data: Expr::Unary(right, oper)
+            });
+            */
 
             return Ok(unary);
         }
@@ -230,7 +289,7 @@ impl<'m, 't> Parser<'m, 't> {
         self.postfix()
     }
 
-    fn postfix(&mut self) -> Result<ExprId, ()> {
+    fn postfix(&'m mut self) -> Result<ExprId, ()> {
         let mut expr = self.primary()?;
 
         'parse: loop {
@@ -246,27 +305,22 @@ impl<'m, 't> Parser<'m, 't> {
     }
 
     fn parse_unwrap(&mut self, _e: ExprId) -> Result<ExprId, ()> {
-        let span = self.get_current().span;
-        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "Unwrap機能は実装されていません。");
-        code_line!(src: self.ast.file, span: span);
+        self.get_current().report("Unimplemented Feature", "Unwrap機能は実装されていません。");
         Err(())
     }
 
     fn parse_deref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
-        let span = self.get_current().span;
-        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "Deref機能は実装されていません。");
-        code_line!(src: self.ast.file, span: span);
+        self.get_current().report("Unimplemented Feature", "Deref機能は実装されていません。");
         Err(())
     }
 
     fn parse_array_ref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
-        let span = self.get_current().span;
-        err_fatal!(src: self.ast.file, span: span, title: "Unimplemented Feature", msg: "ArrayRef機能は実装されていません。");
-        code_line!(src: self.ast.file, span: span);
+        self.get_current().report("Unimplemented Feature", "ArrayRef機能は実装されていません。");
         Err(())
     }
 
-    fn parse_func_call(&mut self, expr: ExprId) -> Result<ExprId, ()> {
+    fn parse_func_call(&'m mut self, expr: ExprId) -> Result<ExprId, ()> {
+        let mut builder = ExprBuilder::default().token(self.get_previous());
         self.consume(TokenType::OpenParen)?;
         let mut v = Vec::<ExprId>::new();
 
@@ -280,9 +334,9 @@ impl<'m, 't> Parser<'m, 't> {
                 }
             }
         }
-        let _paren = self.consume(TokenType::CloseParen)?;
-        let expr = Expr::FunctionCall(expr, v);
-        Ok(self.ast.add_expr(expr))
+        builder.expand_span(self.consume(TokenType::CloseParen)?.span)
+               .data(Expr::FunctionCall(expr, v));
+        Ok(self.ast.add_expr(builder.build()))
     }
 
     fn is(&mut self, _type: TokenType) -> bool {
@@ -321,8 +375,8 @@ impl<'m, 't> Parser<'m, 't> {
         x
     }
 
-    fn primary(&mut self) -> Result<ExprId, ()> {
-        self.advance();
+    fn primary(&'m mut self) -> Result<ExprId, ()> {
+        let mut builder = ExprBuilder::default().token(self.advance());
         let inside = self.get_previous();
         use TokenType::*;
         let result = match &inside.tokentype {
@@ -334,49 +388,39 @@ impl<'m, 't> Parser<'m, 't> {
                 } else {
                     Literal::new_int(inside)
                 };
-                let expr_id = self.ast.add_expr(Expr::Literal(lit));
-                Ok(expr_id)
+
+                let result = builder.data(Expr::Literal(lit)).build();
+                Ok(self.ast.add_expr(result))
                 // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
             Str => {
                 let lit = Literal::new_str(inside);
-                let expr_id = self.ast.add_expr(Expr::Literal(lit));
-                Ok(expr_id)
+                let result = builder.data(Expr::Literal(lit)).build();
+                Ok(self.ast.add_expr(result))
             }
             Iden => {
                 if let Some(ref inside_lexeme) = inside.lexeme {
                     match inside_lexeme.as_str() {
                         "true" | "false" => {
                             let lit = Literal::new_bool(inside);
-                            let expr_id = self.ast.add_expr(Expr::Literal(lit));
-                            Ok(expr_id)
+                            let result = builder.data(Expr::Literal(lit)).build();
+                            Ok(self.ast.add_expr(result))
                         }
                         "null" => {
                             let lit = Literal::new_null(inside);
-                            let expr_id = self.ast.add_expr(Expr::Literal(lit));
-                            Ok(expr_id)
+                            let result = builder.data(Expr::Literal(lit)).build();
+                            Ok(self.ast.add_expr(result))
                         }
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
-                                err_fatal!(
-                                src: self.ast.file,
-                                span: inside.span,
-                                title: "Maximum Identifier Length Exceeded",
-                                msg: "\n識別子の長さ( {} )が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。",
-                                    inside_lexeme.len(),
-                                    MAX_IDENTIFIER_LENGTH
-                                );
-
-                                code_line!(
-                                    src: self.ast.file,
-                                    span: inside.span,
-                                    pad:1
-                                );
+                                let msg = 
+                                    format!("\n識別子の長さ({})が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。", inside_lexeme.len(), MAX_IDENTIFIER_LENGTH);
+                                inside.report("Maximum Identifier Length Exceeded", &msg);
                                 Err(())
                             } else {
-                                let expr = Expr::Variable(inside_lexeme.to_owned());
-                                let expr_id = self.ast.add_expr(expr);
-                                Ok(expr_id)
+                                let var = Expr::Variable(inside_lexeme.to_owned());
+                                let result = builder.data(var).build();
+                                Ok(self.ast.add_expr(result))
                             }
                         }
                     }
@@ -386,23 +430,17 @@ impl<'m, 't> Parser<'m, 't> {
             }
             OpenParen => {
                 let inside_paren = self.expression()?;
-                let _closed_paren = self.consume(CloseParen)?;
-                let expr = Expr::Grouping(inside_paren);
-                Ok(self.ast.add_expr(expr))
+                let data = Expr::Grouping(inside_paren);
+
+                let end_token = self.consume(CloseParen)?;
+                let built = builder.expand_span(end_token.span).data(data).build();
+                Ok(self.ast.add_expr(built))
             }
             _s => {
-                err_fatal!(
-                    src: self.ast.file,
-                    span: inside.span,
-                    title: "Unknown Token",
-                    msg: "\n未知のトークンを受け付けました。処理できません。\n未知のトークン: {:?}", inside
-                );
-                code_line!(
-                    src: self.ast.file,
-                    span: inside.span,
-                    pad: 1
-                );
-
+                let formatted = 
+                    format!("\n未知のトークンを受け付けました。処理できません。
+                             \n未知のトークン: {:?}", inside);
+                inside.report("Unknown Token", &formatted);
                 Err(())
             }
         };
@@ -415,21 +453,12 @@ impl<'m, 't> Parser<'m, 't> {
         if self.is(expected) {
             return Ok(self.advance());
         }
-        let span = self.get_current().span;
-        let actual = self.get_current().tokentype;
-        err_fatal!(
-            src: self.ast.file,
-            span: span,
-            title: "Invalid Token",
-            msg: "想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
-            expected, actual
-        );
+        let actual = self.get_current();
+        let message = 
+            format!("想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
+                expected, actual.tokentype);
 
-        code_line!(
-            src: self.ast.file,
-            span: span,
-            pad: 1
-        );
+        actual.report("Invalid Token", &message);
         Err(())
     }
 }

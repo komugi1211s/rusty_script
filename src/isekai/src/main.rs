@@ -22,13 +22,7 @@ use compiler::{bytecode, ir::print_ir_vec};
 
 // Phase 5a - VM
 use compiler::vm;
-
 use trace::{err_internal, error, source::SourceFile};
-
-
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
-
 
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
@@ -78,7 +72,7 @@ impl TimeCount {
 
 pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let mut timer = TimeCount {
-        messages: RefCell::new(Vec::with_capacity(4)),
+        messages: RefCell::new(Vec::with_capacity(5)),
     };
     // 実際の所謂「文字の数」ではなくバイト列の長さを確認している
     // 今回の場合は最低でもこれだけを確保しておきたいという長さなのでこれで問題ない
@@ -87,7 +81,7 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let binary = timer.time("Total", || {
         let tokens        = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
         let parsed        = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
-        // let sema_analyzed = timer.time("Parser",    || semantic::analysis(&parsed))?;
+        let sema_analyze  = timer.time("Semantic",  || semantic::analysis(&parsed))?;
         let binary        = timer.time("CodeGen",   || bytecode::generate_bytecode(&parsed))?;
         Ok(binary)
     })?;
@@ -109,23 +103,6 @@ fn form_repl_line(s: &str) -> Option<&str> {
 }
 
 fn interpret() -> bool {
-    let mut rl = Editor::<()>::new();
-    loop {
-        let readline = rl.readline("Isekai :: > ");
-        match readline {
-            Ok(line) => {
-                if let Some(l) = form_repl_line(&line) {
-                    if l == "!exit" {
-                        break;
-                    }
-                    let mods = SourceFile::repl(l);
-                    start(mods, 0);
-                }
-            }
-            _ => break,
-        }
-    }
-
     true
 }
 

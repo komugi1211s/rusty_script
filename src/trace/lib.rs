@@ -5,6 +5,13 @@ pub mod position;
 
 use position::CodeSpan;
 
+pub mod prelude {
+    pub use super::{ report, spit_line };
+    pub use super::source::SourceFile;
+    pub use super::position::CodeSpan;
+    pub use super::err_fatal;
+}
+
 fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String {
     let mut chars = string.chars();
 
@@ -15,7 +22,7 @@ fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String {
     format!("{}\x1b[31m{}\x1b[39m{}", left, problematic_pos, rest)
 }
 
-pub fn spit_line(lines: &CodeSpan, file: &SourceFile) {
+pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
     let code_lines = file.code.lines().collect::<Vec<&'_ str>>();
     println!("{} 行目 :: ファイル {}", lines.row_start, file.filename);
 

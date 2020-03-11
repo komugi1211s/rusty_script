@@ -7,9 +7,9 @@ use super::Parser;
 use crate::ast;
 use crate::tokenizer::token::{Token, TokenType};
 
+use trace::err_fatal;
 use trace::position::CodeSpan;
-use trace::Error;
-use trace::{code_line, err_fatal, err_internal, info, warn};
+use trace::source::SourceFile;
 
 fn is_prefix_banned(cand: &str) -> bool {
     match cand {
@@ -25,8 +25,8 @@ fn is_suffix_banned(cand: &str) -> bool {
     }
 }
 
-impl<'m, 't> Parser<'m, 't> {
-    fn parse_type(&mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
+impl<'m> Parser<'m> {
+    fn parse_type(&'m mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
         // Separate Array Consumption to other function
         if self.is(TokenType::OpenSquareBracket) {
             self.advance();
@@ -39,13 +39,8 @@ impl<'m, 't> Parser<'m, 't> {
                 let digit = self.consume(TokenType::Digit)?.clone();
                 let number_inside = digit.lexeme.as_ref().unwrap();
                 if number_inside.contains('.') {
-                    err_fatal!(
-                        src: self.ast.file,
-                        span: digit.span,
-                        title: "Invalid array declaration",
-                        msg: "静的配列は現在定数でのみ長さを初期化出来ます。"
-                    );
-                    code_line!(src: self.ast.file, span: digit.span);
+
+                    digit.report("Invalid array declaration", "静的配列は現在定数でのみ長さを初期化出来ます。");
                     return Err(());
                 }
 
@@ -61,21 +56,11 @@ impl<'m, 't> Parser<'m, 't> {
 
         // TODO - @Broken: are you sure that there's no more prefix??
         let mut core_type = if self.is(TokenType::Iden) {
-            let Token {
-                tokentype: _,
-                span: span,
-                lexeme: candidate,
-            } = self.consume(TokenType::Iden)?.clone();
+            let token = self.consume(TokenType::Iden)?;
 
-            let candidate = candidate.as_ref().unwrap();
+            let candidate = token.lexeme.as_ref().unwrap();
             if is_prefix_banned(candidate) && !prefix.is_empty() {
-                err_fatal!(
-                    src: self.ast.file,
-                    span: span,
-                    title: "Invalid Prefix placement",
-                    msg: "Prefix {:?} はこの定義では使用できません。", prefix
-                );
-                code_line!(src: self.ast.file, span: span);
+                token.report("Invalid Prefix placement", &format!("Prefix {:?} はこの定義では使用できません。", prefix));
                 return Err(());
             }
 
@@ -106,11 +91,11 @@ impl<'m, 't> Parser<'m, 't> {
         Ok(core_type)
     }
 
-    fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
+    fn parse_struct(&'m mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
         unimplemented!();
     }
 
-    fn parse_type_prefix(&mut self) -> ast::DeclPrefix {
+    fn parse_type_prefix(&'m mut self) -> ast::DeclPrefix {
         let mut prefix = ast::DeclPrefix::empty();
         loop {
             match self.get_current().tokentype {
@@ -129,11 +114,13 @@ impl<'m, 't> Parser<'m, 't> {
     }
 
     pub(super) fn parse_function_decl(
-        &mut self,
+        &'m mut self,
         baseinfo: ast::DeclarationData,
     ) -> Result<ast::StmtId, ()> {
+        let start_span = self.get_current().span;
         let args = self.parse_arguments()?;
         let func = self.block_statement()?;
+        let end_span = self.get_current().span;
 
         let data = ast::FunctionData {
             it: baseinfo,
@@ -142,11 +129,16 @@ impl<'m, 't> Parser<'m, 't> {
         };
 
         let idx = self.ast.add_fn(data);
-        let stmt = ast::Statement::Function(idx);
+        let stmt = ast::Statement { 
+            module: self.module,
+            span: CodeSpan::combine(&start_span, &end_span),
+            data: ast::Stmt::Function(idx),
+        };
+
         Ok(self.ast.add_stmt(stmt))
     }
 
-    pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, ()> {
+    pub(super) fn parse_arguments(&'m mut self) -> Result<Vec<ast::DeclarationData>, ()> {
         let _span = self.consume(TokenType::OpenParen)?.span;
         let mut args = vec![];
 
@@ -180,13 +172,7 @@ impl<'m, 't> Parser<'m, 't> {
                 args.push(decl_info);
                 break;
             } else {
-                err_fatal!(
-                    src: self.ast.file,
-                    span: _span,
-                    title: "Invalid Token",
-                    msg: "`)` を想定しましたが、それ以外のトークンを検知しました。"
-                );
-                code_line!(src: self.ast.file, span: _span);
+                self.get_current().report("Invalid Token", "`)` を想定しましたが、それ以外のトークンを検知しました。");
                 panic!();
             }
         }
@@ -195,10 +181,14 @@ impl<'m, 't> Parser<'m, 't> {
         Ok(args)
     }
 
-    pub(super) fn parse_variable(&mut self) -> Result<ast::StmtId, ()> {
+    pub(super) fn parse_variable(&'m mut self) -> Result<ast::StmtId, ()> {
         self.assign_count += 1;
 
-        let name = self.consume(TokenType::Iden)?.lexeme.to_owned().unwrap();
+        let (name, start_span) = {
+            let token = self.consume(TokenType::Iden)?;
+            (token.lexeme.to_owned().unwrap(), token.span)
+        };
+
         self.consume(TokenType::Colon)?;
 
         let prefix = self.parse_type_prefix();
@@ -211,29 +201,28 @@ impl<'m, 't> Parser<'m, 't> {
             prefix,
             expr: None,
         };
+        let statement: ast::Statement;
+        statement.module = self.module;
 
         if self.is(TokenType::Equal) {
             self.advance();
             let item = self.expression()?;
             decl_info.expr = Some(item);
+            let end_span = self.consume(TokenType::SemiColon)?.span;
 
-            self.consume(TokenType::SemiColon)?;
-            Ok(self.ast.add_stmt(ast::Statement::Declaration(decl_info)))
+            statement.span = CodeSpan::combine(&start_span, &end_span);
+            statement.data = ast::Stmt::Declaration(decl_info);
+            Ok(self.ast.add_stmt(statement))
         } else if self.is(TokenType::SemiColon) {
-            self.advance();
-            Ok(self.ast.add_stmt(ast::Statement::Declaration(decl_info)))
+            let end_span = self.advance().span;
+            statement.span = CodeSpan::combine(&start_span, &end_span);
+            statement.data = ast::Stmt::Declaration(decl_info);
+            Ok(self.ast.add_stmt(statement))
         } else if self.is(TokenType::OpenParen) {
             self.parse_function_decl(decl_info)
         } else {
-            let t = self.get_current();
-            err_fatal!(
-                src: self.ast.file,
-                span: t.span,
-                title: "Invalid Token",
-                msg: " '=', ';', '(' のうち一つを期待しましたが、代わりに{:?}が見つかりました",
-                t
-            );
-            code_line!(src: self.ast.file, span: t.span, pad: 1);
+            self.get_current().report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
+            
             Err(())
         }
     }

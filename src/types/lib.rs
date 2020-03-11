@@ -1,15 +1,8 @@
-#[macro_use]
-extern crate bitflags;
 
 use std::fmt;
 use std::mem;
 use std::ops;
 
-#[cfg(target_pointer_width = "32")]
-const USIZE_LENGTH: usize = 4;
-
-#[cfg(target_pointer_width = "64")]
-const USIZE_LENGTH: usize = 8;
 
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub enum TypeKind {

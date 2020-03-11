@@ -1,6 +1,5 @@
 use std::fmt;
-
-use trace::position::CodeSpan;
+use trace::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType {
@@ -81,25 +80,27 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token {
+pub struct Token<'m> {
+    pub file: &'m SourceFile,
     pub tokentype: TokenType,
-    // TODO - @Improvement: Replace it with trace::CodeSpan
     pub span: CodeSpan,
     pub lexeme: Option<String>,
 }
 
-impl Token {
-    pub fn simple(tokentype: TokenType, start: usize, end: usize) -> Self {
+impl<'m> Token<'m> {
+    pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self {
         Token {
+            file,
             tokentype,
-            span: CodeSpan::new(start, end),
+            span,
             lexeme: None,
         }
     }
-    pub fn lexed(tokentype: TokenType, start: usize, end: usize, lexeme: String) -> Self {
+    pub fn lexed(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan, lexeme: String) -> Self {
         Token {
+            file,
             tokentype,
-            span: CodeSpan::new(start, end),
+            span,
             lexeme: Some(lexeme),
         }
     }
@@ -107,10 +108,15 @@ impl Token {
     pub fn is_simple(&self) -> bool {
         self.lexeme.is_none()
     }
+
+    pub fn report(&self, title: &str, message: &str) {
+        report(title, message);
+        spit_line(self.file, &self.span);
+    }
 }
 
-impl fmt::Display for Token {
+impl fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "トークン {:?}, {}行目", self.tokentype, self.span.end)
+        write!(f, "トークン {:?}, {}行目", self.tokentype, self.span.row_start)
     }
 }

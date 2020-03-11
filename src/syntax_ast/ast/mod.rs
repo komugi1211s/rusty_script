@@ -1,39 +1,37 @@
+use types::Type;
 use crate::tokenizer::token::Token;
 
-use trace::position::CodeSpan;
-use trace::SourceFile;
+use trace::prelude::*;
 
 pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
 pub struct ASTree<'m> {
-    pub file: &'m SourceFile,
-    pub ast: Vec<AstNode>,
-    pub stmt: Vec<Statement>,
-    pub expr: Vec<Expr>,
+    pub root: Vec<StmtId>,
+    pub stmt: Vec<Statement<'m>>,
+    pub expr: Vec<Expression<'m>>,
     pub functions: Vec<FunctionData>,
 }
 
 
 impl<'m> ASTree<'m> {
-    pub fn new(m: &'m SourceFile) -> Self {
+    pub fn new() -> Self {
         Self {
-            file: m,
-            ast: vec![],
-            stmt: vec![],
-            expr: vec![],
-            functions: vec![],
+            root: Vec::with_capacity(128),
+            stmt: Vec::with_capacity(256),
+            expr: Vec::with_capacity(256),
+            functions: Vec::with_capacity(128),
         }
     }
 
-    pub fn add_stmt(&mut self, stmt: Statement) -> StmtId {
+    pub fn add_stmt(&mut self, stmt: Statement<'m>) -> StmtId {
         let index = self.stmt.len();
         self.stmt.push(stmt);
         StmtId(index as u32)
     }
 
-    pub fn add_expr(&mut self, expr: Expr) -> ExprId {
+    pub fn add_expr(&mut self, expr: Expression<'m>) -> ExprId {
         let index = self.expr.len();
         self.expr.push(expr);
         ExprId(index as u32)
@@ -45,11 +43,11 @@ impl<'m> ASTree<'m> {
         index
     }
 
-    pub fn add_ast(&mut self, stmt_id: StmtId, span: CodeSpan) {
-        self.ast.push(AstNode::new(stmt_id, span));
+    pub fn add_root(&mut self, stmt_id: StmtId) {
+        self.root.push(stmt_id);
     }
 
-    pub fn get_expr(&'m self, id: ExprId) -> &'m Expr {
+    pub fn get_expr(&'m self, id: ExprId) -> &'m Expression {
         self.expr.get(id.0 as usize).unwrap()
     }
 
@@ -58,23 +56,11 @@ impl<'m> ASTree<'m> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 pub struct StmtId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 pub struct ExprId(pub u32);
-
-#[derive(Debug, Clone)]
-pub struct AstNode {
-    pub span: CodeSpan,
-    pub stmt_id: StmtId,
-}
-
-impl AstNode {
-    pub fn new(stmt_id: StmtId, span: CodeSpan) -> Self {
-        Self { span, stmt_id }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionData {
@@ -119,20 +105,118 @@ struct Statement {
 */
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub struct Expression<'m> {
+    pub span: CodeSpan,
+    pub module: &'m SourceFile,
+    pub data: Expr<'m>,
+    pub end_type: Option<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExprBuilder<'m> {
+    pub span: Option<CodeSpan>,
+    pub module: Option<&'m SourceFile>,
+    pub data: Option<Expr<'m>>,
+}
+
+impl<'m> ExprBuilder<'m> {
+    pub fn expand_span(&mut self, other: CodeSpan) -> &mut Self {
+        if let Some(x) = self.span {
+            self.span = Some(CodeSpan::combine(&x, &other));
+        } else {
+            self.span = Some(other);
+        }
+        self
+    }
+
+    pub fn span(&mut self, span: CodeSpan) -> &mut Self {
+        self.span = Some(span);
+        self
+    }
+
+    pub fn module(&mut self, module: &'m SourceFile) -> &mut Self {
+        self.module = Some(module);
+        self
+    }
+
+    pub fn token(&mut self, token: &'m Token<'m>) -> &mut Self {
+        self.module = Some(token.file);
+        self.span = Some(token.span);
+        self
+    }
+
+    pub fn data(&mut self, data: Expr<'m>) -> &mut Self {
+        self.data = Some(data);
+        self
+    }
+
+    pub fn build(self) -> Expression<'m> {
+        Expression {
+            module: self.module.unwrap(),
+            span: self.span.unwrap(),
+            data: self.data.unwrap(),
+            end_type: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Statement<'m> {
+    pub span: CodeSpan,
+    pub module: &'m SourceFile,
+    pub data: Stmt,
+}
+
+impl<'m> Statement<'m> {
+    pub fn report(&self, title: &str, message: &str) {
+        report(title, message);
+        spit_line(self.module, &self.span);
+    }
+}
+
+impl<'m> Expression<'m> {
+    pub fn report(&self, title: &str, message: &str) {
+        report(title, message);
+        spit_line(self.module, &self.span);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr<'m> {
     Binary(ExprId, ExprId, Operator),
     Logical(ExprId, ExprId, Operator),
     FunctionCall(ExprId, Vec<ExprId>),
     Assign(ExprId, ExprId),
 
-    Literal(Literal),
+    Literal(Literal<'m>),
     Grouping(ExprId),
     Unary(ExprId, Operator),
     Variable(String),
 }
 
+impl<'m> Expr<'m> {
+    fn complete(self, tok: &'m Token<'m>) -> Expression<'m> {
+        Expression {
+            module: tok.file,
+            span: tok.span,
+            data: self,
+            end_type: None,
+        }
+    }
+}
+
+impl Stmt {
+    fn complete<'m>(self, tok: &'m Token<'m>) -> Statement<'m> {
+        Statement {
+            module: tok.file,
+            span: tok.span,
+            data: self,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
+pub enum Stmt {
     // DebugPrint
     Print(ExprId),
     Return(Option<ExprId>),
@@ -243,8 +327,8 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Literal {
-    pub tok: Token,
+pub struct Literal<'m> {
+    pub tok: Token<'m>,
     pub kind: LiteralKind,
 }
 
@@ -257,31 +341,31 @@ pub enum LiteralKind {
     Null,
 }
 
-impl Literal {
-    pub fn new(kind: LiteralKind, tok: &Token) -> Self {
+impl<'m> Literal<'m> {
+    pub fn new(kind: LiteralKind, tok: &Token<'m>) -> Self {
         Self {
             kind,
             tok: tok.clone(),
         }
     }
 
-    pub fn new_null(tok: &Token) -> Self {
+    pub fn new_null(tok: &Token<'m>) -> Self {
         Self::new(LiteralKind::Null, tok)
     }
 
-    pub fn new_bool(tok: &Token) -> Self {
+    pub fn new_bool(tok: &Token<'m>) -> Self {
         Self::new(LiteralKind::Bool, tok)
     }
 
-    pub fn new_str(tok: &Token) -> Self {
+    pub fn new_str(tok: &Token<'m>) -> Self {
         Self::new(LiteralKind::Str, tok)
     }
 
-    pub fn new_int(tok: &Token) -> Self {
+    pub fn new_int(tok: &Token<'m>) -> Self {
         Self::new(LiteralKind::Int, tok)
     }
 
-    pub fn new_float(tok: &Token) -> Self {
+    pub fn new_float(tok: &Token<'m>) -> Self {
         Self::new(LiteralKind::Float, tok)
     }
 
@@ -308,4 +392,68 @@ impl Literal {
     pub fn is_numeric(&self) -> bool {
         self.is_int() || self.is_float()
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeclarationData {
+    pub kind: DeclKind,
+    pub name: String,
+    pub dectype: ParsedType,
+    pub prefix: DeclPrefix,
+
+    pub expr: Option<ExprId>,
+}
+
+impl DeclarationData {
+    pub fn is_inferred(&self) -> bool {
+        self.prefix.is_empty() && self.dectype == ParsedType::pUnknown
+    }
+
+    pub fn is_constant(&self) -> bool {
+        self.prefix.contains(DeclPrefix::Const)
+    }
+
+    pub fn is_annotated(&self) -> bool {
+        !self.is_inferred()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsedType {
+    pInt,
+    pStr,
+    pFloat,
+    pBoolean,
+    pArray(Box<ParsedType>, Option<u32>),
+    pPointer(Box<ParsedType>),
+    pOptional(Box<ParsedType>),
+    pStruct(BlockData),
+    pUserdef(String),
+    pUnknown,
+}
+
+impl ParsedType {
+    pub fn match_primitive(cand: &str) -> Option<Self> {
+        match cand {
+            "int"    => Some(Self::pInt),
+            "string" => Some(Self::pStr),
+            "float"  => Some(Self::pFloat),
+            "bool"   => Some(Self::pBoolean),
+            _ => None,
+        }
+    }
+}
+
+bitflags! {
+    pub struct DeclPrefix: u16 {
+        const Const  = 1 << 1;
+        const Public = 1 << 2;
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeclKind {
+    Variable,
+    Argument,
+    Struct,
 }

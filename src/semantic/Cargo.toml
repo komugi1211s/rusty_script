@@ -12,7 +12,7 @@ name = "semantic"
 path = "lib.rs"
 
 [dependencies]
-bitflags = "*"
+# bitflags = "*"
 typed-arena = "*"
 
 types = { path = "../types" }

@@ -11,5 +11,4 @@ name = "types"
 path = "lib.rs"
 
 [dependencies]
-bitflags = "*"
 typed-arena = "*"
