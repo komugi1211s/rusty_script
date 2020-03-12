@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use trace::{code_line, err_fatal, SourceFile};
+use trace::prelude::*;
 
 use syntax_ast::ast::*;
 
@@ -125,8 +125,8 @@ pub struct Patch {
 pub fn generate_bytecode(ast: &ASTree) -> Result<CompiledCode, ()> {
     let mut compiler = Compiler::new();
 
-    for node in ast.ast.iter() {
-        traverse_statement(&mut compiler, ast, node.stmt_id);
+    for node in ast.root.iter() {
+        traverse_statement(&mut compiler, ast, *node);
     }
 
     Ok(CompiledCode {

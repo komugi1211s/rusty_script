@@ -1,39 +1,47 @@
-use trace::{code_line, err_fatal, SourceFile};
-
+use trace::prelude::*;
 use syntax_ast::ast::*;
 
 use super::{Compiler};
 use crate::ir::IRCode;
 use types::{Type, Value};
 
-pub fn traverse_expression(compiler: &mut Compiler, ast: &ASTree, expression_id: ExprId) {
-    let expression = ast.get_expr(expression_id);
+pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>) {
 
-    use Expr::*;
-    match expression {
-        Binary(lhs, rhs, oper) => {
-            traverse_expression(compiler, ast, *lhs);
-            traverse_expression(compiler, ast, *rhs);
-            emit_from_oper(compiler, *oper);
+    use ExprKind::*;
+    match expr.kind {
+        Binary => {
+            let lhs = expr.lhs.as_ref().unwrap();
+            let rhs = expr.rhs.as_ref().unwrap();
+            traverse_expression(compiler, &*lhs);
+            traverse_expression(compiler, &*rhs);
+            emit_from_oper(compiler, expr.oper.unwrap());
         }
 
-        Logical(lhs, rhs, oper) => {
-            traverse_expression(compiler, ast, *lhs);
-            traverse_expression(compiler, ast, *rhs);
-            emit_from_oper(compiler, *oper);
+        Logical => {
+            let lhs = expr.lhs.as_ref().unwrap();
+            let rhs = expr.rhs.as_ref().unwrap();
+            traverse_expression(compiler, &*lhs);
+            traverse_expression(compiler, &*rhs);
+            emit_from_oper(compiler, expr.oper.unwrap());
         }
 
-        Assign(idenid, rhs) => {
-            traverse_expression(compiler, ast, *rhs);
+        Assign => {
+            expr.report("Unimplemented!", "代入は実装前です。");
+            panic!();
         }
 
-        Unary(rhs, oper) => {
-            traverse_expression(compiler, ast, *rhs);
-            emit_from_oper(compiler, *oper);
+        Unary => {
+            let lhs = expr.lhs.as_ref().unwrap();
+            traverse_expression(compiler, &*lhs);
+            emit_from_oper(compiler, expr.oper.unwrap());
         }
 
-        Literal(ref lit_data) => emit_constants(compiler, lit_data, ast),
-        _ => unimplemented!(),
+        Literal => emit_constants(compiler, &expr.literal.as_ref().unwrap()),
+        _ => {
+            let msg = format!("{:?} は実装前です。", expr.kind);
+            expr.report("Unimplemented!", &msg);
+            panic!();
+        },
     };
 }
 
@@ -48,12 +56,18 @@ fn emit_from_oper(compiler: &mut Compiler, oper: Operator) {
     }
 }
 
-fn emit_constants(compiler: &mut Compiler, literal: &Literal, ast: &ASTree) {
-    let lexeme: &str = literal
+fn emit_constants(compiler: &mut Compiler, literal: &Literal) {
+    let lexeme: &str = match literal
         .tok
         .lexeme
-        .as_ref()
-        .expect("リテラルなのにトークンが空");
+        .as_ref() {
+        Some(x) => x,
+        None => {
+            literal.tok.report("internal", "リテラルなのにトークンが空");
+            panic!();
+        },
+    };
+
 
     match literal.kind {
         LiteralKind::Bool => {
@@ -69,14 +83,9 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal, ast: &ASTree) {
             let value: i64 = match lexeme.parse() {
                 Ok(n) => n,
                 Err(_) => {
-                    err_fatal!(
-                    src: ast.file,
-                    span: literal.tok.span,
-                    title: "Broken Integer Literal",
-                    msg: "整数を期待しましたがパースに失敗しました。"
-                    );
+                    literal.tok.report(
+                        "Broken Integer Literal", "整数を期待しましたがパースに失敗しました。");
 
-                    code_line!(src: ast.file, span: literal.tok.span, pad: 2);
                     return;
                 }
             };
@@ -89,14 +98,8 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal, ast: &ASTree) {
             let value: f64 = match lexeme.parse() {
                 Ok(n) => n,
                 Err(_) => {
-                    err_fatal!(
-                    src: ast.file,
-                    span: literal.tok.span,
-                    title: "Broken Float Literal",
-                    msg: "実数を期待しましたがパースに失敗しました。"
-                    );
-
-                    code_line!(src: ast.file, span: literal.tok.span, pad: 2);
+                    literal.tok.report(
+                        "Broken Float Literal", "実数を期待しましたがパースに失敗しました。");
                     return;
                 }
             };

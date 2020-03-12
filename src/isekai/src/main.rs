@@ -10,6 +10,7 @@ use std::{
 
 // Phase 1 & 2 - Tokenizing, Parsing
 use syntax_ast::{
+    ast::ASTree,
     parser::Parser,
     tokenizer::Tokenizer
 };
@@ -22,7 +23,7 @@ use compiler::{bytecode, ir::print_ir_vec};
 
 // Phase 5a - VM
 use compiler::vm;
-use trace::{err_internal, error, source::SourceFile};
+use trace::prelude::*;
 
 fn exit_process(success: bool) -> ! {
     ::std::process::exit(if success { 0 } else { 1 });
@@ -54,9 +55,9 @@ impl TimeCount {
         let time = { elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9 };
 
         let elapsed_msg = if result.is_ok() {
-            format!(" {0:<12} Finished :: \x1b[32m{1} secs\x1b[39m", step, time)
+            format!(" {0:<12} Finished :: \x1b[32m{1} secs\x1b[0m", step, time)
         } else {
-            format!(" {0:<12} Error :: \x1b[31m{1} secs\x1b[39m", step, time)
+            format!(" {0:<12} Error :: \x1b[31m{1} secs\x1b[0m", step, time)
         };
         self.messages.borrow_mut().push(elapsed_msg);
 
@@ -79,10 +80,10 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let byte_length = module.code.as_str().len();
 
     let binary = timer.time("Total", || {
-        let tokens        = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
-        let parsed        = timer.time("Parser",    || Parser::new(&module, &tokens).parse())?;
-        let sema_analyze  = timer.time("Semantic",  || semantic::analysis(&parsed))?;
-        let binary        = timer.time("CodeGen",   || bytecode::generate_bytecode(&parsed))?;
+        let tokens = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
+        let ast = timer.time("Parser",       || Parser::new(&module, &tokens).parse())?;
+        // let sema_analyze = timer.time("Semantic",  || semantic::analysis(&ast))?;
+        let binary = timer.time("CodeGen",   || bytecode::generate_bytecode(&ast))?;
         Ok(binary)
     })?;
 
@@ -110,7 +111,7 @@ fn run_file(path: &str, stage: Option<&String>) -> bool {
     let module = match SourceFile::open(path) {
         Ok(n) => n,
         Err(_) => {
-            err_internal!("ファイルが読み込めませんでした。");
+            report("internal", "ファイルが読み込めませんでした。");
             return false;
         }
     };
@@ -123,7 +124,6 @@ fn run_file(path: &str, stage: Option<&String>) -> bool {
 }
 
 fn main() {
-    trace::init_logger();
     let arguments: Vec<String> = env::args().collect();
 
     if arguments.len() <= 1 {

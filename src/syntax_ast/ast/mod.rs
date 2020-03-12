@@ -18,9 +18,9 @@ pub struct ASTree<'m> {
 impl<'m> ASTree<'m> {
     pub fn new() -> Self {
         Self {
-            root: Vec::with_capacity(128),
-            stmt: Vec::with_capacity(256),
-            expr: Vec::with_capacity(256),
+            root:      Vec::with_capacity(128),
+            stmt:      Vec::with_capacity(256),
+            expr:      Vec::with_capacity(256),
             functions: Vec::with_capacity(128),
         }
     }
@@ -75,87 +75,63 @@ pub struct BlockData {
     pub statements: Vec<StmtId>,
 }
 
-/*
-struct Expression {
-    type: ExprType,
-    name: Option<String>,
-    lhs: ExprId,
-    rhs: ExprId,
-    oper: Option<Operator>,
-
-    args: Vec<ExprId>,
-}
-
-struct Statement {
-    type: StmtType,
-    expr: Option<ExprId>,
-
-    condition: Option<ExprId>,
-
-    true_block:  Option<StmtId>,
-    false_block: Option<StmtId>,
-
-    for_initial_expr: Option<ExprId>,
-    for_step_expr: Option<ExprId>,
-
-    declaration: Option<DeclarationData>,
-    block: Option<BlockData>,
-
-}
-*/
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression<'m> {
-    pub span: CodeSpan,
+    pub kind: ExprKind,
     pub module: &'m SourceFile,
-    pub data: Expr<'m>,
+    pub span: CodeSpan,
+
+    pub lhs: Option<Box<Expression<'m>>>,
+    pub rhs: Option<Box<Expression<'m>>>,
+
+    pub oper: Option<Operator>,
+
+    pub variable_name: Option<String>,
+    pub arg_expr: Vec<Expression<'m>>,
+    pub literal: Option<Literal<'m>>,
+
     pub end_type: Option<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExprBuilder<'m> {
-    pub span: Option<CodeSpan>,
-    pub module: Option<&'m SourceFile>,
-    pub data: Option<Expr<'m>>,
+impl<'m> Expression<'m> {
+    pub fn report(&self, title: &str, message: &str) {
+        report(title, message);
+        spit_line(self.module, &self.span);
+    }
 }
 
-impl<'m> ExprBuilder<'m> {
-    pub fn expand_span(&mut self, other: CodeSpan) -> &mut Self {
-        if let Some(x) = self.span {
-            self.span = Some(CodeSpan::combine(&x, &other));
-        } else {
-            self.span = Some(other);
-        }
-        self
-    }
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExprInit<'m> {
+    pub kind:     ExprKind,
+    pub module:   Option<&'m SourceFile>,
+    pub span:     Option<CodeSpan>,
 
-    pub fn span(&mut self, span: CodeSpan) -> &mut Self {
-        self.span = Some(span);
-        self
-    }
+    pub lhs: Option<Box<Expression<'m>>>,
+    pub rhs: Option<Box<Expression<'m>>>,
 
-    pub fn module(&mut self, module: &'m SourceFile) -> &mut Self {
-        self.module = Some(module);
-        self
-    }
+    pub oper: Option<Operator>,
 
-    pub fn token(&mut self, token: &'m Token<'m>) -> &mut Self {
-        self.module = Some(token.file);
-        self.span = Some(token.span);
-        self
-    }
+    pub variable_name: Option<String>,
+    pub arg_expr: Vec<Expression<'m>>,
+    pub literal: Option<Literal<'m>>,
 
-    pub fn data(&mut self, data: Expr<'m>) -> &mut Self {
-        self.data = Some(data);
-        self
-    }
+    pub end_type: Option<Type>,
+}
 
-    pub fn build(self) -> Expression<'m> {
+impl<'m> ExprInit<'m> {
+    pub fn init(self) -> Expression<'m> {
         Expression {
-            module: self.module.unwrap(),
+            kind: self.kind,
             span: self.span.unwrap(),
-            data: self.data.unwrap(),
-            end_type: None,
+            module: self.module.unwrap(),
+
+            lhs: self.lhs,
+            rhs: self.rhs,
+            oper: self.oper,
+            variable_name: self.variable_name,
+            arg_expr: self.arg_expr,
+            literal: self.literal,
+            end_type: self.end_type
         }
     }
 }
@@ -174,44 +150,40 @@ impl<'m> Statement<'m> {
     }
 }
 
-impl<'m> Expression<'m> {
-    pub fn report(&self, title: &str, message: &str) {
-        report(title, message);
-        spit_line(self.module, &self.span);
-    }
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct StmtInit<'m> {
+    pub span: Option<CodeSpan>,
+    pub module: Option<&'m SourceFile>,
+    pub data: Option<Stmt>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expr<'m> {
-    Binary(ExprId, ExprId, Operator),
-    Logical(ExprId, ExprId, Operator),
-    FunctionCall(ExprId, Vec<ExprId>),
-    Assign(ExprId, ExprId),
-
-    Literal(Literal<'m>),
-    Grouping(ExprId),
-    Unary(ExprId, Operator),
-    Variable(String),
-}
-
-impl<'m> Expr<'m> {
-    fn complete(self, tok: &'m Token<'m>) -> Expression<'m> {
-        Expression {
-            module: tok.file,
-            span: tok.span,
-            data: self,
-            end_type: None,
-        }
-    }
-}
-
-impl Stmt {
-    fn complete<'m>(self, tok: &'m Token<'m>) -> Statement<'m> {
+impl<'m> StmtInit<'m> {
+    pub fn init(self) -> Statement<'m> {
         Statement {
-            module: tok.file,
-            span: tok.span,
-            data: self,
+            span: self.span.unwrap(),
+            module: self.module.unwrap(),
+            data: self.data.unwrap()
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ExprKind {
+    Binary,
+    Logical,
+    FunctionCall,
+    Assign,
+
+    Literal,
+    Grouping,
+    Unary,
+    Variable,
+    Empty,
+}
+
+impl Default for ExprKind {
+    fn default() -> Self {
+        ExprKind::Empty
     }
 }
 

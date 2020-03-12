@@ -1,6 +1,7 @@
 
 use super::ast::*;
 
+use types::Type;
 use crate::tokenizer::token::{Token, TokenType};
 use trace::prelude::*;
 
@@ -9,9 +10,9 @@ mod stmt;
 
 const MAX_IDENTIFIER_LENGTH: usize = 255;
 pub struct Parser<'m> {
-    ast: ASTree<'m>,
     module: &'m SourceFile,
-    tokens: &'m Vec<Token<'m>>,
+    ast: ASTree<'m>,
+    tokens: &'m [Token<'m>],
     current: usize,
     assign_count: usize,
     block_count: usize,
@@ -21,9 +22,9 @@ impl<'m> Parser<'m> {
     pub fn new(module: &'m SourceFile, tokens: &'m Vec<Token<'m>>) -> Self {
         assert!(module == tokens[0].file);
         Self {
+            ast: ASTree::new(),
             module,
             tokens,
-            ast: ASTree::new(),
             current: 0,
             assign_count: 0,
             block_count: 0,
@@ -46,37 +47,22 @@ impl<'m> Parser<'m> {
         }
     }
 
-    fn enter_block<T>(
-        &'m mut self,
-        pass: &mut T,
-        wrapped_func: fn(&mut Parser<'m>, &mut T) -> Result<(), ()>,
-    ) -> usize {
-        let previous_count = self.assign_count;
-        self.assign_count = 0;
-        self.block_count += 1;
+    fn declaration(&mut self) -> Result<StmtId, ()> {
+        let res = if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
+            self.parse_variable()
+        } else {
+            self.statement()
+        };
 
-        wrapped_func(self, pass);
-
-        let new_assign = self.assign_count;
-        self.assign_count = previous_count;
-        self.block_count -= 1;
-        new_assign
+        res
     }
 
-    fn declaration(&'m mut self) -> Result<StmtId, ()> {
-        if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
-            return self.parse_variable();
-        }
-
-        self.statement()
-    }
-
-    fn expression(&'m mut self) -> Result<ExprId, ()> {
+    fn expression(&mut self) -> Result<Expression<'m>, ()> {
         let x = self.assignment();
         x
     }
 
-    fn assignment(&'m mut self) -> Result<ExprId, ()> {
+    fn assignment(&mut self) -> Result<Expression<'m>, ()> {
         let left_hand = self.logical_or()?;
 
         // @Improvement - 左辺値のハンドリングをもっとまともに出来れば良いかも知れない
@@ -88,19 +74,20 @@ impl<'m> Parser<'m> {
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
             
-            let assign_target = self.ast.get_expr(left_hand);
-            if let Expr::Variable(_) = assign_target.data {
-                let assign = Expression { 
-                    module: self.module,
-                    span: CodeSpan::combine(&start_span, &end_span),
-                    data: Expr::Assign(left_hand, value),
+            if ExprKind::Variable == left_hand.kind {
+                let assign = ExprInit {
+                    kind: ExprKind::Assign,
+                    module: Some(self.module),
+                    lhs: Some(Box::new(value)),
+                    rhs: Some(Box::new(left_hand)),
+                    span: Some(CodeSpan::combine(&start_span, &end_span)),
                     end_type: None,
-                };
+                    .. Default::default()
+                }.init();
 
-                let result = self.ast.add_expr(assign);
-                return Ok(result);
+                return Ok(assign);
             } else {
-                assign_target.report("Invalid Assignment Target", "値の割当を行う対象が不正です.");
+                left_hand.report("Invalid Assignment Target", "値の割当を行う対象が不正です.");
                 return Err(());
             }
         }
@@ -108,7 +95,7 @@ impl<'m> Parser<'m> {
         Ok(left_hand)
     }
 
-    pub fn logical_or(&'m mut self) -> Result<ExprId, ()> {
+    pub fn logical_or(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.logical_and()?;
 
@@ -118,19 +105,22 @@ impl<'m> Parser<'m> {
             let end_span = self.get_current().span;
 
             let span = CodeSpan::combine(&start_span, &end_span);
-            let expression = Expression {
-                module: self.module, 
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Logical(expr, right, Operator::Or),
+            expr = ExprInit {
+                kind: ExprKind::Logical,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(Operator::Or),
                 end_type: None,
-            };
-            expr = self.ast.add_expr(expression);
+                .. Default::default()
+            }.init();
         }
 
         Ok(expr)
     }
 
-    pub fn logical_and(&'m mut self) -> Result<ExprId, ()> {
+    pub fn logical_and(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.equality()?;
 
@@ -139,19 +129,22 @@ impl<'m> Parser<'m> {
             let right = self.equality()?;
             let end_span = self.get_current().span;
 
-            let expression = Expression {
-                module: self.module, 
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Logical(expr, right, Operator::And),
+            expr = ExprInit {
+                kind: ExprKind::Logical,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(Operator::And),
                 end_type: None,
-            };
-            expr = self.ast.add_expr(expression);
+                .. Default::default()
+            }.init();
         }
 
         Ok(expr)
     }
 
-    fn equality(&'m mut self) -> Result<ExprId, ()> {
+    fn equality(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.comparison()?;
         while !self.is_at_end() {
@@ -164,19 +157,21 @@ impl<'m> Parser<'m> {
             let right = self.comparison()?;
             let end_span = self.get_current().span;
 
-            let expression = Expression {
-                module: self.module, 
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Binary(expr, right, operator),
+            expr = ExprInit {
+                kind: ExprKind::Binary,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(operator),
                 end_type: None,
-            };
-
-            expr = self.ast.add_expr(expression);
+                .. Default::default()
+            }.init();
         }
         Ok(expr)
     }
 
-    fn comparison(&'m mut self) -> Result<ExprId, ()> {
+    fn comparison(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.addition()?;
 
@@ -193,18 +188,22 @@ impl<'m> Parser<'m> {
             let right = self.addition()?;
             let end_span = self.get_current().span;
 
-            expr = self.ast.add_expr(Expression { 
-                module: self.module,
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Binary(expr, right, operator),
+            expr = ExprInit {
+                kind: ExprKind::Binary,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(operator),
                 end_type: None,
-            });
+                .. Default::default()
+            }.init();
         }
 
         Ok(expr)
     }
 
-    fn addition(&'m mut self) -> Result<ExprId, ()> {
+    fn addition(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.multiplification()?;
 
@@ -218,18 +217,22 @@ impl<'m> Parser<'m> {
             let right = self.multiplification()?;
             let end_span = self.get_current().span;
 
-            expr = self.ast.add_expr(Expression { 
-                module: self.module,
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Binary(expr, right, operator),
+            expr = ExprInit {
+                kind: ExprKind::Binary,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(operator),
                 end_type: None,
-            });
+                .. Default::default()
+            }.init();
         }
 
         Ok(expr)
     }
 
-    fn multiplification(&'m mut self) -> Result<ExprId, ()> {
+    fn multiplification(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let mut expr = self.unary()?;
 
@@ -244,18 +247,22 @@ impl<'m> Parser<'m> {
             let right = self.unary()?;
             let end_span = self.get_current().span;
 
-            expr = self.ast.add_expr(Expression { 
-                module: self.module,
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Binary(expr, right, operator),
+            expr = ExprInit {
+                kind: ExprKind::Binary,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                lhs: Some(Box::new(expr)),
+                rhs: Some(Box::new(right)),
+                oper: Some(operator),
                 end_type: None,
-            });
+                .. Default::default()
+            }.init();
         }
 
         Ok(expr)
     }
 
-    fn unary(&'m mut self) -> Result<ExprId, ()> {
+    fn unary(&mut self) -> Result<Expression<'m>, ()> {
         let start_span = self.get_current().span;
         let operator = match self.get_current().tokentype {
             TokenType::Bang => Some(Operator::Not),
@@ -268,20 +275,15 @@ impl<'m> Parser<'m> {
             self.advance();
             let right = self.unary()?;
             let end_span = self.get_current().span;
-            let expression: Expression;
-            expression.module = self.module;
-            expression.span = CodeSpan::combine(&start_span, &end_span);
-            expression.data = Expr::Unary(right, oper);
 
-            let unary = self.ast.add_expr(expression);
-
-            /*
-            let unary = self.ast.add_expr(Expression {
-                module: self.module,
-                span: CodeSpan::combine(&start_span, &end_span),
-                data: Expr::Unary(right, oper)
-            });
-            */
+            let unary = ExprInit {
+                kind: ExprKind::Unary,
+                module: Some(self.module),
+                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                rhs: Some(Box::new(right)),
+                oper: Some(oper),
+                .. Default::default()
+            }.init();
 
             return Ok(unary);
         }
@@ -289,11 +291,11 @@ impl<'m> Parser<'m> {
         self.postfix()
     }
 
-    fn postfix(&'m mut self) -> Result<ExprId, ()> {
+    fn postfix(&mut self) -> Result<Expression<'m>, ()> {
         let mut expr = self.primary()?;
 
         'parse: loop {
-            expr = match self.get_current().tokentype {
+            expr = match self.get_current().tokentype.clone() {
                 TokenType::OpenParen => self.parse_func_call(expr)?,
                 TokenType::Bang => self.parse_unwrap(expr)?,
                 TokenType::OpenSquareBracket => self.parse_array_ref(expr)?,
@@ -304,26 +306,30 @@ impl<'m> Parser<'m> {
         Ok(expr)
     }
 
-    fn parse_unwrap(&mut self, _e: ExprId) -> Result<ExprId, ()> {
+    fn parse_unwrap(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
         self.get_current().report("Unimplemented Feature", "Unwrap機能は実装されていません。");
         Err(())
     }
 
-    fn parse_deref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
+    fn parse_deref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
         self.get_current().report("Unimplemented Feature", "Deref機能は実装されていません。");
         Err(())
     }
 
-    fn parse_array_ref(&mut self, _e: ExprId) -> Result<ExprId, ()> {
+    fn parse_array_ref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
         self.get_current().report("Unimplemented Feature", "ArrayRef機能は実装されていません。");
         Err(())
     }
 
-    fn parse_func_call(&'m mut self, expr: ExprId) -> Result<ExprId, ()> {
-        let mut builder = ExprBuilder::default().token(self.get_previous());
-        self.consume(TokenType::OpenParen)?;
-        let mut v = Vec::<ExprId>::new();
+    fn parse_func_call(&mut self, var: Expression<'m>) -> Result<Expression<'m>, ()> {
+        let mut expr = ExprInit {
+            kind: ExprKind::FunctionCall,
+            module: Some(self.module),
+            ..Default::default()
+        };
+        let start_span = self.consume(TokenType::OpenParen)?.span;
 
+        let mut v = Vec::<Expression<'m>>::new();
         if !self.is(TokenType::CloseParen) {
             loop {
                 v.push(self.expression()?);
@@ -334,9 +340,14 @@ impl<'m> Parser<'m> {
                 }
             }
         }
-        builder.expand_span(self.consume(TokenType::CloseParen)?.span)
-               .data(Expr::FunctionCall(expr, v));
-        Ok(self.ast.add_expr(builder.build()))
+
+        let end_span = self.consume(TokenType::CloseParen)?.span;
+        
+        expr.span = Some(CodeSpan::combine(&start_span, &end_span));
+        expr.lhs = Some(Box::new(var));
+        expr.arg_expr = v;
+
+        Ok(expr.init())
     }
 
     fn is(&mut self, _type: TokenType) -> bool {
@@ -351,17 +362,17 @@ impl<'m> Parser<'m> {
         (!self.is_at_end() && self.get_previous().tokentype == _type)
     }
 
-    fn get_current(&self) -> &Token {
+    fn get_current(&self) -> &Token<'m> {
         let x = self.tokens.get(self.current).unwrap();
         x
     }
 
-    fn get_previous(&self) -> &Token {
+    fn get_previous(&self) -> &Token<'m> {
         let x = self.tokens.get(self.current - 1).unwrap();
         x
     }
 
-    fn get_next(&self) -> &Token {
+    fn get_next(&self) -> &Token<'m> {
         if self.current + 1 >= self.tokens.len() {
             return self.get_current();
         }
@@ -369,47 +380,60 @@ impl<'m> Parser<'m> {
         x
     }
 
-    fn advance(&mut self) -> &Token {
+    fn advance(&mut self) -> &Token<'m> {
         self.current += 1;
         let x = self.tokens.get(self.current - 1).unwrap();
         x
     }
 
-    fn primary(&'m mut self) -> Result<ExprId, ()> {
-        let mut builder = ExprBuilder::default().token(self.advance());
-        let inside = self.get_previous();
+    fn primary(&mut self) -> Result<Expression<'m>, ()> {
+        let inside = self.advance().clone();
+
+        let mut expr = ExprInit {
+            kind: ExprKind::Literal,
+            module: Some(self.module),
+            span: Some(inside.span),
+            .. Default::default()
+        };
+
         use TokenType::*;
         let result = match &inside.tokentype {
             Digit => {
                 let inside_lexeme = inside.lexeme.clone().unwrap();
                 let contain_dot = inside_lexeme.contains('.');
                 let lit = if contain_dot {
-                    Literal::new_float(inside)
+                    Literal::new_float(&inside)
                 } else {
-                    Literal::new_int(inside)
+                    Literal::new_int(&inside)
                 };
 
-                let result = builder.data(Expr::Literal(lit)).build();
-                Ok(self.ast.add_expr(result))
+                expr.literal = Some(lit);
+                expr.end_type = Some(if contain_dot { Type::float() } else { Type::int() });
+
+                Ok(expr.init())
                 // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
             Str => {
-                let lit = Literal::new_str(inside);
-                let result = builder.data(Expr::Literal(lit)).build();
-                Ok(self.ast.add_expr(result))
+                let lit = Literal::new_str(&inside);
+                expr.literal = Some(lit);
+                expr.end_type = Some(Type::string());
+
+                Ok(expr.init())
             }
             Iden => {
                 if let Some(ref inside_lexeme) = inside.lexeme {
                     match inside_lexeme.as_str() {
                         "true" | "false" => {
-                            let lit = Literal::new_bool(inside);
-                            let result = builder.data(Expr::Literal(lit)).build();
-                            Ok(self.ast.add_expr(result))
+                            let lit = Literal::new_bool(&inside);
+                            expr.literal = Some(lit);
+                            expr.end_type = Some(Type::boolean());
+                            Ok(expr.init())
                         }
                         "null" => {
-                            let lit = Literal::new_null(inside);
-                            let result = builder.data(Expr::Literal(lit)).build();
-                            Ok(self.ast.add_expr(result))
+                            let lit = Literal::new_null(&inside);
+                            expr.literal = Some(lit);
+                            expr.end_type = Some(Type::null());
+                            Ok(expr.init())
                         }
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
@@ -418,9 +442,9 @@ impl<'m> Parser<'m> {
                                 inside.report("Maximum Identifier Length Exceeded", &msg);
                                 Err(())
                             } else {
-                                let var = Expr::Variable(inside_lexeme.to_owned());
-                                let result = builder.data(var).build();
-                                Ok(self.ast.add_expr(result))
+                                expr.kind = ExprKind::Variable;
+                                expr.variable_name = Some(inside_lexeme.to_owned());
+                                Ok(expr.init())
                             }
                         }
                     }
@@ -430,11 +454,12 @@ impl<'m> Parser<'m> {
             }
             OpenParen => {
                 let inside_paren = self.expression()?;
-                let data = Expr::Grouping(inside_paren);
+                let end_span = self.consume(CloseParen)?.span;
 
-                let end_token = self.consume(CloseParen)?;
-                let built = builder.expand_span(end_token.span).data(data).build();
-                Ok(self.ast.add_expr(built))
+                expr.kind = ExprKind::Grouping;
+                expr.lhs = Some(Box::new(inside_paren));
+                expr.span = Some(CodeSpan::combine(&expr.span.unwrap(), &end_span));
+                Ok(expr.init())
             }
             _s => {
                 let formatted = 

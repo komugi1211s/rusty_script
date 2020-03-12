@@ -26,7 +26,7 @@ fn is_suffix_banned(cand: &str) -> bool {
 }
 
 impl<'m> Parser<'m> {
-    fn parse_type(&'m mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
+    fn parse_type(&mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
         // Separate Array Consumption to other function
         if self.is(TokenType::OpenSquareBracket) {
             self.advance();
@@ -91,11 +91,11 @@ impl<'m> Parser<'m> {
         Ok(core_type)
     }
 
-    fn parse_struct(&'m mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
+    fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
         unimplemented!();
     }
 
-    fn parse_type_prefix(&'m mut self) -> ast::DeclPrefix {
+    fn parse_type_prefix(&mut self) -> ast::DeclPrefix {
         let mut prefix = ast::DeclPrefix::empty();
         loop {
             match self.get_current().tokentype {
@@ -114,7 +114,7 @@ impl<'m> Parser<'m> {
     }
 
     pub(super) fn parse_function_decl(
-        &'m mut self,
+        &mut self,
         baseinfo: ast::DeclarationData,
     ) -> Result<ast::StmtId, ()> {
         let start_span = self.get_current().span;
@@ -138,7 +138,7 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    pub(super) fn parse_arguments(&'m mut self) -> Result<Vec<ast::DeclarationData>, ()> {
+    pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, ()> {
         let _span = self.consume(TokenType::OpenParen)?.span;
         let mut args = vec![];
 
@@ -181,7 +181,7 @@ impl<'m> Parser<'m> {
         Ok(args)
     }
 
-    pub(super) fn parse_variable(&'m mut self) -> Result<ast::StmtId, ()> {
+    pub(super) fn parse_variable(&mut self) -> Result<ast::StmtId, ()> {
         self.assign_count += 1;
 
         let (name, start_span) = {
@@ -201,23 +201,23 @@ impl<'m> Parser<'m> {
             prefix,
             expr: None,
         };
-        let statement: ast::Statement;
-        statement.module = self.module;
+        let mut statement: ast::StmtInit = Default::default();
+        statement.module = Some(self.module);
 
         if self.is(TokenType::Equal) {
             self.advance();
             let item = self.expression()?;
-            decl_info.expr = Some(item);
+            decl_info.expr = Some(self.ast.add_expr(item));
             let end_span = self.consume(TokenType::SemiColon)?.span;
 
-            statement.span = CodeSpan::combine(&start_span, &end_span);
-            statement.data = ast::Stmt::Declaration(decl_info);
-            Ok(self.ast.add_stmt(statement))
+            statement.span = Some(CodeSpan::combine(&start_span, &end_span));
+            statement.data = Some(ast::Stmt::Declaration(decl_info));
+            Ok(self.ast.add_stmt(statement.init()))
         } else if self.is(TokenType::SemiColon) {
             let end_span = self.advance().span;
-            statement.span = CodeSpan::combine(&start_span, &end_span);
-            statement.data = ast::Stmt::Declaration(decl_info);
-            Ok(self.ast.add_stmt(statement))
+            statement.span = Some(CodeSpan::combine(&start_span, &end_span));
+            statement.data = Some(ast::Stmt::Declaration(decl_info));
+            Ok(self.ast.add_stmt(statement.init()))
         } else if self.is(TokenType::OpenParen) {
             self.parse_function_decl(decl_info)
         } else {

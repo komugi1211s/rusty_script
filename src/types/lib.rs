@@ -280,10 +280,10 @@ impl Value {
 
     pub fn is_truthy(&self) -> bool {
         // NOTE: This should work since Value implement ops::Not
-        if let Value::Boolean(x) = !!self {
-            x
+        if let Value::Boolean(ref x) = !!self {
+            *x
         } else {
-            panic!("Interpreter Internal Error");
+            panic!();
         }
     }
 }

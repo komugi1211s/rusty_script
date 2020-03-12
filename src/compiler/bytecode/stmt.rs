@@ -1,4 +1,4 @@
-use trace::{code_line, err_fatal, SourceFile};
+use trace::prelude::*;
 
 use syntax_ast::ast::*;
 
@@ -10,17 +10,23 @@ use types::{Type, Value};
 pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: StmtId) {
     let statement = ast.get_stmt(statement_id);
 
-    use Statement::*;
-    match statement {
-        Expression(expr_id) => traverse_expression(compiler, ast, *expr_id),
+    use Stmt::*;
+    match &statement.data {
+        Expression(expr_id) => {
+            let expr = ast.get_expr(*expr_id);
+            traverse_expression(compiler, expr);
+        },
 
         Print(expr_id) => {
-            traverse_expression(compiler, ast, *expr_id);
+            let expr = ast.get_expr(*expr_id);
+            traverse_expression(compiler, expr);
             compiler.emit_op(IRCode::DebugPrint);
         }
 
         If(cond_expr, if_id, else_block) => {
-            traverse_expression(compiler, ast, *cond_expr);
+            let expr = ast.get_expr(*cond_expr);
+            traverse_expression(compiler, expr);
+
             let jnt_patch = compiler.reserve_one(); // Conditional Jump Position
             traverse_statement(compiler, ast, *if_id);
 
@@ -40,7 +46,8 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
 
         While(expr_id, inner_stmt) => {
             let before_expr = compiler.codes.len();
-            traverse_expression(compiler, ast, *expr_id);
+            let expr = ast.get_expr(*expr_id);
+            traverse_expression(compiler, expr);
             let jnt_patch = compiler.reserve_one();
 
             let captured = capture_patch(compiler, |enclosed| {
@@ -71,7 +78,10 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
         Continue => {
             compiler.mark_continue();
         }
-        _ => unimplemented!(),
+        _ => {
+            statement.report("Unimplemented", "実装前です");
+            panic!();
+        },
     };
 }
 
@@ -86,7 +96,8 @@ fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) {
 
 fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData) {
     let expr_type = if let Some(expr) = decl.expr {
-        traverse_expression(compiler, ast, expr)
+        let expr = ast.get_expr(expr);
+        traverse_expression(compiler, expr)
     } else {
     };
 

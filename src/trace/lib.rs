@@ -19,7 +19,8 @@ fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String {
     let problematic_pos = chars.by_ref().take(col_len).collect::<String>();
     let rest = chars.collect::<String>();
 
-    format!("{}\x1b[31m{}\x1b[39m{}", left, problematic_pos, rest)
+    let middle = format!("\x1b[31m{}\x1b[0m", problematic_pos);
+    format!("{}{}{}", left, middle, rest)
 }
 
 pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
@@ -28,8 +29,9 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
 
     let (col_start, col_len) = lines.cols();
     if lines.is_oneliner() {
-        let line = lines.rows().0.saturating_sub(1);
-        let line_text = code_lines.get(line);
+        let line = lines.rows().0;
+        let index = line.saturating_sub(1);
+        let line_text = code_lines.get(index);
 
         let decorated_text = if let Some(text) = line_text {
             mark_by_red(text, col_start, col_len)
@@ -47,11 +49,11 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
         let end = start + len;
 
         for line in start..end {
-            let line = line.saturating_sub(1);
+            let index = line.saturating_sub(1);
             println!(
                 "   :: {} |: {}",
                 line,
-                code_lines.get(line).unwrap_or(&"~~~~~~~~~~~~~~")
+                code_lines.get(index).unwrap_or(&"~~~~~~~~~~~~~~")
             );
         }
     }
@@ -62,13 +64,17 @@ pub fn report(
     message: &str,
 ) {
     if title == "internal" {
-        println!("[Isekai :: 内部エラー] {}", message);
+        println!(
+            "{:-<50}",
+            "[Isekai] :: 内部エラー "
+        );
+        println!("{}", message);
         return;
     }
 
     println!(
         "{:-<50}",
-        format!("[Isekai :: {}]", title)
+        format!("[Isekai] :: {} ", title)
     );
     println!("{}", message);
 }
