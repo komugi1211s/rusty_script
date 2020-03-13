@@ -54,7 +54,7 @@ impl TimeCount {
         let elapsed = start.elapsed();
         let time = { elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9 };
 
-        let elapsed_msg = if result.is_ok() {
+        let elapsed_msg = if result.is_ok() && !error_reported() {
             format!(" {0:<12} Finished :: \x1b[32m{1} secs\x1b[0m", step, time)
         } else {
             format!(" {0:<12} Error :: \x1b[31m{1} secs\x1b[0m", step, time)
@@ -85,10 +85,11 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
         // let sema_analyze = timer.time("Semantic",  || semantic::analysis(&ast))?;
         let binary = timer.time("CodeGen",   || bytecode::generate_bytecode(&ast))?;
         Ok(binary)
-    })?;
+    });
 
     // print_ir_vec(&binary.code);
     timer.report();
+    let binary = binary?;
 
     let mut vm = vm::VirtualMachine::new();
     vm::start_vm(&mut vm, &module, &binary);

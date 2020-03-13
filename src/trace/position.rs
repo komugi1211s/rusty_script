@@ -23,7 +23,9 @@ pub struct CodeSpan {
 
 impl fmt::Display for CodeSpan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "line {} ~ {}", self.row_start, self.row_start + self.row_len)
+        write!(f, "{} - {}行目, {} - {}列目",
+               self.row_start, self.row_start + self.row_len,
+               self.col_start, self.col_start + self.col_len)
     }
 }
 

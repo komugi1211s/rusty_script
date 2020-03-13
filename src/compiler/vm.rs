@@ -7,7 +7,7 @@ use types::Value;
 #[derive(Debug)]
 pub struct VirtualMachine {
     // Instruction Pointer :: current instruction.
-    IP: usize,
+    inst_idx: usize,
     callst: Vec<usize>,
 
     stack: Vec<Value>,
@@ -16,7 +16,7 @@ pub struct VirtualMachine {
 impl VirtualMachine {
     pub fn new() -> Self {
         Self {
-            IP: 0,
+            inst_idx: 0,
             callst: Vec::with_capacity(65535),
             stack: Vec::with_capacity(65535),
         }
@@ -26,8 +26,8 @@ impl VirtualMachine {
 pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode) -> () {
     let code_length = bin.code.len();
 
-    while code_length > vm.IP {
-        let instruction = &bin.code[vm.IP];
+    while code_length > vm.inst_idx {
+        let instruction = &bin.code[vm.inst_idx];
 
         match instruction {
             // TODO: redundant const difference
@@ -61,14 +61,14 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             }
 
             IRCode::Jump(to) => {
-                vm.IP = *to as usize;
+                vm.inst_idx = *to as usize;
                 continue;
             }
 
             IRCode::JT(to) => {
                 let cond = vm.stack.pop().unwrap();
                 if cond.is_truthy() {
-                    vm.IP = *to as usize;
+                    vm.inst_idx = *to as usize;
                     continue;
                 }
             }
@@ -76,7 +76,7 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             IRCode::JNT(to) => {
                 let cond = vm.stack.pop().unwrap();
                 if !cond.is_truthy() {
-                    vm.IP = *to as usize;
+                    vm.inst_idx = *to as usize;
                     continue;
                 }
             }
@@ -89,6 +89,6 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             _ => unimplemented!(),
         }
 
-        vm.IP += 1;
+        vm.inst_idx += 1;
     }
 }

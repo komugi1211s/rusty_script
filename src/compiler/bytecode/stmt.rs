@@ -7,7 +7,7 @@ use super::{Compiler, Patch, PatchKind};
 use crate::ir::IRCode;
 use types::{Type, Value};
 
-pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: StmtId) {
+pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: StmtId) -> Result<(), ()> {
     let statement = ast.get_stmt(statement_id);
 
     use Stmt::*;
@@ -15,12 +15,14 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
         Expression(expr_id) => {
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
+            Ok(())
         },
 
         Print(expr_id) => {
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
             compiler.emit_op(IRCode::DebugPrint);
+            Ok(())
         }
 
         If(cond_expr, if_id, else_block) => {
@@ -42,6 +44,7 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
                 let end_if = compiler.codes.len();
                 compiler.patch(jnt_patch, IRCode::JNT(end_if as u32));
             }
+            Ok(())
         }
 
         While(expr_id, inner_stmt) => {
@@ -66,23 +69,29 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
                     PatchKind::Continue => compiler.patch(*patch, IRCode::Jump(before_expr as u32)),
                 }
             }
+            Ok(())
         }
 
-        Block(innerblock) => traverse_block(compiler, ast, innerblock),
+        Block(innerblock) => {
+            traverse_block(compiler, ast, innerblock);
+            Ok(())
+        }
         //        Function(func_idx)    => declare_function(compiler, ast, func_idx),
-        Declaration(ref decl) => traverse_vardecl(compiler, ast, decl),
+        Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
 
         Break => {
             compiler.mark_break();
+            Ok(())
         }
         Continue => {
             compiler.mark_continue();
+            Ok(())
         }
         _ => {
             statement.report("Unimplemented", "実装前です");
-            panic!();
+            Err(())
         },
-    };
+    }
 }
 
 fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) {

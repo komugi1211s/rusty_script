@@ -65,7 +65,9 @@ impl<'m> Parser<'m> {
             }
 
             if candidate == "struct" {
-                return self.parse_struct(prefix);
+                token.report("Unimplemented", "Structはまだ未実装です。");
+                return Err(());
+                // return self.parse_struct(prefix);
             }
 
             match ast::ParsedType::match_primitive(candidate) {
@@ -92,7 +94,7 @@ impl<'m> Parser<'m> {
     }
 
     fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()> {
-        unimplemented!();
+        Err(())
     }
 
     fn parse_type_prefix(&mut self) -> ast::DeclPrefix {
@@ -164,7 +166,8 @@ impl<'m> Parser<'m> {
             };
 
             if self.is(TokenType::Equal) {
-                unimplemented!();
+                self.get_current().report("Unimplemented", "デフォルト引数は未実装です。");
+                return Err(());
             } else if self.is(TokenType::Comma) {
                 args.push(decl_info);
                 self.consume(TokenType::Comma)?;
@@ -173,7 +176,7 @@ impl<'m> Parser<'m> {
                 break;
             } else {
                 self.get_current().report("Invalid Token", "`)` を想定しましたが、それ以外のトークンを検知しました。");
-                panic!();
+                return Err(());
             }
         }
 
@@ -222,7 +225,6 @@ impl<'m> Parser<'m> {
             self.parse_function_decl(decl_info)
         } else {
             self.get_current().report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
-            
             Err(())
         }
     }

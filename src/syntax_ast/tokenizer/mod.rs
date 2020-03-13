@@ -176,10 +176,9 @@ impl<'m> Tokenizer<'m> {
 
         // Unterminated String
         if self.is_at_end() {
-            let span = CodeSpan::oneline(starting_line, starting_idx, 0);
             err_fatal!(
                 src: module,
-                span: &span,
+                span: &self.create_current_span(),
                 title: "Unterminated String",
                 msg: "\n文字列が閉じられていません。\n"
             );
