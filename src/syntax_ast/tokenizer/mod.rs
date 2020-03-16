@@ -1,7 +1,7 @@
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{position::CodeSpan, source::SourceFile, err_fatal};
+use trace::{err_fatal, position::CodeSpan, source::SourceFile};
 
 pub struct Tokenizer<'m> {
     source: Vec<char>,
@@ -35,7 +35,7 @@ impl<'m> Tokenizer<'m> {
 
     pub fn set_start_index(&mut self) {
         self.start = self.current;
-        self.start_line   = self.current_line;
+        self.start_line = self.current_line;
         self.start_column = self.current_column;
     }
 
@@ -47,8 +47,7 @@ impl<'m> Tokenizer<'m> {
         }
 
         let span = self.create_current_span();
-        self.tokens
-            .push(Token::simple(modu, TokenType::EOF, span));
+        self.tokens.push(Token::simple(modu, TokenType::EOF, span));
         Ok(self.tokens.to_owned())
     }
 
@@ -256,8 +255,12 @@ impl<'m> Tokenizer<'m> {
     }
 
     fn create_current_span(&self) -> CodeSpan {
-        CodeSpan::new(self.start_line, self.current_line.saturating_sub(self.start_line),
-            self.start_column, self.current_column.saturating_sub(self.start_column))
+        CodeSpan::new(
+            self.start_line,
+            self.current_line.saturating_sub(self.start_line),
+            self.start_column,
+            self.current_column.saturating_sub(self.start_column),
+        )
     }
 
     fn add_simple(&mut self, module: &'m SourceFile, tokentype: TokenType) -> TResult {
@@ -269,8 +272,12 @@ impl<'m> Tokenizer<'m> {
     fn add_lexed(&mut self, module: &'m SourceFile, tokentype: TokenType) -> TResult {
         let string: String = self.source[self.start..self.current].iter().collect();
 
-        self.tokens
-            .push(Token::lexed(module, tokentype, self.create_current_span(), string));
+        self.tokens.push(Token::lexed(
+            module,
+            tokentype,
+            self.create_current_span(),
+            string,
+        ));
         Ok(())
     }
 

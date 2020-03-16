@@ -30,7 +30,7 @@ pub struct Compiler {
     depth: u16,
     global: HashMap<String, Type>,
     local: Vec<Local>,
-    consts: Vec<Value>, 
+    consts: Vec<Value>,
 }
 
 impl Compiler {

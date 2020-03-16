@@ -1,5 +1,5 @@
-use types::Type;
 use crate::tokenizer::token::Token;
+use types::Type;
 
 use trace::prelude::*;
 
@@ -14,13 +14,12 @@ pub struct ASTree<'m> {
     pub functions: Vec<FunctionData>,
 }
 
-
 impl<'m> ASTree<'m> {
     pub fn new() -> Self {
         Self {
-            root:      Vec::with_capacity(128),
-            stmt:      Vec::with_capacity(256),
-            expr:      Vec::with_capacity(256),
+            root: Vec::with_capacity(128),
+            stmt: Vec::with_capacity(256),
+            expr: Vec::with_capacity(256),
             functions: Vec::with_capacity(128),
         }
     }
@@ -98,13 +97,17 @@ impl<'m> Expression<'m> {
         report(title, message);
         spit_line(self.module, &self.span);
     }
+
+    pub fn is_literal(&self) -> bool {
+        self.kind == ExprKind::Literal
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExprInit<'m> {
-    pub kind:     ExprKind,
-    pub module:   Option<&'m SourceFile>,
-    pub span:     Option<CodeSpan>,
+    pub kind: ExprKind,
+    pub module: Option<&'m SourceFile>,
+    pub span: Option<CodeSpan>,
 
     pub lhs: Option<Box<Expression<'m>>>,
     pub rhs: Option<Box<Expression<'m>>>,
@@ -131,7 +134,7 @@ impl<'m> ExprInit<'m> {
             variable_name: self.variable_name,
             arg_expr: self.arg_expr,
             literal: self.literal,
-            end_type: self.end_type
+            end_type: self.end_type,
         }
     }
 }
@@ -141,6 +144,7 @@ pub struct Statement<'m> {
     pub span: CodeSpan,
     pub module: &'m SourceFile,
     pub data: Stmt,
+    pub parent: Option<StmtId>,
 }
 
 impl<'m> Statement<'m> {
@@ -155,6 +159,7 @@ pub struct StmtInit<'m> {
     pub span: Option<CodeSpan>,
     pub module: Option<&'m SourceFile>,
     pub data: Option<Stmt>,
+    pub parent: Option<StmtId>,
 }
 
 impl<'m> StmtInit<'m> {
@@ -162,7 +167,8 @@ impl<'m> StmtInit<'m> {
         Statement {
             span: self.span.unwrap(),
             module: self.module.unwrap(),
-            data: self.data.unwrap()
+            data: self.data.unwrap(),
+            parent: self.parent,
         }
     }
 }
@@ -207,6 +213,7 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operator {
+    // Binary
     Add,
     Sub,
     Div,
@@ -219,9 +226,12 @@ pub enum Operator {
     MoreEq,
     Less,
     More,
+
+    // Unary
     Not,
     Neg,
 
+    // Logical
     And,
     Or,
 
@@ -407,10 +417,10 @@ pub enum ParsedType {
 impl ParsedType {
     pub fn match_primitive(cand: &str) -> Option<Self> {
         match cand {
-            "int"    => Some(Self::pInt),
+            "int" => Some(Self::pInt),
             "string" => Some(Self::pStr),
-            "float"  => Some(Self::pFloat),
-            "bool"   => Some(Self::pBoolean),
+            "float" => Some(Self::pFloat),
+            "bool" => Some(Self::pBoolean),
             _ => None,
         }
     }

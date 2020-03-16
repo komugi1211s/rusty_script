@@ -10,20 +10,20 @@ use std::sync::atomic::AtomicBool;
 static ERROR_REPORTED: AtomicBool = AtomicBool::new(false);
 
 pub mod prelude {
-    pub use super::{ report, spit_line, error_reported };
-    pub use super::source::SourceFile;
-    pub use super::position::CodeSpan;
     pub use super::err_fatal;
+    pub use super::position::CodeSpan;
+    pub use super::source::SourceFile;
+    pub use super::{error_reported, report, spit_line};
 }
 
 pub fn error_reported() -> bool {
-     ERROR_REPORTED.load(std::sync::atomic::Ordering::Relaxed)
+    ERROR_REPORTED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String {
     let mut chars = string.chars();
 
-    let left = chars.by_ref().take(col_start-1).collect::<String>();
+    let left = chars.by_ref().take(col_start - 1).collect::<String>();
     let problematic_pos = chars.by_ref().take(col_len).collect::<String>();
     let rest = chars.collect::<String>();
 
@@ -47,11 +47,7 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
             String::from("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         };
 
-        println!(
-            " {:>5} |:| {}",
-            line,
-            &decorated_text
-        );
+        println!(" {:>5} |:| {}", line, &decorated_text);
     } else {
         let (start, len) = lines.rows();
         let end = start + len;
@@ -61,30 +57,22 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan) {
             println!(
                 " {:>5} |:| \x1b[31m{}\x1b[0m",
                 line,
-                code_lines.get(index).unwrap_or(&"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                code_lines
+                    .get(index)
+                    .unwrap_or(&"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             );
         }
     }
 }
 
-pub fn report(
-    title: &str,
-    message: &str,
-) {
+pub fn report(title: &str, message: &str) {
     if title == "internal" {
-        println!(
-            "{:-<50}",
-            "\x1b[31m[Isekai]\x1b[0m :: 内部エラー "
-        );
+        println!("{:-<50}", "\x1b[31m[Isekai]\x1b[0m :: 内部エラー ");
         println!("{}", message);
         return;
     }
 
-    println!(
-        "{:-<50}",
-        format!("\x1b[31m[Isekai]\x1b[0m :: {} ", title)
-    );
+    println!("{:-<50}", format!("\x1b[31m[Isekai]\x1b[0m :: {} ", title));
     println!("{}", message);
     ERROR_REPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
-

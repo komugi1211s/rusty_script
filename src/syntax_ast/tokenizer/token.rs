@@ -96,7 +96,12 @@ impl<'m> Token<'m> {
             lexeme: None,
         }
     }
-    pub fn lexed(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan, lexeme: String) -> Self {
+    pub fn lexed(
+        file: &'m SourceFile,
+        tokentype: TokenType,
+        span: CodeSpan,
+        lexeme: String,
+    ) -> Self {
         Token {
             file,
             tokentype,
@@ -117,6 +122,10 @@ impl<'m> Token<'m> {
 
 impl fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "トークン {:?}, {}行目", self.tokentype, self.span.row_start)
+        write!(
+            f,
+            "トークン {:?}, {}行目",
+            self.tokentype, self.span.row_start
+        )
     }
 }

@@ -1,12 +1,11 @@
-use trace::prelude::*;
 use syntax_ast::ast::*;
+use trace::prelude::*;
 
-use super::{Compiler};
+use super::Compiler;
 use crate::ir::IRCode;
 use types::{Type, Value};
 
 pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>) {
-
     use ExprKind::*;
     match expr.kind {
         Binary => {
@@ -41,7 +40,7 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>) {
             let msg = format!("{:?} は実装前です。", expr.kind);
             expr.report("Unimplemented!", &msg);
             panic!();
-        },
+        }
     };
 }
 
@@ -57,23 +56,19 @@ fn emit_from_oper(compiler: &mut Compiler, oper: Operator) {
 }
 
 fn emit_constants(compiler: &mut Compiler, literal: &Literal) {
-    let lexeme: &str = match literal
-        .tok
-        .lexeme
-        .as_ref() {
+    let lexeme: &str = match literal.tok.lexeme.as_ref() {
         Some(x) => x,
         None => {
             literal.tok.report("internal", "リテラルなのにトークンが空");
             panic!();
-        },
+        }
     };
-
 
     match literal.kind {
         LiteralKind::Bool => {
             match lexeme {
                 // TODO - @DumbCode: Hardcoded Index.
-                "true"  => compiler.emit_op(IRCode::True),
+                "true" => compiler.emit_op(IRCode::True),
                 "false" => compiler.emit_op(IRCode::False),
                 _ => unreachable!(),
             };
@@ -84,7 +79,9 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal) {
                 Ok(n) => n,
                 Err(_) => {
                     literal.tok.report(
-                        "Broken Integer Literal", "整数を期待しましたがパースに失敗しました。");
+                        "Broken Integer Literal",
+                        "整数を期待しましたがパースに失敗しました。",
+                    );
 
                     return;
                 }
@@ -99,7 +96,9 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal) {
                 Ok(n) => n,
                 Err(_) => {
                     literal.tok.report(
-                        "Broken Float Literal", "実数を期待しましたがパースに失敗しました。");
+                        "Broken Float Literal",
+                        "実数を期待しましたがパースに失敗しました。",
+                    );
                     return;
                 }
             };

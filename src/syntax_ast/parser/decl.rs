@@ -39,8 +39,10 @@ impl<'m> Parser<'m> {
                 let digit = self.consume(TokenType::Digit)?.clone();
                 let number_inside = digit.lexeme.as_ref().unwrap();
                 if number_inside.contains('.') {
-
-                    digit.report("Invalid array declaration", "静的配列は現在定数でのみ長さを初期化出来ます。");
+                    digit.report(
+                        "Invalid array declaration",
+                        "静的配列は現在定数でのみ長さを初期化出来ます。",
+                    );
                     return Err(());
                 }
 
@@ -60,7 +62,10 @@ impl<'m> Parser<'m> {
 
             let candidate = token.lexeme.as_ref().unwrap();
             if is_prefix_banned(candidate) && !prefix.is_empty() {
-                token.report("Invalid Prefix placement", &format!("Prefix {:?} はこの定義では使用できません。", prefix));
+                token.report(
+                    "Invalid Prefix placement",
+                    &format!("Prefix {:?} はこの定義では使用できません。", prefix),
+                );
                 return Err(());
             }
 
@@ -131,10 +136,11 @@ impl<'m> Parser<'m> {
         };
 
         let idx = self.ast.add_fn(data);
-        let stmt = ast::Statement { 
+        let stmt = ast::Statement {
             module: self.module,
             span: CodeSpan::combine(&start_span, &end_span),
             data: ast::Stmt::Function(idx),
+            parent: None,
         };
 
         Ok(self.ast.add_stmt(stmt))
@@ -166,7 +172,8 @@ impl<'m> Parser<'m> {
             };
 
             if self.is(TokenType::Equal) {
-                self.get_current().report("Unimplemented", "デフォルト引数は未実装です。");
+                self.get_current()
+                    .report("Unimplemented", "デフォルト引数は未実装です。");
                 return Err(());
             } else if self.is(TokenType::Comma) {
                 args.push(decl_info);
@@ -175,7 +182,10 @@ impl<'m> Parser<'m> {
                 args.push(decl_info);
                 break;
             } else {
-                self.get_current().report("Invalid Token", "`)` を想定しましたが、それ以外のトークンを検知しました。");
+                self.get_current().report(
+                    "Invalid Token",
+                    "`)` を想定しましたが、それ以外のトークンを検知しました。",
+                );
                 return Err(());
             }
         }
@@ -218,13 +228,15 @@ impl<'m> Parser<'m> {
             Ok(self.ast.add_stmt(statement.init()))
         } else if self.is(TokenType::SemiColon) {
             let end_span = self.advance().span;
-            statement.span = Some(CodeSpan::combine(&start_span, &end_span));
+            let span = CodeSpan::combine(&start_span, &end_span);
+            statement.span = Some(span);
             statement.data = Some(ast::Stmt::Declaration(decl_info));
             Ok(self.ast.add_stmt(statement.init()))
         } else if self.is(TokenType::OpenParen) {
             self.parse_function_decl(decl_info)
         } else {
-            self.get_current().report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
+            self.get_current()
+                .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
             Err(())
         }
     }

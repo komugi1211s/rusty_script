@@ -1,8 +1,6 @@
-
 use std::fmt;
 use std::mem;
 use std::ops;
-
 
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub enum TypeKind {
@@ -33,25 +31,25 @@ pub struct Type {
     pub kind: TypeKind,
 
     /// For Array :: Pointer's Inside.
-    pub pointer_to:     Option<Box<Type>>,
+    pub pointer_to: Option<Box<Type>>,
 
     /// For Array :: Type of array's content.
-    pub array_type:     Option<Box<Type>>,
+    pub array_type: Option<Box<Type>>,
 
     /// For Array :: Array's variable count.
-    pub array_size:     Option<u32>,
+    pub array_size: Option<u32>,
 
     /// For Array :: Is array defined as a dynamic array??
     pub is_array_dynamic: bool,
 
     /// For Function :: Function's Return Type.
-    pub return_type:    Option<Box<Type>>,
+    pub return_type: Option<Box<Type>>,
 
     /// For Function :: Function's argument type in left to right order.
-    pub arg_type:       Vec<Type>,
+    pub arg_type: Vec<Type>,
 
     /// For Struct :: name of struct.
-    pub struct_name:    Option<String>,
+    pub struct_name: Option<String>,
 
     /// For Struct :: type of struct member in top to bottom order.
     pub struct_members: Vec<Type>,
@@ -59,42 +57,45 @@ pub struct Type {
 
 impl Type {
     pub fn new(kind: TypeKind) -> Self {
-        Self { kind, .. Default::default() }
+        Self {
+            kind,
+            ..Default::default()
+        }
     }
 
     pub fn ptr(of: Box<Self>) -> Self {
         Self {
             kind: TypeKind::Ptr,
             pointer_to: Some(of),
-            .. Default::default()
+            ..Default::default()
         }
     }
 
     pub fn boolean() -> Self {
         Self {
             kind: TypeKind::Boolean,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
     pub fn float() -> Self {
         Self {
             kind: TypeKind::Float,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
     pub fn int() -> Self {
         Self {
             kind: TypeKind::Int,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
     pub fn string() -> Self {
         Self {
             kind: TypeKind::Str,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
@@ -104,7 +105,7 @@ impl Type {
             array_type: Some(of),
             array_size: size,
             is_array_dynamic: size.is_none(),
-            .. Default::default()
+            ..Default::default()
         }
     }
 
@@ -113,14 +114,14 @@ impl Type {
             kind: TypeKind::Function,
             return_type: Some(returns),
             arg_type: arg_require,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
     pub fn null() -> Self {
         Self {
             kind: TypeKind::Null,
-            .. Default::default()
+            ..Default::default()
         }
     }
 
@@ -130,7 +131,7 @@ impl Type {
             kind: TypeKind::Struct,
             struct_name: Some(format!("Option<{}>", &of)),
             struct_members: vec![of, Self::null()],
-            .. Default::default()
+            ..Default::default()
         }
     }
 
@@ -146,22 +147,23 @@ impl std::fmt::Display for Type {
             f,
             "{}",
             match self.kind {
-                Int     => "int".into(),
-                Float   => "float".into(),
-                Str     => "string".into(),
+                Int => "int".into(),
+                Float => "float".into(),
+                Str => "string".into(),
                 Boolean => "boolean".into(),
-                Array   => {
+                Array => {
                     if let Some(ref base) = self.array_type {
                         match self.array_size {
                             Some(size) => format!("[{}; {}]", &**base, size),
-                            None => format!("[{}]", &**base)
+                            None => format!("[{}]", &**base),
                         }
                     } else {
                         unreachable!();
                     }
                 }
                 Function => {
-                    let func_args = self.arg_type
+                    let func_args = self
+                        .arg_type
                         .iter()
                         .map(|x| format!("{}", x))
                         .collect::<Vec<String>>()
@@ -187,7 +189,12 @@ impl std::fmt::Display for Type {
                         String::from("<NoNameStruct>")
                     };
 
-                    let members = self.struct_members.iter().map(|x| format!("{}", x)).collect::<Vec<String>>().join("; ");
+                    let members = self
+                        .struct_members
+                        .iter()
+                        .map(|x| format!("{}", x))
+                        .collect::<Vec<String>>()
+                        .join("; ");
                     format!("{}: struct {{ {} }}", struct_name, members)
                 }
                 Null => "null".into(),

@@ -7,7 +7,11 @@ use super::{Compiler, Patch, PatchKind};
 use crate::ir::IRCode;
 use types::{Type, Value};
 
-pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: StmtId) -> Result<(), ()> {
+pub fn traverse_statement(
+    compiler: &mut Compiler,
+    ast: &ASTree,
+    statement_id: StmtId,
+) -> Result<(), ()> {
     let statement = ast.get_stmt(statement_id);
 
     use Stmt::*;
@@ -16,7 +20,7 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
             Ok(())
-        },
+        }
 
         Print(expr_id) => {
             let expr = ast.get_expr(*expr_id);
@@ -65,7 +69,7 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
             for patch in &captured {
                 match patch.kind {
                     PatchKind::Generic => unreachable!(),
-                    PatchKind::Break    => compiler.patch(*patch, IRCode::Jump(end_of_while as u32)),
+                    PatchKind::Break => compiler.patch(*patch, IRCode::Jump(end_of_while as u32)),
                     PatchKind::Continue => compiler.patch(*patch, IRCode::Jump(before_expr as u32)),
                 }
             }
@@ -90,7 +94,7 @@ pub fn traverse_statement(compiler: &mut Compiler, ast: &ASTree, statement_id: S
         _ => {
             statement.report("Unimplemented", "実装前です");
             Err(())
-        },
+        }
     }
 }
 
@@ -102,7 +106,6 @@ fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) {
     compiler.shallowen_nest();
 }
 
-
 fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData) {
     let expr_type = if let Some(expr) = decl.expr {
         let expr = ast.get_expr(expr);
@@ -111,35 +114,8 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
     };
 
     let declaration_type = if decl.is_annotated() {
-        parsedtype_to_type(&decl.dectype);
     } else {
-
     };
-}
-
-fn parsedtype_to_type(ptype: &ParsedType) -> Type {
-    use ParsedType::*;
-    match ptype {
-        pInt     => Type::int(),
-        pStr     => Type::string(),
-        pFloat   => Type::float(),
-        pBoolean => Type::boolean(),
-        pArray(of, size) => {
-            let type_of = Box::new(parsedtype_to_type(of));
-            Type::array(type_of, *size)
-        }
-        pPointer(of) => {
-            let pointer_of = Box::new(parsedtype_to_type(of));
-            Type::ptr(pointer_of)
-        }
-        pOptional(of) => {
-            let pointer_of = Box::new(parsedtype_to_type(of));
-            Type::ptr(pointer_of)
-        }
-        pStruct(defs)  => unreachable!(),
-        pUserdef(defs) => unreachable!(),
-        pUnknown       => unreachable!(),
-    }
 }
 
 use std::mem;

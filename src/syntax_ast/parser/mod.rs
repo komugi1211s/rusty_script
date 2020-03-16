@@ -1,9 +1,8 @@
-
 use super::ast::*;
 
-use types::Type;
 use crate::tokenizer::token::{Token, TokenType};
 use trace::prelude::*;
+use types::Type;
 
 mod decl;
 mod stmt;
@@ -20,6 +19,7 @@ pub struct Parser<'m> {
 
 impl<'m> Parser<'m> {
     pub fn new(module: &'m SourceFile, tokens: &'m Vec<Token<'m>>) -> Self {
+        // FIXME - @DumbCode
         assert!(module == tokens[0].file);
         Self {
             ast: ASTree::new(),
@@ -73,7 +73,7 @@ impl<'m> Parser<'m> {
 
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
-            
+
             if ExprKind::Variable == left_hand.kind {
                 let assign = ExprInit {
                     kind: ExprKind::Assign,
@@ -82,8 +82,9 @@ impl<'m> Parser<'m> {
                     rhs: Some(Box::new(left_hand)),
                     span: Some(CodeSpan::combine(&start_span, &end_span)),
                     end_type: None,
-                    .. Default::default()
-                }.init();
+                    ..Default::default()
+                }
+                .init();
 
                 return Ok(assign);
             } else {
@@ -113,8 +114,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(Operator::Or),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
 
         Ok(expr)
@@ -137,8 +139,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(Operator::And),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
 
         Ok(expr)
@@ -165,8 +168,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(operator),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
         Ok(expr)
     }
@@ -196,8 +200,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(operator),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
 
         Ok(expr)
@@ -225,8 +230,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(operator),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
 
         Ok(expr)
@@ -255,8 +261,9 @@ impl<'m> Parser<'m> {
                 rhs: Some(Box::new(right)),
                 oper: Some(operator),
                 end_type: None,
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
         }
 
         Ok(expr)
@@ -282,8 +289,9 @@ impl<'m> Parser<'m> {
                 span: Some(CodeSpan::combine(&start_span, &end_span)),
                 rhs: Some(Box::new(right)),
                 oper: Some(oper),
-                .. Default::default()
-            }.init();
+                ..Default::default()
+            }
+            .init();
 
             return Ok(unary);
         }
@@ -307,17 +315,22 @@ impl<'m> Parser<'m> {
     }
 
     fn parse_unwrap(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
-        self.get_current().report("Unimplemented Feature", "Unwrap機能は実装されていません。");
+        self.get_current()
+            .report("Unimplemented Feature", "Unwrap機能は実装されていません。");
         Err(())
     }
 
     fn parse_deref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
-        self.get_current().report("Unimplemented Feature", "Deref機能は実装されていません。");
+        self.get_current()
+            .report("Unimplemented Feature", "Deref機能は実装されていません。");
         Err(())
     }
 
     fn parse_array_ref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()> {
-        self.get_current().report("Unimplemented Feature", "ArrayRef機能は実装されていません。");
+        self.get_current().report(
+            "Unimplemented Feature",
+            "ArrayRef機能は実装されていません。",
+        );
         Err(())
     }
 
@@ -342,7 +355,7 @@ impl<'m> Parser<'m> {
         }
 
         let end_span = self.consume(TokenType::CloseParen)?.span;
-        
+
         expr.span = Some(CodeSpan::combine(&start_span, &end_span));
         expr.lhs = Some(Box::new(var));
         expr.arg_expr = v;
@@ -393,7 +406,7 @@ impl<'m> Parser<'m> {
             kind: ExprKind::Literal,
             module: Some(self.module),
             span: Some(inside.span),
-            .. Default::default()
+            ..Default::default()
         };
 
         use TokenType::*;
@@ -408,7 +421,11 @@ impl<'m> Parser<'m> {
                 };
 
                 expr.literal = Some(lit);
-                expr.end_type = Some(if contain_dot { Type::float() } else { Type::int() });
+                expr.end_type = Some(if contain_dot {
+                    Type::float()
+                } else {
+                    Type::int()
+                });
 
                 Ok(expr.init())
                 // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
@@ -437,8 +454,12 @@ impl<'m> Parser<'m> {
                         }
                         _ => {
                             if inside_lexeme.len() > MAX_IDENTIFIER_LENGTH {
-                                let msg = 
-                                    format!("\n識別子の長さ({})が許容範囲を超過しました。\n 識別子は長さ最大{}文字までです。", inside_lexeme.len(), MAX_IDENTIFIER_LENGTH);
+                                let msg = format!(
+                                    "\n識別子の長さ({})が許容範囲を超過しました。
+                                    \n 識別子は長さ最大{}文字までです。",
+                                    inside_lexeme.len(),
+                                    MAX_IDENTIFIER_LENGTH
+                                );
                                 inside.report("Maximum Identifier Length Exceeded", &msg);
                                 Err(())
                             } else {
@@ -462,9 +483,11 @@ impl<'m> Parser<'m> {
                 Ok(expr.init())
             }
             _s => {
-                let formatted = 
-                    format!("\n未知のトークンを受け付けました。処理できません。
-                             \n未知のトークン: {:?}", inside);
+                let formatted = format!(
+                    "\n未知のトークンを受け付けました。処理できません。
+                             \n未知のトークン: {:?}",
+                    inside
+                );
                 inside.report("Unknown Token", &formatted);
                 Err(())
             }
@@ -479,9 +502,10 @@ impl<'m> Parser<'m> {
             return Ok(self.advance());
         }
         let actual = self.get_current();
-        let message = 
-            format!("想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
-                expected, actual.tokentype);
+        let message = format!(
+            "想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
+            expected, actual.tokentype
+        );
 
         actual.report("Invalid Token", &message);
         Err(())

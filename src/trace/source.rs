@@ -4,8 +4,8 @@ use std::io::{BufRead, BufReader};
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceFile {
     pub filename: String,
-    pub code:     String,
-    pub line:     usize,
+    pub code: String,
+    pub line: usize,
 }
 
 impl SourceFile {

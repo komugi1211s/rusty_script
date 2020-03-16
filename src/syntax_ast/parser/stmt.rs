@@ -1,8 +1,7 @@
-
 use super::Parser;
-use trace::position::CodeSpan;
-use crate::tokenizer::token::{ TokenType, Token };
 use crate::ast::{BlockData, Statement, Stmt, StmtId};
+use crate::tokenizer::token::{Token, TokenType};
+use trace::position::CodeSpan;
 
 impl<'m> Parser<'m> {
     pub(super) fn statement(&mut self) -> Result<StmtId, ()> {
@@ -21,7 +20,6 @@ impl<'m> Parser<'m> {
             TokenType::Break => self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
             _ => {
-
                 let start_span = self.get_current().span;
                 let expr = self.expression()?;
                 let expr_id = self.ast.add_expr(expr);
@@ -30,6 +28,7 @@ impl<'m> Parser<'m> {
                     module: self.module,
                     span: CodeSpan::combine(&start_span, &self.get_current().span),
                     data: Stmt::Expression(expr_id),
+                    parent: None,
                 };
 
                 Ok(self.ast.add_stmt(statement))
@@ -41,7 +40,6 @@ impl<'m> Parser<'m> {
     }
 
     fn parse_print_stmt(&mut self) -> Result<StmtId, ()> {
-
         let stmt = Statement {
             module: self.module,
             span: self.consume(TokenType::Print)?.span,
@@ -49,6 +47,7 @@ impl<'m> Parser<'m> {
                 let expr = self.expression()?;
                 self.ast.add_expr(expr)
             }),
+            parent: None,
         };
 
         let id = self.ast.add_stmt(stmt);
@@ -60,8 +59,8 @@ impl<'m> Parser<'m> {
             module: self.module,
             span: self.consume(TokenType::Break)?.span,
             data: Stmt::Break,
+            parent: None,
         };
-
 
         Ok(self.ast.add_stmt(stmt))
     }
@@ -71,8 +70,8 @@ impl<'m> Parser<'m> {
             module: self.module,
             span: self.consume(TokenType::Continue)?.span,
             data: Stmt::Continue,
+            parent: None,
         };
-
 
         Ok(self.ast.add_stmt(stmt))
     }
@@ -89,7 +88,8 @@ impl<'m> Parser<'m> {
         let stmt = Statement {
             module: self.module,
             span: CodeSpan::combine(&start, &end),
-            data: Stmt::Return(result)
+            data: Stmt::Return(result),
+            parent: None,
         };
 
         Ok(self.ast.add_stmt(stmt))
@@ -113,7 +113,8 @@ impl<'m> Parser<'m> {
         let stmt = Statement {
             module: self.module,
             span: CodeSpan::combine(&start, &end),
-            data: Stmt::If(condition, true_route, false_route)
+            data: Stmt::If(condition, true_route, false_route),
+            parent: None,
         };
 
         Ok(self.ast.add_stmt(stmt))
@@ -121,10 +122,12 @@ impl<'m> Parser<'m> {
 
     fn while_statement(&mut self) -> Result<StmtId, ()> {
         let start = self.consume(TokenType::While)?.span;
+
         let condition = {
             let expr = self.expression()?;
             self.ast.add_expr(expr)
         };
+
         let whileloop = self.statement()?;
         let end = self.get_current().span;
 
@@ -132,6 +135,7 @@ impl<'m> Parser<'m> {
             module: self.module,
             span: CodeSpan::combine(&start, &end),
             data: Stmt::While(condition, whileloop),
+            parent: None,
         };
 
         Ok(self.ast.add_stmt(stmt))
@@ -154,6 +158,12 @@ impl<'m> Parser<'m> {
         self.block_count -= 1;
 
         let end_span = self.consume(TokenType::CloseBrace)?.span;
+        let next_stmt_index = self.ast.stmt.len();
+
+        for i in vector.iter() {
+            self.ast.stmt[i.0 as usize].parent = Some(StmtId(next_stmt_index as u32));
+        }
+
         let block = Stmt::Block(BlockData {
             statements: vector,
             local_count: assign_count,
@@ -163,6 +173,7 @@ impl<'m> Parser<'m> {
             module: self.module,
             span: CodeSpan::combine(&start_span, &end_span),
             data: block,
+            parent: None,
         };
 
         Ok(self.ast.add_stmt(stmt))

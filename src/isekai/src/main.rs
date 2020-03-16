@@ -5,15 +5,11 @@ use std::{
     env,
     fs::{self, File},
     io::prelude::*,
-    time::Instant
+    time::Instant,
 };
 
 // Phase 1 & 2 - Tokenizing, Parsing
-use syntax_ast::{
-    ast::ASTree,
-    parser::Parser,
-    tokenizer::Tokenizer
-};
+use syntax_ast::{ast::ASTree, parser::Parser, tokenizer::Tokenizer};
 
 // Phase 3  - semantic analysis
 use semantic;
@@ -81,9 +77,9 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
 
     let binary = timer.time("Total", || {
         let tokens = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
-        let ast = timer.time("Parser",       || Parser::new(&module, &tokens).parse())?;
-        // let sema_analyze = timer.time("Semantic",  || semantic::analysis(&ast))?;
-        let binary = timer.time("CodeGen",   || bytecode::generate_bytecode(&ast))?;
+        let mut ast = timer.time("Parser", || Parser::new(&module, &tokens).parse())?;
+        timer.time("Semantic", || semantic::analysis(&mut ast))?;
+        let binary = timer.time("CodeGen", || bytecode::generate_bytecode(&ast))?;
         Ok(binary)
     });
 
