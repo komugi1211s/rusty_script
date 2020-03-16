@@ -69,6 +69,7 @@ impl TimeCount
 
     fn report(&self)
     {
+        println!("");
         for x in self.messages.borrow().iter()
         {
             println!("{}", x);
@@ -96,7 +97,6 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()>
             || Parser::new(&module, &tokens).parse()
         )?;
 
-        println!("{:#?}", ast);
 
         timer.time(
             "Semantic",

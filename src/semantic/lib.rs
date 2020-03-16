@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use syntax_ast::ast::*;
 use types::Type;
+use trace::prelude::*;
 
 #[derive(Debug)]
 struct SymbolTable
@@ -25,8 +26,16 @@ pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()>
     };
 
     resolve_directive(ast)?;
+
     resolve_root_symbols(&mut table, ast)?;
     resolve_function_symbols(&mut table, ast)?;
+
+    if table.has_no_main() 
+    {
+        report("internal", "Main関数がありません。");
+        Err(())
+    }
+
     Ok(())
 }
 
@@ -277,14 +286,13 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             }
             else
             {
-                let lhs_type = format!("{:?}", lhs.end_type);
-                let rhs_type = format!("{:?}", rhs.end_type);
+                let message = format!(
+                        "右辺値({})と左辺値({})で型が一致しませんでした。",
+                        lhs.end_type.as_ref().unwrap(), rhs.end_type.as_ref().unwrap()
+                    );
                 expr.report(
                     "Type Mismatch",
-                    &format!(
-                        "{} != {}: 右辺値と左辺値で型が一致しませんでした。",
-                        lhs_type, rhs_type
-                    ),
+                    &message,
                 );
                 Err(())
             }
@@ -312,14 +320,13 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             }
             else
             {
-                let lhs_type = format!("{:?}", lhs.end_type);
-                let rhs_type = format!("{:?}", rhs.end_type);
+                let message = format!(
+                        "{} != {}: 右辺値と左辺値で型が一致しませんでした。",
+                        lhs.end_type.as_ref().unwrap(), rhs.end_type.as_ref().unwrap()
+                    );
                 expr.report(
                     "Type Mismatch",
-                    &format!(
-                        "{} != {}: 右辺値と左辺値で型が一致しませんでした。",
-                        lhs_type, rhs_type
-                    ),
+                    &message,
                 );
                 Err(())
             }
