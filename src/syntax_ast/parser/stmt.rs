@@ -3,10 +3,13 @@ use crate::ast::{BlockData, Statement, Stmt, StmtId};
 use crate::tokenizer::token::{Token, TokenType};
 use trace::position::CodeSpan;
 
-impl<'m> Parser<'m> {
-    pub(super) fn statement(&mut self) -> Result<StmtId, ()> {
+impl<'m> Parser<'m>
+{
+    pub(super) fn statement(&mut self) -> Result<StmtId, ()>
+    {
         let possible_stmt = self.get_current().tokentype.clone();
-        let result = match possible_stmt {
+        let result = match possible_stmt
+        {
             // Close Bracket Expected, They'll handle the close bracket themselves
             // so no need for check
             TokenType::If => return self.if_statement(),
@@ -19,7 +22,8 @@ impl<'m> Parser<'m> {
             TokenType::Return => self.parse_return_stmt(),
             TokenType::Break => self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
-            _ => {
+            _ =>
+            {
                 let start_span = self.get_current().span;
                 let expr = self.expression()?;
                 let expr_id = self.ast.add_expr(expr);
@@ -39,7 +43,8 @@ impl<'m> Parser<'m> {
         result
     }
 
-    fn parse_print_stmt(&mut self) -> Result<StmtId, ()> {
+    fn parse_print_stmt(&mut self) -> Result<StmtId, ()>
+    {
         let stmt = Statement {
             module: self.module,
             span: self.consume(TokenType::Print)?.span,
@@ -54,7 +59,8 @@ impl<'m> Parser<'m> {
         Ok(id)
     }
 
-    fn parse_break_stmt(&mut self) -> Result<StmtId, ()> {
+    fn parse_break_stmt(&mut self) -> Result<StmtId, ()>
+    {
         let stmt = Statement {
             module: self.module,
             span: self.consume(TokenType::Break)?.span,
@@ -65,7 +71,8 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn parse_continue_stmt(&mut self) -> Result<StmtId, ()> {
+    fn parse_continue_stmt(&mut self) -> Result<StmtId, ()>
+    {
         let stmt = Statement {
             module: self.module,
             span: self.consume(TokenType::Continue)?.span,
@@ -76,10 +83,12 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn parse_return_stmt(&mut self) -> Result<StmtId, ()> {
+    fn parse_return_stmt(&mut self) -> Result<StmtId, ()>
+    {
         let start = self.consume(TokenType::Return)?.span;
         let mut result = None;
-        if !self.is(TokenType::SemiColon) {
+        if !self.is(TokenType::SemiColon)
+        {
             let expr = self.expression()?;
             result = Some(self.ast.add_expr(expr));
         }
@@ -95,17 +104,21 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn if_statement(&mut self) -> Result<StmtId, ()> {
+    fn if_statement(&mut self) -> Result<StmtId, ()>
+    {
         let start = self.consume(TokenType::If)?.span;
         let condition = {
             let expr = self.expression()?;
             self.ast.add_expr(expr)
         };
         let true_route = self.statement()?;
-        let false_route = if self.is(TokenType::Else) {
+        let false_route = if self.is(TokenType::Else)
+        {
             self.advance();
             Some(self.statement()?)
-        } else {
+        }
+        else
+        {
             None
         };
         let end = self.get_current().span;
@@ -120,7 +133,8 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn while_statement(&mut self) -> Result<StmtId, ()> {
+    fn while_statement(&mut self) -> Result<StmtId, ()>
+    {
         let start = self.consume(TokenType::While)?.span;
 
         let condition = {
@@ -141,7 +155,8 @@ impl<'m> Parser<'m> {
         Ok(self.ast.add_stmt(stmt))
     }
 
-    pub(super) fn block_statement(&mut self) -> Result<StmtId, ()> {
+    pub(super) fn block_statement(&mut self) -> Result<StmtId, ()>
+    {
         let start_span = self.consume(TokenType::OpenBrace)?.span;
         let mut vector = Vec::new();
 
@@ -149,7 +164,8 @@ impl<'m> Parser<'m> {
         self.assign_count = 0;
         self.block_count += 1;
 
-        while !self.is_at_end() && !self.is(TokenType::CloseBrace) {
+        while !self.is_at_end() && !self.is(TokenType::CloseBrace)
+        {
             vector.push(self.declaration()?);
         }
 
@@ -160,7 +176,8 @@ impl<'m> Parser<'m> {
         let end_span = self.consume(TokenType::CloseBrace)?.span;
         let next_stmt_index = self.ast.stmt.len();
 
-        for i in vector.iter() {
+        for i in vector.iter()
+        {
             self.ast.stmt[i.0 as usize].parent = Some(StmtId(next_stmt_index as u32));
         }
 

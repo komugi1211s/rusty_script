@@ -2,7 +2,8 @@ use std::fmt;
 use trace::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TokenType {
+pub enum TokenType
+{
     // 予約語
     If,       // if expr {
     Else,     // else {
@@ -59,9 +60,11 @@ pub enum TokenType {
     EOF,
 }
 
-pub fn match_identity(keywords: &str) -> Option<TokenType> {
+pub fn match_identity(keywords: &str) -> Option<TokenType>
+{
     use TokenType::*;
-    match keywords {
+    match keywords
+    {
         "if" => Some(If),
         "else" => Some(Else),
         "while" => Some(While),
@@ -80,15 +83,18 @@ pub fn match_identity(keywords: &str) -> Option<TokenType> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token<'m> {
+pub struct Token<'m>
+{
     pub file: &'m SourceFile,
     pub tokentype: TokenType,
     pub span: CodeSpan,
     pub lexeme: Option<String>,
 }
 
-impl<'m> Token<'m> {
-    pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self {
+impl<'m> Token<'m>
+{
+    pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self
+    {
         Token {
             file,
             tokentype,
@@ -96,12 +102,9 @@ impl<'m> Token<'m> {
             lexeme: None,
         }
     }
-    pub fn lexed(
-        file: &'m SourceFile,
-        tokentype: TokenType,
-        span: CodeSpan,
-        lexeme: String,
-    ) -> Self {
+    pub fn lexed(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan, lexeme: String)
+        -> Self
+    {
         Token {
             file,
             tokentype,
@@ -110,18 +113,22 @@ impl<'m> Token<'m> {
         }
     }
 
-    pub fn is_simple(&self) -> bool {
+    pub fn is_simple(&self) -> bool
+    {
         self.lexeme.is_none()
     }
 
-    pub fn report(&self, title: &str, message: &str) {
+    pub fn report(&self, title: &str, message: &str)
+    {
         report(title, message);
         spit_line(self.file, &self.span);
     }
 }
 
-impl fmt::Display for Token<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl fmt::Display for Token<'_>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
         write!(
             f,
             "トークン {:?}, {}行目",

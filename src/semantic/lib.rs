@@ -1,21 +1,24 @@
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 use syntax_ast::ast::*;
 use types::Type;
 
 #[derive(Debug)]
-struct SymbolTable {
+struct SymbolTable
+{
     symbol: HashMap<String, Symbol>,
     imports: HashSet<String>,
 }
 
 #[derive(Debug)]
-struct Symbol {
+struct Symbol
+{
     name: String,
     types: Option<Type>,
     is_global: bool,
 }
 
-pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()> {
+pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()>
+{
     let mut table = SymbolTable {
         symbol: HashMap::with_capacity(255),
         imports: HashSet::with_capacity(255),
@@ -27,42 +30,58 @@ pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()> {
     Ok(())
 }
 
-fn resolve_directive(ast: &mut ASTree<'_>) -> Result<(), ()> {
+fn resolve_directive(ast: &mut ASTree<'_>) -> Result<(), ()>
+{
     Ok(())
 }
 
-fn resolve_function_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()> {
+fn resolve_function_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+{
     Ok(())
 }
 
-fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)> {
+fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
+{
     use ParsedType::*;
-    match ptype {
+    match ptype
+    {
         pInt => Ok(Some(Type::int())),
         pStr => Ok(Some(Type::string())),
         pFloat => Ok(Some(Type::float())),
         pBoolean => Ok(Some(Type::boolean())),
-        pArray(of, size) => {
-            if let Some(type_of) = maybe_parse_annotated_type(of)? {
+        pArray(of, size) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
                 let type_of = Box::new(type_of);
                 Ok(Some(Type::array(type_of, *size)))
-            } else {
+            }
+            else
+            {
                 todo!("Error Logging");
             }
         }
-        pPointer(of) => {
-            if let Some(type_of) = maybe_parse_annotated_type(of)? {
+        pPointer(of) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
                 let pointer_of = Box::new(type_of);
                 Ok(Some(Type::ptr(pointer_of)))
-            } else {
+            }
+            else
+            {
                 todo!("Error Logging");
             }
         }
-        pOptional(of) => {
-            if let Some(type_of) = maybe_parse_annotated_type(of)? {
+        pOptional(of) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
                 let pointer_of = Box::new(type_of);
                 Ok(Some(Type::ptr(pointer_of)))
-            } else {
+            }
+            else
+            {
                 todo!("Error Logging");
             }
         }
@@ -75,26 +94,39 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
     }
 }
 
-fn resolve_root_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()> {
-    for stmt in ast.root.iter() {
+fn resolve_root_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+{
+    for stmt in ast.root.iter()
+    {
         let mut root = ast.stmt.get_mut(stmt.0 as usize).unwrap();
 
-        match root.data {
-            Stmt::Declaration(ref decl) => {
-                let maybe_type = if decl.is_annotated() {
-                    match maybe_parse_annotated_type(&decl.dectype) {
+        match root.data
+        {
+            Stmt::Declaration(ref decl) =>
+            {
+                let maybe_type = if decl.is_annotated()
+                {
+                    match maybe_parse_annotated_type(&decl.dectype)
+                    {
                         Ok(x) => x,
-                        Err((title, message)) => {
+                        Err((title, message)) =>
+                        {
                             root.report(title, message);
                             return Err(());
                         }
                     }
-                } else {
-                    if let Some(expr_id) = decl.expr {
-                        if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize) {
+                }
+                else
+                {
+                    if let Some(expr_id) = decl.expr
+                    {
+                        if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
+                        {
                             // try_folding_literal(expr, 0)?;
                             expr.end_type.clone()
-                        } else {
+                        }
+                        else
+                        {
                             // TODO: It can be okay if it's optional.
                             root.report(
                                 "internal",
@@ -102,7 +134,9 @@ fn resolve_root_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result
                             );
                             panic!();
                         }
-                    } else {
+                    }
+                    else
+                    {
                         root.report(
                             "Empty Annotation/Initialization",
                             "変数の初期化も型指定もされていないため、型の推論が出来ません。",
@@ -212,30 +246,37 @@ fn fold_literal_binop<'b>(base: &'b Expression<'b>, lhs: &Literal<'_>, rhs: &Lit
 
 */
 
-fn type_match(lhs: &Expression<'_>, rhs: &Expression<'_>) -> bool {
+fn type_match(lhs: &Expression<'_>, rhs: &Expression<'_>) -> bool
+{
     lhs.end_type == rhs.end_type
 }
 
-fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), ()> {
+fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), ()>
+{
     use ExprKind::*;
-    match expr.kind {
-        Assign => Err(()),
-        Binary => {
+    match expr.kind
+    {
+        Literal => Ok(()),
+        Assign => 
+        {
+            // TODO: Actually emit something
+            Err(())
+        }        
+        Binary =>
+        {
             let mut lhs = expr.lhs.as_mut().unwrap();
             let mut rhs = expr.rhs.as_mut().unwrap();
 
-            if lhs.end_type.is_none() {
-                solve_type(table, lhs.as_mut())?;
-            }
+            if lhs.end_type.is_none() { solve_type(table, lhs.as_mut())?; }
+            if rhs.end_type.is_none() { solve_type(table, rhs.as_mut())?; }
 
-            if rhs.end_type.is_none() {
-                solve_type(table, rhs.as_mut())?;
-            }
-
-            if type_match(lhs.as_ref(), rhs.as_ref()) {
+            if type_match(lhs.as_ref(), rhs.as_ref())
+            {
                 expr.end_type = lhs.end_type.clone();
                 Ok(())
-            } else {
+            }
+            else
+            {
                 let lhs_type = format!("{:?}", lhs.end_type);
                 let rhs_type = format!("{:?}", rhs.end_type);
                 expr.report(
@@ -249,22 +290,28 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             }
         }
 
-        Logical => {
+        Logical =>
+        {
             let mut lhs = expr.lhs.as_mut().unwrap();
             let mut rhs = expr.rhs.as_mut().unwrap();
 
-            if lhs.end_type.is_none() {
+            if lhs.end_type.is_none()
+            {
                 solve_type(table, lhs.as_mut())?;
             }
 
-            if rhs.end_type.is_none() {
+            if rhs.end_type.is_none()
+            {
                 solve_type(table, rhs.as_mut())?;
             }
 
-            if type_match(lhs.as_ref(), rhs.as_ref()) {
+            if type_match(lhs.as_ref(), rhs.as_ref())
+            {
                 expr.end_type = Some(Type::boolean());
                 Ok(())
-            } else {
+            }
+            else
+            {
                 let lhs_type = format!("{:?}", lhs.end_type);
                 let rhs_type = format!("{:?}", rhs.end_type);
                 expr.report(
@@ -278,17 +325,21 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             }
         }
 
-        Unary => {
+        Unary =>
+        {
             let mut var = expr.lhs.as_mut().unwrap();
-            if var.end_type.is_none() {
+            if var.end_type.is_none()
+            {
                 solve_type(table, var.as_mut())?;
             }
             var.report("Unimplemented", "Unaryはまだ実装できていません。");
             Err(())
         }
-        FunctionCall => {
+        FunctionCall =>
+        {
             let mut lhs = expr.lhs.as_mut().unwrap();
-            if lhs.kind != Variable {
+            if lhs.kind != Variable
+            {
                 lhs.report("Uncallable", "呼び出そうとした対象は関数ではありません。");
                 return Err(());
             }
@@ -296,18 +347,20 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             expr.end_type = lhs.end_type.clone();
             Err(())
         }
-        Grouping => {
+        Grouping =>
+        {
             let mut lhs = expr.lhs.as_mut().unwrap();
             solve_type(table, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
-        Variable => {
+        Variable =>
+        {
             expr.report("Unimplemented", "変数は実装されていません。");
             Err(())
         }
-        Literal => Ok(()),
-        Empty => {
+        Empty =>
+        {
             expr.report("internal", "コンパイラーが式の形式を認識できませんでした。");
             Err(())
         }

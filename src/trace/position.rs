@@ -13,15 +13,18 @@ pub const EMPTY_SPAN: CodeSpan = CodeSpan {
 // 誰も4,294,967,295行以上のコードなんて書くわけがないので
 // どっちもu32で固定
 #[derive(Clone, Copy, PartialEq, Debug, Hash)]
-pub struct CodeSpan {
+pub struct CodeSpan
+{
     pub row_start: u32,
     pub row_len: u32,
     pub col_start: u32,
     pub col_len: u32,
 }
 
-impl fmt::Display for CodeSpan {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl fmt::Display for CodeSpan
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
         write!(
             f,
             "{} - {}行目, {} - {}列目",
@@ -33,8 +36,10 @@ impl fmt::Display for CodeSpan {
     }
 }
 
-impl CodeSpan {
-    pub fn new(row_st: usize, row_len: usize, col_st: usize, col_len: usize) -> Self {
+impl CodeSpan
+{
+    pub fn new(row_st: usize, row_len: usize, col_st: usize, col_len: usize) -> Self
+    {
         CodeSpan {
             row_start: row_st as u32,
             row_len: row_len as u32,
@@ -43,12 +48,15 @@ impl CodeSpan {
         }
     }
 
-    pub fn oneline(row: usize, col_st: usize, col_len: usize) -> Self {
+    pub fn oneline(row: usize, col_st: usize, col_len: usize) -> Self
+    {
         Self::new(row, 0, col_st, col_len)
     }
 
-    pub fn combine(a: &CodeSpan, b: &CodeSpan) -> Self {
-        if a.row_start == b.row_start {
+    pub fn combine(a: &CodeSpan, b: &CodeSpan) -> Self
+    {
+        if a.row_start == b.row_start
+        {
             let new_colstart = cmp::min(a.col_start, b.col_start);
             let new_col_len = (cmp::max(a.col_start, b.col_start) - new_colstart)
                 + cmp::max(a.col_len, b.col_len);
@@ -58,20 +66,28 @@ impl CodeSpan {
                 col_start: new_colstart,
                 col_len: new_col_len,
             }
-        } else {
+        }
+        else
+        {
             let new_rowstart = cmp::min(a.row_start, b.row_start);
             let new_rowlen = cmp::max(a.row_len, b.row_len);
             Self {
                 row_start: new_rowstart,
                 row_len: new_rowlen,
-                col_start: if new_rowstart == a.row_start {
+                col_start: if new_rowstart == a.row_start
+                {
                     a.col_start
-                } else {
+                }
+                else
+                {
                     b.col_start
                 },
-                col_len: if new_rowlen == a.row_len {
+                col_len: if new_rowlen == a.row_len
+                {
                     a.col_len
-                } else {
+                }
+                else
+                {
                     b.col_len
                 },
             }
@@ -79,22 +95,26 @@ impl CodeSpan {
     }
 
     #[inline(always)]
-    pub fn cols(&self) -> (usize, usize) {
+    pub fn cols(&self) -> (usize, usize)
+    {
         (self.col_start as usize, self.col_len as usize)
     }
 
     #[inline(always)]
-    pub fn rows(&self) -> (usize, usize) {
+    pub fn rows(&self) -> (usize, usize)
+    {
         (self.row_start as usize, self.row_len as usize)
     }
 
     #[inline(always)]
-    pub fn is_oneliner(&self) -> bool {
+    pub fn is_oneliner(&self) -> bool
+    {
         self.row_len == 0
     }
 
     #[inline(always)]
-    pub fn is_invalid(&self) -> bool {
+    pub fn is_invalid(&self) -> bool
+    {
         self.row_start == 0 && self.row_len == 0 && self.col_start == 0 && self.col_len == 0
     }
 }

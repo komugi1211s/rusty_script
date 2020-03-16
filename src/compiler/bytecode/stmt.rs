@@ -11,32 +11,38 @@ pub fn traverse_statement(
     compiler: &mut Compiler,
     ast: &ASTree,
     statement_id: StmtId,
-) -> Result<(), ()> {
+) -> Result<(), ()>
+{
     let statement = ast.get_stmt(statement_id);
 
     use Stmt::*;
-    match &statement.data {
-        Expression(expr_id) => {
+    match &statement.data
+    {
+        Expression(expr_id) =>
+        {
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
             Ok(())
         }
 
-        Print(expr_id) => {
+        Print(expr_id) =>
+        {
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
             compiler.emit_op(IRCode::DebugPrint);
             Ok(())
         }
 
-        If(cond_expr, if_id, else_block) => {
+        If(cond_expr, if_id, else_block) =>
+        {
             let expr = ast.get_expr(*cond_expr);
             traverse_expression(compiler, expr);
 
             let jnt_patch = compiler.reserve_one(); // Conditional Jump Position
             traverse_statement(compiler, ast, *if_id);
 
-            if let Some(else_id) = else_block {
+            if let Some(else_id) = else_block
+            {
                 let jump_patch = compiler.reserve_one();
                 let start_of_else = compiler.codes.len();
                 traverse_statement(compiler, ast, *else_id);
@@ -44,14 +50,17 @@ pub fn traverse_statement(
 
                 compiler.patch(jnt_patch, IRCode::JNT(start_of_else as u32));
                 compiler.patch(jump_patch, IRCode::Jump(end_of_else as u32));
-            } else {
+            }
+            else
+            {
                 let end_if = compiler.codes.len();
                 compiler.patch(jnt_patch, IRCode::JNT(end_if as u32));
             }
             Ok(())
         }
 
-        While(expr_id, inner_stmt) => {
+        While(expr_id, inner_stmt) =>
+        {
             let before_expr = compiler.codes.len();
             let expr = ast.get_expr(*expr_id);
             traverse_expression(compiler, expr);
@@ -66,8 +75,10 @@ pub fn traverse_statement(
             });
 
             let end_of_while = compiler.codes.len();
-            for patch in &captured {
-                match patch.kind {
+            for patch in &captured
+            {
+                match patch.kind
+                {
                     PatchKind::Generic => unreachable!(),
                     PatchKind::Break => compiler.patch(*patch, IRCode::Jump(end_of_while as u32)),
                     PatchKind::Continue => compiler.patch(*patch, IRCode::Jump(before_expr as u32)),
@@ -76,50 +87,64 @@ pub fn traverse_statement(
             Ok(())
         }
 
-        Block(innerblock) => {
+        Block(innerblock) =>
+        {
             traverse_block(compiler, ast, innerblock);
             Ok(())
         }
         //        Function(func_idx)    => declare_function(compiler, ast, func_idx),
         Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
 
-        Break => {
+        Break =>
+        {
             compiler.mark_break();
             Ok(())
         }
-        Continue => {
+        Continue =>
+        {
             compiler.mark_continue();
             Ok(())
         }
-        _ => {
+        _ =>
+        {
             statement.report("Unimplemented", "実装前です");
             Err(())
         }
     }
 }
 
-fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) {
+fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData)
+{
     compiler.deepen_nest();
-    for (stmt_id) in &inner.statements {
+    for (stmt_id) in &inner.statements
+    {
         traverse_statement(compiler, ast, *stmt_id);
     }
     compiler.shallowen_nest();
 }
 
-fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData) {
-    let expr_type = if let Some(expr) = decl.expr {
+fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData)
+{
+    let expr_type = if let Some(expr) = decl.expr
+    {
         let expr = ast.get_expr(expr);
         traverse_expression(compiler, expr)
-    } else {
+    }
+    else
+    {
     };
 
-    let declaration_type = if decl.is_annotated() {
-    } else {
+    let declaration_type = if decl.is_annotated()
+    {
+    }
+    else
+    {
     };
 }
 
 use std::mem;
-fn capture_patch(compiler: &mut Compiler, func: impl FnOnce(&mut Compiler)) -> Vec<Patch> {
+fn capture_patch(compiler: &mut Compiler, func: impl FnOnce(&mut Compiler)) -> Vec<Patch>
+{
     let mut old_vec = Vec::with_capacity(255);
     mem::swap(&mut compiler.patch, &mut old_vec);
     func(compiler);

@@ -3,7 +3,8 @@ use std::mem;
 use std::ops;
 
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
-pub enum TypeKind {
+pub enum TypeKind
+{
     // Primitives.
     Int,
     Float,
@@ -20,14 +21,17 @@ pub enum TypeKind {
     Struct,
 }
 
-impl Default for TypeKind {
-    fn default() -> Self {
+impl Default for TypeKind
+{
+    fn default() -> Self
+    {
         TypeKind::Null
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Type {
+pub struct Type
+{
     pub kind: TypeKind,
 
     /// For Array :: Pointer's Inside.
@@ -55,15 +59,18 @@ pub struct Type {
     pub struct_members: Vec<Type>,
 }
 
-impl Type {
-    pub fn new(kind: TypeKind) -> Self {
+impl Type
+{
+    pub fn new(kind: TypeKind) -> Self
+    {
         Self {
             kind,
             ..Default::default()
         }
     }
 
-    pub fn ptr(of: Box<Self>) -> Self {
+    pub fn ptr(of: Box<Self>) -> Self
+    {
         Self {
             kind: TypeKind::Ptr,
             pointer_to: Some(of),
@@ -71,35 +78,40 @@ impl Type {
         }
     }
 
-    pub fn boolean() -> Self {
+    pub fn boolean() -> Self
+    {
         Self {
             kind: TypeKind::Boolean,
             ..Default::default()
         }
     }
 
-    pub fn float() -> Self {
+    pub fn float() -> Self
+    {
         Self {
             kind: TypeKind::Float,
             ..Default::default()
         }
     }
 
-    pub fn int() -> Self {
+    pub fn int() -> Self
+    {
         Self {
             kind: TypeKind::Int,
             ..Default::default()
         }
     }
 
-    pub fn string() -> Self {
+    pub fn string() -> Self
+    {
         Self {
             kind: TypeKind::Str,
             ..Default::default()
         }
     }
 
-    pub fn array(of: Box<Self>, size: Option<u32>) -> Self {
+    pub fn array(of: Box<Self>, size: Option<u32>) -> Self
+    {
         Self {
             kind: TypeKind::Array,
             array_type: Some(of),
@@ -109,7 +121,8 @@ impl Type {
         }
     }
 
-    pub fn function(returns: Box<Self>, arg_require: Vec<Self>) -> Self {
+    pub fn function(returns: Box<Self>, arg_require: Vec<Self>) -> Self
+    {
         Self {
             kind: TypeKind::Function,
             return_type: Some(returns),
@@ -118,14 +131,16 @@ impl Type {
         }
     }
 
-    pub fn null() -> Self {
+    pub fn null() -> Self
+    {
         Self {
             kind: TypeKind::Null,
             ..Default::default()
         }
     }
 
-    pub fn optional(of: Type) -> Self {
+    pub fn optional(of: Type) -> Self
+    {
         Self {
             // TODO - @Broken: Move optional into TypeKind::Union
             kind: TypeKind::Struct,
@@ -135,33 +150,43 @@ impl Type {
         }
     }
 
-    pub fn is_null(&self) -> bool {
+    pub fn is_null(&self) -> bool
+    {
         self.kind == TypeKind::Null
     }
 }
 
-impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl std::fmt::Display for Type
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
         use TypeKind::*;
         write!(
             f,
             "{}",
-            match self.kind {
+            match self.kind
+            {
                 Int => "int".into(),
                 Float => "float".into(),
                 Str => "string".into(),
                 Boolean => "boolean".into(),
-                Array => {
-                    if let Some(ref base) = self.array_type {
-                        match self.array_size {
+                Array =>
+                {
+                    if let Some(ref base) = self.array_type
+                    {
+                        match self.array_size
+                        {
                             Some(size) => format!("[{}; {}]", &**base, size),
                             None => format!("[{}]", &**base),
                         }
-                    } else {
+                    }
+                    else
+                    {
                         unreachable!();
                     }
                 }
-                Function => {
+                Function =>
+                {
                     let func_args = self
                         .arg_type
                         .iter()
@@ -169,23 +194,34 @@ impl std::fmt::Display for Type {
                         .collect::<Vec<String>>()
                         .join(", ");
 
-                    if let Some(ref ret_type) = self.return_type {
+                    if let Some(ref ret_type) = self.return_type
+                    {
                         format!("({}) {}", func_args, &**ret_type)
-                    } else {
+                    }
+                    else
+                    {
                         format!("({}) void", func_args)
                     }
                 }
-                Ptr => {
-                    if let Some(ref pointer_to) = self.pointer_to {
+                Ptr =>
+                {
+                    if let Some(ref pointer_to) = self.pointer_to
+                    {
                         format!("*{}", &**pointer_to)
-                    } else {
+                    }
+                    else
+                    {
                         String::from("nullptr")
                     }
                 }
-                Struct => {
-                    let struct_name = if let Some(ref name) = self.struct_name {
+                Struct =>
+                {
+                    let struct_name = if let Some(ref name) = self.struct_name
+                    {
                         name.clone()
-                    } else {
+                    }
+                    else
+                    {
                         String::from("<NoNameStruct>")
                     };
 
@@ -204,7 +240,8 @@ impl std::fmt::Display for Type {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Value {
+pub enum Value
+{
     Int(i64),
     Float(f64),
     Str(String),
@@ -214,63 +251,84 @@ pub enum Value {
     Null,
 }
 
-impl From<&i64> for Type {
-    fn from(_: &i64) -> Self {
+impl From<&i64> for Type
+{
+    fn from(_: &i64) -> Self
+    {
         Type::int()
     }
 }
 
-impl From<&f64> for Type {
-    fn from(_: &f64) -> Self {
+impl From<&f64> for Type
+{
+    fn from(_: &f64) -> Self
+    {
         Type::float()
     }
 }
 
-impl From<&String> for Type {
-    fn from(_: &String) -> Self {
+impl From<&String> for Type
+{
+    fn from(_: &String) -> Self
+    {
         Type::string()
     }
 }
 
-impl From<&bool> for Type {
-    fn from(_: &bool) -> Self {
+impl From<&bool> for Type
+{
+    fn from(_: &bool) -> Self
+    {
         Type::boolean()
     }
 }
 
-impl From<i64> for Value {
-    fn from(i: i64) -> Self {
+impl From<i64> for Value
+{
+    fn from(i: i64) -> Self
+    {
         Value::Int(i)
     }
 }
-impl From<f64> for Value {
-    fn from(f: f64) -> Self {
+impl From<f64> for Value
+{
+    fn from(f: f64) -> Self
+    {
         Value::Float(f)
     }
 }
 
-impl From<String> for Value {
-    fn from(s: String) -> Self {
+impl From<String> for Value
+{
+    fn from(s: String) -> Self
+    {
         Value::Str(s)
     }
 }
 
-impl From<bool> for Value {
-    fn from(b: bool) -> Self {
+impl From<bool> for Value
+{
+    fn from(b: bool) -> Self
+    {
         Value::Boolean(b)
     }
 }
 
-impl From<usize> for Value {
-    fn from(u: usize) -> Self {
+impl From<usize> for Value
+{
+    fn from(u: usize) -> Self
+    {
         Value::Pointer(u)
     }
 }
 
-impl Value {
-    pub fn to_type(&self) -> Type {
+impl Value
+{
+    pub fn to_type(&self) -> Type
+    {
         // Todo: Type Alias support
-        match self {
+        match self
+        {
             Value::Null => Type::default(),
             Value::Int(_) => Type::int(),
             Value::Float(_) => Type::float(),
@@ -280,24 +338,32 @@ impl Value {
         }
     }
 
-    pub fn is_same_type(&self, other: &Value) -> bool {
+    pub fn is_same_type(&self, other: &Value) -> bool
+    {
         mem::discriminant(self) == mem::discriminant(&Value::Null)
             || mem::discriminant(self) == mem::discriminant(other)
     }
 
-    pub fn is_truthy(&self) -> bool {
+    pub fn is_truthy(&self) -> bool
+    {
         // NOTE: This should work since Value implement ops::Not
-        if let Value::Boolean(ref x) = !!self {
+        if let Value::Boolean(ref x) = !!self
+        {
             *x
-        } else {
+        }
+        else
+        {
             panic!();
         }
     }
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self {
+impl fmt::Display for Value
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match &self
+        {
             Value::Int(i) => write!(f, "{}", i),
             Value::Float(f_) => write!(f, "{}", f_),
             Value::Str(ref s) => write!(f, "{}", s),
@@ -308,25 +374,34 @@ impl fmt::Display for Value {
     }
 }
 
-impl ops::Add<Value> for Value {
+impl ops::Add<Value> for Value
+{
     type Output = Value;
 
-    fn add(self, right: Value) -> Value {
-        match self {
-            Value::Int(il) => match right {
+    fn add(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
                 Value::Int(ir) => Value::Int(il + ir),
                 Value::Float(fr) => Value::Float(il as f64 + fr),
                 x => unreachable!("TypeError: Can't add Int and {} together", x),
             },
-            Value::Float(fl) => match right {
+            Value::Float(fl) => match right
+            {
                 Value::Int(ir) => Value::Float(fl + ir as f64),
                 Value::Float(fr) => Value::Float(fl + fr),
                 x => unreachable!("TypeError: Can't add Float and {} together", x),
             },
-            Value::Str(ref sl) => {
-                if let Value::Str(ref sr) = right {
+            Value::Str(ref sl) =>
+            {
+                if let Value::Str(ref sr) = right
+                {
                     Value::Str(format!("{}{}", sl, sr))
-                } else {
+                }
+                else
+                {
                     unreachable!("TypeError: Can't add String and {} together", right)
                 }
             }
@@ -337,17 +412,22 @@ impl ops::Add<Value> for Value {
     }
 }
 
-impl ops::Sub<Value> for Value {
+impl ops::Sub<Value> for Value
+{
     type Output = Value;
 
-    fn sub(self, right: Value) -> Value {
-        match self {
-            Value::Int(il) => match right {
+    fn sub(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
                 Value::Int(ir) => Value::Int(il - ir),
                 Value::Float(fr) => Value::Float(il as f64 - fr),
                 x => unreachable!("TypeError: Can't subtract {} from Int", x),
             },
-            Value::Float(fl) => match right {
+            Value::Float(fl) => match right
+            {
                 Value::Int(ir) => Value::Float(fl - ir as f64),
                 Value::Float(fr) => Value::Float(fl - fr),
                 x => unreachable!("TypeError: Can't subtract {} from Float", x),
@@ -358,17 +438,22 @@ impl ops::Sub<Value> for Value {
     }
 }
 
-impl ops::Mul<Value> for Value {
+impl ops::Mul<Value> for Value
+{
     type Output = Value;
 
-    fn mul(self, right: Value) -> Value {
-        match self {
-            Value::Int(il) => match right {
+    fn mul(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
                 Value::Int(ir) => Value::Int(il * ir),
                 Value::Float(fr) => Value::Float(il as f64 * fr),
                 x => unreachable!("TypeError: Can't multiply Int and {}", x),
             },
-            Value::Float(fl) => match right {
+            Value::Float(fl) => match right
+            {
                 Value::Int(ir) => Value::Float(fl * ir as f64),
                 Value::Float(fr) => Value::Float(fl * fr),
                 x => unreachable!("TypeError: Can't multiply Float and {}", x),
@@ -380,17 +465,22 @@ impl ops::Mul<Value> for Value {
     }
 }
 
-impl ops::Div<Value> for Value {
+impl ops::Div<Value> for Value
+{
     type Output = Value;
 
-    fn div(self, right: Value) -> Value {
-        match self {
-            Value::Int(il) => match right {
+    fn div(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
                 Value::Int(ir) => Value::Float(il as f64 / ir as f64),
                 Value::Float(fr) => Value::Float(il as f64 / fr),
                 x => unreachable!("TypeError: Cannot divide Int with {}", x),
             },
-            Value::Float(fl) => match right {
+            Value::Float(fl) => match right
+            {
                 Value::Int(ir) => Value::Float(fl / ir as f64),
                 Value::Float(fr) => Value::Float(fl / fr),
                 x => unreachable!("TypeError: Cannot divide Float with {}", x),
@@ -402,16 +492,21 @@ impl ops::Div<Value> for Value {
     }
 }
 
-impl ops::Rem<Value> for Value {
+impl ops::Rem<Value> for Value
+{
     type Output = Value;
-    fn rem(self, right: Value) -> Value {
-        match self {
-            Value::Int(il) => match right {
+    fn rem(self, right: Value) -> Value
+    {
+        match self
+        {
+            Value::Int(il) => match right
+            {
                 Value::Int(ir) => Value::Float(il as f64 % ir as f64),
                 Value::Float(fr) => Value::Float(il as f64 % fr),
                 _ => panic!("Rem operation is not covered for Str / Bool"),
             },
-            Value::Float(fl) => match right {
+            Value::Float(fl) => match right
+            {
                 Value::Int(ir) => Value::Float(fl % ir as f64),
                 Value::Float(fr) => Value::Float(fl % fr),
                 _ => panic!("Rem operation is not covered for Str / Bool"),
@@ -421,11 +516,14 @@ impl ops::Rem<Value> for Value {
     }
 }
 
-impl ops::Not for Value {
+impl ops::Not for Value
+{
     type Output = Value;
 
-    fn not(self) -> Value {
-        match self {
+    fn not(self) -> Value
+    {
+        match self
+        {
             Value::Boolean(b) => Value::Boolean(!b),
             Value::Int(i) => Value::Boolean(i == 0),
             Value::Float(f) => Value::Boolean(f == 0.0),
@@ -438,11 +536,14 @@ impl ops::Not for Value {
 
 // TODO:
 // Cleanup: This feels weird.
-impl ops::Not for &Value {
+impl ops::Not for &Value
+{
     type Output = Value;
 
-    fn not(self) -> Value {
-        match self {
+    fn not(self) -> Value
+    {
+        match self
+        {
             Value::Boolean(b) => Value::Boolean(!*b),
             Value::Int(i) => Value::Boolean(*i == 0),
             Value::Float(f) => Value::Boolean(*f == 0.0),
@@ -453,11 +554,14 @@ impl ops::Not for &Value {
     }
 }
 
-impl ops::Neg for Value {
+impl ops::Neg for Value
+{
     type Output = Value;
 
-    fn neg(self) -> Value {
-        match self {
+    fn neg(self) -> Value
+    {
+        match self
+        {
             Value::Int(i) => Value::Int(-i),
             Value::Float(f) => Value::Float(-f),
             x => unreachable!("TypeError:{} does not support negation", x),
@@ -466,15 +570,20 @@ impl ops::Neg for Value {
 }
 
 use std::cmp::Ordering;
-impl PartialOrd for Value {
-    fn partial_cmp(&self, other: &Value) -> Option<Ordering> {
-        match self {
-            Value::Int(i_left) => match other {
+impl PartialOrd for Value
+{
+    fn partial_cmp(&self, other: &Value) -> Option<Ordering>
+    {
+        match self
+        {
+            Value::Int(i_left) => match other
+            {
                 Value::Int(i_right) => i_left.partial_cmp(i_right),
                 Value::Float(f_right) => (*i_left as f64).partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),
             },
-            Value::Float(f_left) => match other {
+            Value::Float(f_left) => match other
+            {
                 Value::Int(i_right) => f_left.partial_cmp(&(*i_right as f64)),
                 Value::Float(f_right) => f_left.partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),

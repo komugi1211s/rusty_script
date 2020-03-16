@@ -21,7 +21,8 @@ use compiler::{bytecode, ir::print_ir_vec};
 use compiler::vm;
 use trace::prelude::*;
 
-fn exit_process(success: bool) -> ! {
+fn exit_process(success: bool) -> !
+{
     ::std::process::exit(if success { 0 } else { 1 });
 }
 
@@ -39,20 +40,26 @@ fn dump_chunk(chunk: &ByteChunk) {
 }
 */
 
-struct TimeCount {
+struct TimeCount
+{
     messages: RefCell<Vec<String>>,
 }
 
-impl TimeCount {
-    fn time<T, U>(&self, step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U> {
+impl TimeCount
+{
+    fn time<T, U>(&self, step: &str, fun: impl FnOnce() -> Result<T, U>) -> Result<T, U>
+    {
         let start = Instant::now();
         let result = fun();
         let elapsed = start.elapsed();
         let time = { elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9 };
 
-        let elapsed_msg = if result.is_ok() && !error_reported() {
+        let elapsed_msg = if result.is_ok() && !error_reported()
+        {
             format!(" {0:<12} Finished :: \x1b[32m{1} secs\x1b[0m", step, time)
-        } else {
+        }
+        else
+        {
             format!(" {0:<12} Error :: \x1b[31m{1} secs\x1b[0m", step, time)
         };
         self.messages.borrow_mut().push(elapsed_msg);
@@ -60,14 +67,17 @@ impl TimeCount {
         result
     }
 
-    fn report(&self) {
-        for x in self.messages.borrow().iter() {
+    fn report(&self)
+    {
+        for x in self.messages.borrow().iter()
+        {
             println!("{}", x);
         }
     }
 }
 
-pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
+pub fn start(module: SourceFile, stage: u8) -> Result<(), ()>
+{
     let mut timer = TimeCount {
         messages: RefCell::new(Vec::with_capacity(5)),
     };
@@ -76,10 +86,28 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     let byte_length = module.code.as_str().len();
 
     let binary = timer.time("Total", || {
-        let tokens = timer.time("Tokenizer", || Tokenizer::new(byte_length).scan(&module))?;
-        let mut ast = timer.time("Parser", || Parser::new(&module, &tokens).parse())?;
-        timer.time("Semantic", || semantic::analysis(&mut ast))?;
-        let binary = timer.time("CodeGen", || bytecode::generate_bytecode(&ast))?;
+        let tokens = timer.time(
+            "Tokenizer",
+            || Tokenizer::new(byte_length).scan(&module)
+        )?;
+
+        let mut ast = timer.time(
+            "Parser", 
+            || Parser::new(&module, &tokens).parse()
+        )?;
+
+        println!("{:#?}", ast);
+
+        timer.time(
+            "Semantic",
+            || semantic::analysis(&mut ast)
+        )?;
+
+        let binary = timer.time(
+            "CodeGen",
+            || bytecode::generate_bytecode(&ast)
+        )?;
+
         Ok(binary)
     });
 
@@ -92,38 +120,49 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()> {
     Ok(())
 }
 
-fn form_repl_line(s: &str) -> Option<&str> {
-    if s.len() == 0 {
+fn form_repl_line(s: &str) -> Option<&str>
+{
+    if s.len() == 0
+    {
         None
-    } else {
+    }
+    else
+    {
         Some(s)
     }
 }
 
-fn interpret() -> bool {
+fn interpret() -> bool
+{
     true
 }
 
-fn run_file(path: &str, stage: Option<&String>) -> bool {
-    let module = match SourceFile::open(path) {
+fn run_file(path: &str, stage: Option<&String>) -> bool
+{
+    let module = match SourceFile::open(path)
+    {
         Ok(n) => n,
-        Err(_) => {
+        Err(_) =>
+        {
             report("internal", "ファイルが読み込めませんでした。");
             return false;
         }
     };
     let mut stage_u8: u8 = 0;
-    if let Some(stage_) = stage {
+    if let Some(stage_) = stage
+    {
         stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
     }
 
     start(module, stage_u8).is_ok()
 }
 
-fn main() {
+fn main()
+{
     let arguments: Vec<String> = env::args().collect();
 
-    if arguments.len() <= 1 {
+    if arguments.len() <= 1
+    {
         // もし引数が無かったら
         println!("usage: isekai [filename].kai");
         exit_process(interpret());

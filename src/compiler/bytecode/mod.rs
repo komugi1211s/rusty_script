@@ -11,20 +11,23 @@ mod stmt;
 use stmt::traverse_statement;
 
 #[derive(Debug)]
-pub struct CompiledCode {
+pub struct CompiledCode
+{
     pub code: Vec<IRCode>,
     pub consts: Vec<Value>,
 }
 
 #[derive(Debug)]
-struct Local {
+struct Local
+{
     name: String,
     dtype: Type,
     depth: u16,
 }
 
 #[derive(Debug)]
-pub struct Compiler {
+pub struct Compiler
+{
     codes: Vec<IRCode>,
     patch: Vec<Patch>,
     depth: u16,
@@ -33,8 +36,10 @@ pub struct Compiler {
     consts: Vec<Value>,
 }
 
-impl Compiler {
-    fn new() -> Self {
+impl Compiler
+{
+    fn new() -> Self
+    {
         Compiler {
             codes: Vec::with_capacity(5000),
             patch: Vec::with_capacity(255),
@@ -45,34 +50,40 @@ impl Compiler {
         }
     }
 
-    fn add_const(&mut self, value: Value) -> usize {
+    fn add_const(&mut self, value: Value) -> usize
+    {
         let current = self.consts.len();
         self.consts.push(value);
         current
     }
 
-    fn deepen_nest(&mut self) {
+    fn deepen_nest(&mut self)
+    {
         self.depth += 1;
     }
 
-    fn shallowen_nest(&mut self) {
+    fn shallowen_nest(&mut self)
+    {
         self.depth -= 1;
         let depth = self.depth;
         self.local.retain(|x| x.depth <= depth);
     }
 
     #[inline(always)]
-    fn emit_op(&mut self, code: IRCode) {
+    fn emit_op(&mut self, code: IRCode)
+    {
         self.codes.push(code);
     }
 
     #[inline(always)]
-    fn add_patch(&mut self, patch: Patch) {
+    fn add_patch(&mut self, patch: Patch)
+    {
         self.patch.push(patch);
     }
 
     #[inline(always)]
-    fn reserve_one(&mut self) -> Patch {
+    fn reserve_one(&mut self) -> Patch
+    {
         let patch = Patch {
             kind: PatchKind::Generic,
             position: self.codes.len(),
@@ -83,13 +94,15 @@ impl Compiler {
 
     // TODO: Technically it could fail
     #[inline(always)]
-    fn patch(&mut self, patch: Patch, with: IRCode) {
+    fn patch(&mut self, patch: Patch, with: IRCode)
+    {
         let position = patch.position;
         self.codes[position] = with;
     }
 
     #[inline(always)]
-    fn mark_break(&mut self) {
+    fn mark_break(&mut self)
+    {
         let position = self.codes.len();
         self.add_patch(Patch {
             kind: PatchKind::Break,
@@ -99,7 +112,8 @@ impl Compiler {
     }
 
     #[inline(always)]
-    fn mark_continue(&mut self) {
+    fn mark_continue(&mut self)
+    {
         let position = self.codes.len();
         self.add_patch(Patch {
             kind: PatchKind::Continue,
@@ -110,22 +124,26 @@ impl Compiler {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PatchKind {
+pub enum PatchKind
+{
     Generic,
     Break,
     Continue,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Patch {
+pub struct Patch
+{
     kind: PatchKind,
     position: usize,
 }
 
-pub fn generate_bytecode(ast: &ASTree) -> Result<CompiledCode, ()> {
+pub fn generate_bytecode(ast: &ASTree) -> Result<CompiledCode, ()>
+{
     let mut compiler = Compiler::new();
 
-    for node in ast.root.iter() {
+    for node in ast.root.iter()
+    {
         traverse_statement(&mut compiler, ast, *node);
     }
 

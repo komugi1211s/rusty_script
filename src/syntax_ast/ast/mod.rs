@@ -7,15 +7,18 @@ pub mod declaration;
 pub use declaration::*;
 
 #[derive(Debug)]
-pub struct ASTree<'m> {
+pub struct ASTree<'m>
+{
     pub root: Vec<StmtId>,
     pub stmt: Vec<Statement<'m>>,
     pub expr: Vec<Expression<'m>>,
     pub functions: Vec<FunctionData>,
 }
 
-impl<'m> ASTree<'m> {
-    pub fn new() -> Self {
+impl<'m> ASTree<'m>
+{
+    pub fn new() -> Self
+    {
         Self {
             root: Vec::with_capacity(128),
             stmt: Vec::with_capacity(256),
@@ -24,33 +27,39 @@ impl<'m> ASTree<'m> {
         }
     }
 
-    pub fn add_stmt(&mut self, stmt: Statement<'m>) -> StmtId {
+    pub fn add_stmt(&mut self, stmt: Statement<'m>) -> StmtId
+    {
         let index = self.stmt.len();
         self.stmt.push(stmt);
         StmtId(index as u32)
     }
 
-    pub fn add_expr(&mut self, expr: Expression<'m>) -> ExprId {
+    pub fn add_expr(&mut self, expr: Expression<'m>) -> ExprId
+    {
         let index = self.expr.len();
         self.expr.push(expr);
         ExprId(index as u32)
     }
 
-    pub fn add_fn(&mut self, fun: FunctionData) -> usize {
+    pub fn add_fn(&mut self, fun: FunctionData) -> usize
+    {
         let index = self.functions.len();
         self.functions.push(fun);
         index
     }
 
-    pub fn add_root(&mut self, stmt_id: StmtId) {
+    pub fn add_root(&mut self, stmt_id: StmtId)
+    {
         self.root.push(stmt_id);
     }
 
-    pub fn get_expr(&'m self, id: ExprId) -> &'m Expression {
+    pub fn get_expr(&'m self, id: ExprId) -> &'m Expression
+    {
         self.expr.get(id.0 as usize).unwrap()
     }
 
-    pub fn get_stmt(&'m self, id: StmtId) -> &'m Statement {
+    pub fn get_stmt(&'m self, id: StmtId) -> &'m Statement
+    {
         self.stmt.get(id.0 as usize).unwrap()
     }
 }
@@ -62,20 +71,23 @@ pub struct StmtId(pub u32);
 pub struct ExprId(pub u32);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FunctionData {
+pub struct FunctionData
+{
     pub it: DeclarationData,
     pub args: Vec<DeclarationData>,
     pub block_id: StmtId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BlockData {
+pub struct BlockData
+{
     pub local_count: usize,
     pub statements: Vec<StmtId>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Expression<'m> {
+pub struct Expression<'m>
+{
     pub kind: ExprKind,
     pub module: &'m SourceFile,
     pub span: CodeSpan,
@@ -92,19 +104,23 @@ pub struct Expression<'m> {
     pub end_type: Option<Type>,
 }
 
-impl<'m> Expression<'m> {
-    pub fn report(&self, title: &str, message: &str) {
+impl<'m> Expression<'m>
+{
+    pub fn report(&self, title: &str, message: &str)
+    {
         report(title, message);
         spit_line(self.module, &self.span);
     }
 
-    pub fn is_literal(&self) -> bool {
+    pub fn is_literal(&self) -> bool
+    {
         self.kind == ExprKind::Literal
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExprInit<'m> {
+pub struct ExprInit<'m>
+{
     pub kind: ExprKind,
     pub module: Option<&'m SourceFile>,
     pub span: Option<CodeSpan>,
@@ -121,8 +137,10 @@ pub struct ExprInit<'m> {
     pub end_type: Option<Type>,
 }
 
-impl<'m> ExprInit<'m> {
-    pub fn init(self) -> Expression<'m> {
+impl<'m> ExprInit<'m>
+{
+    pub fn init(self) -> Expression<'m>
+    {
         Expression {
             kind: self.kind,
             span: self.span.unwrap(),
@@ -140,30 +158,36 @@ impl<'m> ExprInit<'m> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Statement<'m> {
+pub struct Statement<'m>
+{
     pub span: CodeSpan,
     pub module: &'m SourceFile,
     pub data: Stmt,
     pub parent: Option<StmtId>,
 }
 
-impl<'m> Statement<'m> {
-    pub fn report(&self, title: &str, message: &str) {
+impl<'m> Statement<'m>
+{
+    pub fn report(&self, title: &str, message: &str)
+    {
         report(title, message);
         spit_line(self.module, &self.span);
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct StmtInit<'m> {
+pub struct StmtInit<'m>
+{
     pub span: Option<CodeSpan>,
     pub module: Option<&'m SourceFile>,
     pub data: Option<Stmt>,
     pub parent: Option<StmtId>,
 }
 
-impl<'m> StmtInit<'m> {
-    pub fn init(self) -> Statement<'m> {
+impl<'m> StmtInit<'m>
+{
+    pub fn init(self) -> Statement<'m>
+    {
         Statement {
             span: self.span.unwrap(),
             module: self.module.unwrap(),
@@ -174,7 +198,8 @@ impl<'m> StmtInit<'m> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ExprKind {
+pub enum ExprKind
+{
     Binary,
     Logical,
     FunctionCall,
@@ -187,14 +212,17 @@ pub enum ExprKind {
     Empty,
 }
 
-impl Default for ExprKind {
-    fn default() -> Self {
+impl Default for ExprKind
+{
+    fn default() -> Self
+    {
         ExprKind::Empty
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
+pub enum Stmt
+{
     // DebugPrint
     Print(ExprId),
     Return(Option<ExprId>),
@@ -212,7 +240,8 @@ pub enum Stmt {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Operator {
+pub enum Operator
+{
     // Binary
     Add,
     Sub,
@@ -244,13 +273,16 @@ pub enum Operator {
     Asgn,
 }
 
-impl std::fmt::Display for Operator {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl std::fmt::Display for Operator
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
         use Operator::*;
         write!(
             f,
             "{}",
-            match self {
+            match self
+            {
                 Add => "+",
                 Sub => "-",
                 Div => "/",
@@ -277,30 +309,37 @@ impl std::fmt::Display for Operator {
     }
 }
 
-impl Operator {
+impl Operator
+{
     // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
-    pub fn is_arithmetic(&self) -> bool {
+    pub fn is_arithmetic(&self) -> bool
+    {
         // NOTE - @Improvement: Unaryのマイナスって計算式に入る？
         use Operator::*;
-        match self {
+        match self
+        {
             Add | Sub | Div | Mul | Mod | Neg => true,
             EqEq | NotEq | LessEq | MoreEq | Less | More | Not | Ref | Deref | Wrap | Unwrap
             | And | Or | Asgn => false,
         }
     }
 
-    pub fn is_comparison(&self) -> bool {
+    pub fn is_comparison(&self) -> bool
+    {
         use Operator::*;
-        match self {
+        match self
+        {
             EqEq | NotEq | LessEq | MoreEq | Less | More => true,
             Add | Sub | Div | Mul | Mod | Neg | Not | And | Or | Asgn | Ref | Deref | Wrap
             | Unwrap => false,
         }
     }
 
-    pub fn is_logic(&self) -> bool {
+    pub fn is_logic(&self) -> bool
+    {
         use Operator::*;
-        match self {
+        match self
+        {
             And | Or | Not => true,
             EqEq | NotEq | LessEq | MoreEq | Less | More | Add | Sub | Div | Mul | Mod | Ref
             | Deref | Wrap | Unwrap | Neg | Asgn => false,
@@ -309,13 +348,15 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Literal<'m> {
+pub struct Literal<'m>
+{
     pub tok: Token<'m>,
     pub kind: LiteralKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LiteralKind {
+pub enum LiteralKind
+{
     Bool,
     Str,
     Int,
@@ -323,61 +364,75 @@ pub enum LiteralKind {
     Null,
 }
 
-impl<'m> Literal<'m> {
-    pub fn new(kind: LiteralKind, tok: &Token<'m>) -> Self {
+impl<'m> Literal<'m>
+{
+    pub fn new(kind: LiteralKind, tok: &Token<'m>) -> Self
+    {
         Self {
             kind,
             tok: tok.clone(),
         }
     }
 
-    pub fn new_null(tok: &Token<'m>) -> Self {
+    pub fn new_null(tok: &Token<'m>) -> Self
+    {
         Self::new(LiteralKind::Null, tok)
     }
 
-    pub fn new_bool(tok: &Token<'m>) -> Self {
+    pub fn new_bool(tok: &Token<'m>) -> Self
+    {
         Self::new(LiteralKind::Bool, tok)
     }
 
-    pub fn new_str(tok: &Token<'m>) -> Self {
+    pub fn new_str(tok: &Token<'m>) -> Self
+    {
         Self::new(LiteralKind::Str, tok)
     }
 
-    pub fn new_int(tok: &Token<'m>) -> Self {
+    pub fn new_int(tok: &Token<'m>) -> Self
+    {
         Self::new(LiteralKind::Int, tok)
     }
 
-    pub fn new_float(tok: &Token<'m>) -> Self {
+    pub fn new_float(tok: &Token<'m>) -> Self
+    {
         Self::new(LiteralKind::Float, tok)
     }
 
-    pub fn is_str(&self) -> bool {
+    pub fn is_str(&self) -> bool
+    {
         self.kind == LiteralKind::Str
     }
 
-    pub fn is_int(&self) -> bool {
+    pub fn is_int(&self) -> bool
+    {
         self.kind == LiteralKind::Int
     }
 
-    pub fn is_float(&self) -> bool {
+    pub fn is_float(&self) -> bool
+    {
         self.kind == LiteralKind::Float
     }
 
-    pub fn is_bool(&self) -> bool {
+    pub fn is_bool(&self) -> bool
+    {
         self.kind == LiteralKind::Bool
     }
 
-    pub fn is_null(&self) -> bool {
+    pub fn is_null(&self) -> bool
+    {
         self.kind == LiteralKind::Null
     }
 
-    pub fn is_numeric(&self) -> bool {
+    pub fn is_numeric(&self) -> bool
+    {
         self.is_int() || self.is_float()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct DeclarationData {
+pub struct DeclarationData
+{
     pub kind: DeclKind,
     pub name: String,
     pub dectype: ParsedType,
@@ -386,22 +441,27 @@ pub struct DeclarationData {
     pub expr: Option<ExprId>,
 }
 
-impl DeclarationData {
-    pub fn is_inferred(&self) -> bool {
+impl DeclarationData
+{
+    pub fn is_inferred(&self) -> bool
+    {
         self.prefix.is_empty() && self.dectype == ParsedType::pUnknown
     }
 
-    pub fn is_constant(&self) -> bool {
+    pub fn is_constant(&self) -> bool
+    {
         self.prefix.contains(DeclPrefix::Const)
     }
 
-    pub fn is_annotated(&self) -> bool {
+    pub fn is_annotated(&self) -> bool
+    {
         !self.is_inferred()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ParsedType {
+pub enum ParsedType
+{
     pInt,
     pStr,
     pFloat,
@@ -414,9 +474,12 @@ pub enum ParsedType {
     pUnknown,
 }
 
-impl ParsedType {
-    pub fn match_primitive(cand: &str) -> Option<Self> {
-        match cand {
+impl ParsedType
+{
+    pub fn match_primitive(cand: &str) -> Option<Self>
+    {
+        match cand
+        {
             "int" => Some(Self::pInt),
             "string" => Some(Self::pStr),
             "float" => Some(Self::pFloat),
@@ -434,7 +497,8 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum DeclKind {
+pub enum DeclKind
+{
     Variable,
     Argument,
     Struct,
