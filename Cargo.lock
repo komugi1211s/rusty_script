@@ -6,66 +6,11 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "bumpalo"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "compiler"
-version = "0.1.0"
-dependencies = [
- "syntax_ast 0.1.0",
- "trace 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
-name = "isekai"
-version = "0.1.0"
-dependencies = [
- "compiler 0.1.0",
- "semantic 0.1.0",
- "syntax_ast 0.1.0",
- "trace 0.1.0",
-]
-
-[[package]]
-name = "semantic"
-version = "0.1.0"
-dependencies = [
- "syntax_ast 0.1.0",
- "trace 0.1.0",
- "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
-name = "syntax_ast"
+name = "kai"
 version = "0.1.0"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "bumpalo 3.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "trace 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
-name = "trace"
-version = "0.1.0"
-
-[[package]]
-name = "typed-arena"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "types"
-version = "0.1.0"
-dependencies = [
- "typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [metadata]
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
-"checksum bumpalo 3.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1f359dc14ff8911330a51ef78022d376f25ed00248912803b58f00cb1c27f742"
-"checksum typed-arena 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0685c84d5d54d1c26f7d3eb96cd41550adb97baed141a761cf335d3d33bcd0ae"

@@ -5,11 +5,12 @@ TODO:
 
  * */
 
-use super::ast::*;
-
-use crate::tokenizer::token::{Token, TokenType};
-use trace::prelude::*;
-use types::Type;
+use super::{
+    ast::*,
+    tokenizer::token::{Token, TokenType},
+    trace::prelude::*,
+    types::Type,
+};
 
 mod decl;
 mod stmt;

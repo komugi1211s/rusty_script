@@ -1,11 +1,12 @@
-use trace::prelude::*;
-
-use syntax_ast::ast::*;
+use crate::{
+    trace::prelude::*,
+    ast::*,
+    ir::IRCode,
+    types::{Type, Value},
+};
 
 use super::expr::traverse_expression;
 use super::{Compiler, Patch, PatchKind};
-use crate::ir::IRCode;
-use types::{Type, Value};
 
 pub fn traverse_statement(
     compiler: &mut Compiler,

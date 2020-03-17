@@ -1,7 +1,9 @@
 use super::Parser;
-use crate::ast::{BlockData, Statement, Stmt, StmtId};
-use crate::tokenizer::token::{Token, TokenType};
-use trace::position::CodeSpan;
+use crate::{
+    ast::{BlockData, Statement, Stmt, StmtId},
+    tokenizer::token::{Token, TokenType},
+    trace::prelude::*,
+};
 
 impl<'m> Parser<'m>
 {
@@ -22,6 +24,7 @@ impl<'m> Parser<'m>
             TokenType::Return => self.parse_return_stmt(),
             TokenType::Break => self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
+            // TokenType::Defer => self.parse_defer_stmt(),
             _ =>
             {
                 let start_span = self.get_current().span;

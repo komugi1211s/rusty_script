@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use trace::prelude::*;
-
-use syntax_ast::ast::*;
-
-use super::ir::IRCode;
-use types::{Type, Value};
+use super::{
+    trace::prelude::*,
+    ast::*,
+    ir::IRCode,
+    types::{Type, Value},
+};
 
 mod expr;
 mod stmt;

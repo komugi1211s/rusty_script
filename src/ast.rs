@@ -1,10 +1,9 @@
-use crate::tokenizer::token::Token;
-use types::Type;
-
-use trace::prelude::*;
-
-pub mod declaration;
-pub use declaration::*;
+extern crate bitflags;
+use super::{
+    types::Type,
+    tokenizer::token::Token,
+    trace::prelude::*,
+};
 
 #[derive(Debug)]
 pub struct ASTree<'m>
@@ -445,7 +444,7 @@ impl DeclarationData
 {
     pub fn is_inferred(&self) -> bool
     {
-        self.prefix.is_empty() && self.dectype == ParsedType::pUnknown
+        self.prefix.is_empty() && self.dectype == ParsedType::Unknown
     }
 
     pub fn is_constant(&self) -> bool
@@ -462,16 +461,16 @@ impl DeclarationData
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedType
 {
-    pInt,
-    pStr,
-    pFloat,
-    pBoolean,
-    pArray(Box<ParsedType>, Option<u32>),
-    pPointer(Box<ParsedType>),
-    pOptional(Box<ParsedType>),
-    pStruct(BlockData),
-    pUserdef(String),
-    pUnknown,
+    Int,
+    Str,
+    Float,
+    Boolean,
+    Array(Box<ParsedType>, Option<u32>),
+    Pointer(Box<ParsedType>),
+    Optional(Box<ParsedType>),
+    Struct(BlockData),
+    Userdef(String),
+    Unknown,
 }
 
 impl ParsedType
@@ -480,10 +479,10 @@ impl ParsedType
     {
         match cand
         {
-            "int" => Some(Self::pInt),
-            "string" => Some(Self::pStr),
-            "float" => Some(Self::pFloat),
-            "bool" => Some(Self::pBoolean),
+            "int" => Some(Self::Int),
+            "string" => Some(Self::Str),
+            "float" => Some(Self::Float),
+            "bool" => Some(Self::Boolean),
             _ => None,
         }
     }

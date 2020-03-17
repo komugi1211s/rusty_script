@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
-use syntax_ast::ast::*;
-use types::Type;
-use trace::prelude::*;
+use super::{
+    ast::*,
+    types::Type,
+    trace::prelude::*,
+};
 
 #[derive(Debug)]
 struct SymbolTable
 {
     symbol: HashMap<String, Symbol>,
+    // pub scopes: HashMap<StmtId, Scopes>,
     imports: HashSet<String>,
 }
 
@@ -25,89 +28,17 @@ pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()>
         imports: HashSet::with_capacity(255),
     };
 
-    resolve_directive(ast)?;
-
-    resolve_root_symbols(&mut table, ast)?;
-    resolve_function_symbols(&mut table, ast)?;
-
-    if table.has_no_main() 
-    {
-        report("internal", "Main関数がありません。");
-        Err(())
-    }
+    // resolve_directive(ast)?;
+    resolve_symbols(&mut table, ast)?;
 
     Ok(())
 }
 
-fn resolve_directive(ast: &mut ASTree<'_>) -> Result<(), ()>
-{
-    Ok(())
-}
-
-fn resolve_function_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
-{
-    Ok(())
-}
-
-fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
-{
-    use ParsedType::*;
-    match ptype
-    {
-        pInt => Ok(Some(Type::int())),
-        pStr => Ok(Some(Type::string())),
-        pFloat => Ok(Some(Type::float())),
-        pBoolean => Ok(Some(Type::boolean())),
-        pArray(of, size) =>
-        {
-            if let Some(type_of) = maybe_parse_annotated_type(of)?
-            {
-                let type_of = Box::new(type_of);
-                Ok(Some(Type::array(type_of, *size)))
-            }
-            else
-            {
-                todo!("Error Logging");
-            }
-        }
-        pPointer(of) =>
-        {
-            if let Some(type_of) = maybe_parse_annotated_type(of)?
-            {
-                let pointer_of = Box::new(type_of);
-                Ok(Some(Type::ptr(pointer_of)))
-            }
-            else
-            {
-                todo!("Error Logging");
-            }
-        }
-        pOptional(of) =>
-        {
-            if let Some(type_of) = maybe_parse_annotated_type(of)?
-            {
-                let pointer_of = Box::new(type_of);
-                Ok(Some(Type::ptr(pointer_of)))
-            }
-            else
-            {
-                todo!("Error Logging");
-            }
-        }
-        pStruct(defs) => Err(("internal", "structは未実装です。")),
-        pUserdef(defs) => Err(("internal", "userdefは未実装です。")),
-        pUnknown => Err((
-            "internal",
-            "アノテーションがあるべき関数内で推論を必要とする定義に接触しました。",
-        )),
-    }
-}
-
-fn resolve_root_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     for stmt in ast.root.iter()
     {
-        let mut root = ast.stmt.get_mut(stmt.0 as usize).unwrap();
+        let root = ast.stmt.get(stmt.0 as usize).unwrap();
 
         match root.data
         {
@@ -162,18 +93,79 @@ fn resolve_root_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result
 
                 table.symbol.insert(decl.name.clone(), symbol);
             }
+
+            Stmt::Function(targ) => 
+            {
+                let func = ast.functions.get_mut(targ).unwrap();
+            }
             _ => (),
         }
     }
     Ok(())
 }
 
+fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
+{
+    use ParsedType::*;
+    match ptype
+    {
+        Int => Ok(Some(Type::int())),
+        Str => Ok(Some(Type::string())),
+        Float => Ok(Some(Type::float())),
+        Boolean => Ok(Some(Type::boolean())),
+        Array(of, size) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
+                let type_of = Box::new(type_of);
+                Ok(Some(Type::array(type_of, *size)))
+            }
+            else
+            {
+                todo!("Error Logging");
+            }
+        }
+        Pointer(of) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
+                let pointer_of = Box::new(type_of);
+                Ok(Some(Type::ptr(pointer_of)))
+            }
+            else
+            {
+                todo!("Error Logging");
+            }
+        }
+        Optional(of) =>
+        {
+            if let Some(type_of) = maybe_parse_annotated_type(of)?
+            {
+                let pointer_of = Box::new(type_of);
+                Ok(Some(Type::ptr(pointer_of)))
+            }
+            else
+            {
+                todo!("Error Logging");
+            }
+        }
+        Struct(defs) => Err(("internal", "structは未実装です。")),
+        Userdef(defs) => Err(("internal", "userdefは未実装です。")),
+        Unknown => Err((
+            "internal",
+            "アノテーションがあるべき関数内で推論を必要とする定義に接触しました。",
+        )),
+    }
+}
+
+
 /*
- *
- *
- * // TODO - @Improvement: Currently, Literal folding is impossible to implement thanks to the
- * structure of Literal data - It carries Token around instead of an actual value.
- * It should be switched into " enum Literal { Int(i64), Str(String) .. } " if possible.
+
+
+// TODO - @Improvement: Currently, Literal folding is impossible to implement thanks to the
+structure of Literal data - It carries Token around instead of an actual value.
+It should be switched into " enum Literal { Int(i64), Str(String) .. } " if possible.
+
 Binary,
 Logical,
 FunctionCall,
@@ -373,3 +365,4 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
         }
     }
 }
+

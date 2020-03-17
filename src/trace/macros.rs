@@ -15,11 +15,3 @@ macro_rules! __l_args {
         format!("{}", format_args!($($args)*))
     }
 }
-/*
- * rt_error! {
- *     src: file,
- *     span: span,
- *     message: format!("Hello world", a, b, c,)
- * }
- *
- * */

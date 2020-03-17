@@ -1,8 +1,9 @@
-use super::bytecode::CompiledCode;
-use super::ir::IRCode;
-use trace::SourceFile;
-
-use types::Value;
+use super::{
+    bytecode::CompiledCode,
+    ir::IRCode,
+    trace::prelude::*,
+    types::Value,
+};
 
 #[derive(Debug)]
 pub struct VirtualMachine

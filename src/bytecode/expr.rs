@@ -1,9 +1,11 @@
-use syntax_ast::ast::*;
-use trace::prelude::*;
+use crate::{
+    ast::*,
+    trace::prelude::*,
+    ir::IRCode,
+    types::{Type, Value},
+};
 
 use super::Compiler;
-use crate::ir::IRCode;
-use types::{Type, Value};
 
 pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
 {

@@ -1,7 +1,7 @@
 // use std::mem;
 pub mod token;
 use token::{match_identity, Token, TokenType};
-use trace::{err_fatal, position::CodeSpan, source::SourceFile};
+use super::trace::prelude::*;
 
 pub struct Tokenizer<'m>
 {
@@ -157,12 +157,8 @@ impl<'m> Tokenizer<'m>
             def =>
             {
                 let span = self.create_current_span();
-                err_fatal!(
-                    src: module,
-                    span: &span,
-                    title: "Unknown Token",
-                    msg: "未知のトークン {} を発見しました。", def
-                );
+                report("Unknown Token", &format!("未知のトークン {} を発見しました。", def));
+                spit_line(module, &span);
                 Err(())
             }
         }
@@ -203,12 +199,8 @@ impl<'m> Tokenizer<'m>
         // Unterminated String
         if self.is_at_end()
         {
-            err_fatal!(
-                src: module,
-                span: &self.create_current_span(),
-                title: "Unterminated String",
-                msg: "\n文字列が閉じられていません。\n"
-            );
+            report("Unterminated String", "\n文字列が閉じられていません。\n");
+            spit_line(module,&self.create_current_span());
             return Err(());
         }
 

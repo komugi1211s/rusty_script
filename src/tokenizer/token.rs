@@ -1,5 +1,5 @@
 use std::fmt;
-use trace::prelude::*;
+use crate::trace::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType

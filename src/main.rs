@@ -1,44 +1,35 @@
 //#![feature(test)]
 //extern crate test;
 
+#[macro_use]
+extern crate bitflags;
+
 use std::{
     env,
-    fs::{self, File},
-    io::prelude::*,
     time::Instant,
+    cell::RefCell,
 };
 
-// Phase 1 & 2 - Tokenizing, Parsing
-use syntax_ast::{ast::ASTree, parser::Parser, tokenizer::Tokenizer};
+mod ast;
+mod parser;
+mod tokenizer;
 
-// Phase 3  - semantic analysis
-use semantic;
+mod semantic;
+mod bytecode;
+mod ir;
+mod vm;
+mod trace;
+mod types;
 
-// Phase 4  - bytecode gen | llvm gen(TODO)
-use compiler::{bytecode, ir::print_ir_vec};
-
-// Phase 5a - VM
-use compiler::vm;
+use ast::ASTree;
+use parser::Parser;
+use tokenizer::Tokenizer;
 use trace::prelude::*;
 
 fn exit_process(success: bool) -> !
 {
     ::std::process::exit(if success { 0 } else { 1 });
 }
-
-type Stage = u8;
-use std::cell::RefCell;
-
-/*
-fn dump_chunk(chunk: &ByteChunk) {
-    let disassembled = disassemble_all(&chunk.code);
-    let mut file = File::create("dump").expect("Dump File failed to create.");
-    for i in disassembled {
-        writeln!(file, "{}", i).expect("Hey?");
-    }
-    file.flush().expect("File Flushing Failed.");
-}
-*/
 
 struct TimeCount
 {
@@ -77,7 +68,7 @@ impl TimeCount
     }
 }
 
-pub fn start(module: SourceFile, stage: u8) -> Result<(), ()>
+pub fn start(module: SourceFile) -> Result<(), ()>
 {
     let mut timer = TimeCount {
         messages: RefCell::new(Vec::with_capacity(5)),
@@ -87,6 +78,7 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()>
     let byte_length = module.code.as_str().len();
 
     let binary = timer.time("Total", || {
+
         let tokens = timer.time(
             "Tokenizer",
             || Tokenizer::new(byte_length).scan(&module)
@@ -120,41 +112,20 @@ pub fn start(module: SourceFile, stage: u8) -> Result<(), ()>
     Ok(())
 }
 
-fn form_repl_line(s: &str) -> Option<&str>
+fn run_file(path: &str)
 {
-    if s.len() == 0
-    {
-        None
-    }
-    else
-    {
-        Some(s)
-    }
-}
-
-fn interpret() -> bool
-{
-    true
-}
-
-fn run_file(path: &str, stage: Option<&String>) -> bool
-{
+    
     let module = match SourceFile::open(path)
     {
         Ok(n) => n,
         Err(_) =>
         {
             report("internal", "ファイルが読み込めませんでした。");
-            return false;
+            return;
         }
     };
-    let mut stage_u8: u8 = 0;
-    if let Some(stage_) = stage
-    {
-        stage_u8 = stage_.as_str().parse::<u8>().unwrap_or(0);
-    }
 
-    start(module, stage_u8).is_ok()
+    start(module);
 }
 
 fn main()
@@ -165,43 +136,10 @@ fn main()
     {
         // もし引数が無かったら
         println!("usage: isekai [filename].kai");
-        exit_process(interpret());
     }
-    exit_process(run_file(arguments.get(1).unwrap(), arguments.get(2)))
-}
-
-/*
-fn main() {
-    use isekai::_byte_test::fntest;
-    fntest();
-}
-*/
-
-/*
-#[cfg(test)]
-mod tests
-{
-    use super::*;
-    use test::Bencher;
-
-    #[bench]
-    fn benchmark(b: &mut Bencher)
+    else 
     {
-        let stri = "
-                int: loop_i = 0;
-                while loop_i <= 10000 {
-                  loop_i = loop_i + 1;
-                }
-        ";
-
-        b.iter(move ||
-        {
-            let n = test::black_box(1);
-
-            for _ in 0..n {
-                isekai::core::start(stri);
-            }
-        });
+        let file_name = arguments.get(1).unwrap();
+        run_file(file_name);
     }
 }
-*/

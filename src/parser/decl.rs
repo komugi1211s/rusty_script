@@ -4,12 +4,11 @@
 
 use super::Parser;
 
-use crate::ast;
-use crate::tokenizer::token::{Token, TokenType};
-
-use trace::err_fatal;
-use trace::position::CodeSpan;
-use trace::source::SourceFile;
+use crate::{
+    ast,
+    tokenizer::token::{Token, TokenType},
+    trace::prelude::*,
+};
 
 fn is_prefix_banned(cand: &str) -> bool
 {
@@ -58,12 +57,12 @@ impl<'m> Parser<'m>
                 // TODO: do not use unwrap
                 let length = number_inside.parse::<u32>().unwrap();
                 self.consume(TokenType::CloseSquareBracket)?;
-                return Ok(ast::ParsedType::pArray(Box::new(inner_type), Some(length)));
+                return Ok(ast::ParsedType::Array(Box::new(inner_type), Some(length)));
             }
             else
             {
                 self.consume(TokenType::CloseSquareBracket)?;
-                return Ok(ast::ParsedType::pArray(Box::new(inner_type), None));
+                return Ok(ast::ParsedType::Array(Box::new(inner_type), None));
             }
         }
 
@@ -92,12 +91,12 @@ impl<'m> Parser<'m>
             match ast::ParsedType::match_primitive(candidate)
             {
                 Some(x) => x,
-                None => ast::ParsedType::pUserdef(candidate.to_string()),
+                None => ast::ParsedType::Userdef(candidate.to_string()),
             }
         }
         else
         {
-            ast::ParsedType::pUnknown
+            ast::ParsedType::Unknown
         };
         loop
         {
@@ -106,12 +105,12 @@ impl<'m> Parser<'m>
                 TokenType::Caret =>
                 {
                     self.advance();
-                    core_type = ast::ParsedType::pPointer(Box::new(core_type));
+                    core_type = ast::ParsedType::Pointer(Box::new(core_type));
                 }
                 TokenType::Question =>
                 {
                     self.advance();
-                    core_type = ast::ParsedType::pOptional(Box::new(core_type));
+                    core_type = ast::ParsedType::Optional(Box::new(core_type));
                 }
                 _ => break,
             }
