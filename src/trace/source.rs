@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, self};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceFile
@@ -11,13 +11,9 @@ pub struct SourceFile
 
 impl SourceFile
 {
-    pub fn open(name: &str) -> Result<Self, ()>
+    pub fn open(name: &str) -> io::Result<Self>
     {
-        let file = match fs::File::open(name)
-        {
-            Ok(x) => x,
-            Err(_) => return Err(()),
-        };
+        let file = fs::File::open(name)?;
 
         let mut reader = BufReader::new(file);
         let mut string = String::new();

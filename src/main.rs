@@ -1,35 +1,33 @@
 //#![feature(test)]
 //extern crate test;
 
-#[macro_use]
-extern crate bitflags;
+#[macro_use] extern crate bitflags;
+
+mod trace;
+mod ast;
+
+mod parser;
+mod tokenizer;
+
+mod types;
+mod semantic;
+
+mod bytecode;
+mod ir;
+mod vm;
 
 use std::{
     env,
     time::Instant,
     cell::RefCell,
+    collections::HashMap,
+    path::PathBuf,
 };
-
-mod ast;
-mod parser;
-mod tokenizer;
-
-mod semantic;
-mod bytecode;
-mod ir;
-mod vm;
-mod trace;
-mod types;
 
 use ast::ASTree;
 use parser::Parser;
 use tokenizer::Tokenizer;
 use trace::prelude::*;
-
-fn exit_process(success: bool) -> !
-{
-    ::std::process::exit(if success { 0 } else { 1 });
-}
 
 struct TimeCount
 {
@@ -65,6 +63,48 @@ impl TimeCount
         {
             println!("{}", x);
         }
+    }
+}
+
+pub(crate) struct Global 
+{
+    pub root_path: PathBuf,
+    pub modules: Vec<SourceFile>,
+}
+
+impl Global
+{
+    fn new() -> Self
+    {
+        Self 
+        {
+            root_path: expect!(
+                           env::current_dir(),
+                           "現在のディレクトリが取得できませんでした。"
+                       ),
+            modules: Vec::with_capacity(32),
+        }
+    }
+
+    pub fn open_and_add_module(&mut self, file_name: &str) -> Result<usize, ()> 
+    {
+        let file = expect!(SourceFile::open(file_name), "ファイルを開けませんでした。");
+
+        let next_idx = self.modules.len();
+        self.modules.push(file);
+        Ok(next_idx)
+    }
+
+    pub fn lookup_by_name(&self, name: &str) -> Option<usize>
+    {
+        for (idx, module) in self.modules.iter().enumerate()
+        {
+            if name == module.filename
+            {
+                return Some(idx);
+            }
+        }
+        None
     }
 }
 
@@ -112,34 +152,24 @@ pub fn start(module: SourceFile) -> Result<(), ()>
     Ok(())
 }
 
-fn run_file(path: &str)
-{
-    
-    let module = match SourceFile::open(path)
-    {
-        Ok(n) => n,
-        Err(_) =>
-        {
-            report("internal", "ファイルが読み込めませんでした。");
-            return;
-        }
-    };
-
-    start(module);
-}
-
 fn main()
 {
     let arguments: Vec<String> = env::args().collect();
+    let mut globals = Global::new();
+    let mut vm = vm::VirtualMachine::new();
+    println!("ルートパス: {:?}", &globals.root_path);
 
-    if arguments.len() <= 1
-    {
-        // もし引数が無かったら
+    if arguments.len() <= 1 
+    { 
+        // TODO: Interpreter Support
         println!("usage: isekai [filename].kai");
+        return;
     }
-    else 
-    {
-        let file_name = arguments.get(1).unwrap();
-        run_file(file_name);
-    }
+    let root = globals.open_and_add_module(&arguments[1]).unwrap(); 
+
+    /*
+    let tokens = Tokenizer::new(&globals, root).scan().unwrap();
+    let ast    = Parser::new(root_file, &tokens).parse().unwrap();
+    println!("{:?}", ast);
+    */
 }

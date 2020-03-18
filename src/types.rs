@@ -19,6 +19,10 @@ pub enum TypeKind
 
     // User_Defined.
     Struct,
+    Enum,
+    
+    // Meta
+    Type
 }
 
 impl Default for TypeKind
@@ -98,6 +102,14 @@ impl Type
     {
         Self {
             kind: TypeKind::Int,
+            ..Default::default()
+        }
+    }
+
+    pub fn basetype() -> Self
+    {
+        Self {
+            kind: TypeKind::Type,
             ..Default::default()
         }
     }
@@ -214,7 +226,7 @@ impl std::fmt::Display for Type
                         String::from("nullptr")
                     }
                 }
-                Struct =>
+                Struct | Enum =>
                 {
                     let struct_name = if let Some(ref name) = self.struct_name
                     {
@@ -231,9 +243,11 @@ impl std::fmt::Display for Type
                         .map(|x| format!("{}", x))
                         .collect::<Vec<String>>()
                         .join("; ");
-                    format!("{}: struct {{ {} }}", struct_name, members)
+
+                    format!("{}: {:?} {{ {} }}", struct_name, self.kind, members)
                 }
                 Null => "null".into(),
+                Type => "Type".into(),
             }
         )
     }

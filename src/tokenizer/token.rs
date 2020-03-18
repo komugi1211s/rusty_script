@@ -91,6 +91,12 @@ pub struct Token<'m>
     pub lexeme: Option<String>,
 }
 
+impl Reportable for Token<'_> 
+{
+    fn sourcefile(&self) -> usize { 0 }
+    fn span(&self) -> CodeSpan { self.span }
+}
+
 impl<'m> Token<'m>
 {
     pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self

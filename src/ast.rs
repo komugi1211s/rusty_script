@@ -103,6 +103,12 @@ pub struct Expression<'m>
     pub end_type: Option<Type>,
 }
 
+impl Reportable for Expression<'_> 
+{
+    fn sourcefile(&self) -> usize { 0 }
+    fn span(&self) -> CodeSpan { self.span }
+}
+
 impl<'m> Expression<'m>
 {
     pub fn report(&self, title: &str, message: &str)
@@ -163,6 +169,12 @@ pub struct Statement<'m>
     pub module: &'m SourceFile,
     pub data: Stmt,
     pub parent: Option<StmtId>,
+}
+
+impl Reportable for Statement<'_> 
+{
+    fn sourcefile(&self) -> usize { 0 }
+    fn span(&self) -> CodeSpan { self.span }
 }
 
 impl<'m> Statement<'m>
