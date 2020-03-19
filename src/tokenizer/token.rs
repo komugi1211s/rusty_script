@@ -83,36 +83,36 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token
+pub struct Token<'m>
 {
-    pub file_idx: usize,
+    pub file: &'m SourceFile,
     pub tokentype: TokenType,
     pub span: CodeSpan,
     pub lexeme: Option<String>,
 }
 
-impl Reportable for Token
+impl Reportable for Token<'_> 
 {
     fn sourcefile(&self) -> usize { 0 }
     fn span(&self) -> CodeSpan { self.span }
 }
 
-impl Token
+impl<'m> Token<'m>
 {
-    pub fn simple(file_idx: usize, tokentype: TokenType, span: CodeSpan) -> Self
+    pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self
     {
         Token {
-            file_idx,
+            file,
             tokentype,
             span,
             lexeme: None,
         }
     }
-    pub fn lexed(file_idx: usize, tokentype: TokenType, span: CodeSpan, lexeme: String)
+    pub fn lexed(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan, lexeme: String)
         -> Self
     {
         Token {
-            file_idx,
+            file,
             tokentype,
             span,
             lexeme: Some(lexeme),
@@ -131,7 +131,7 @@ impl Token
     }
 }
 
-impl fmt::Display for Token
+impl fmt::Display for Token<'_>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
