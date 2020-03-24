@@ -21,7 +21,7 @@ use std::{
     time::Instant,
     cell::RefCell,
     collections::HashMap,
-    path::PathBuf,
+    path::{ PathBuf, Path },
 };
 
 use ast::ASTree;
@@ -68,7 +68,7 @@ impl TimeCount
 
 pub(crate) struct Global 
 {
-    pub root_path: PathBuf,
+    pub module_paths: Vec<PathBuf>,
     pub modules: Vec<SourceFile>,
 }
 
@@ -76,24 +76,38 @@ impl Global
 {
     fn new() -> Self
     {
+        let mut vector = Vec::with_capacity(16);
+        let root = expect!(env::current_dir(),
+                           "現在のディレクトリが取得できませんでした。");
+        vector.push(root);
+
         Self 
         {
-            root_path: expect!(
-                           env::current_dir(),
-                           "現在のディレクトリが取得できませんでした。"
-                       ),
+            module_paths: vector,
             modules: Vec::with_capacity(32),
         }
     }
 
     pub fn open_and_add_module(&mut self, file_name: &str) -> Result<usize, ()> 
     {
-        let file = expect!(SourceFile::open(file_name), "ファイルを開けませんでした。");
+        let filename_path = Path::new(file_name).with_extension("kai");
 
-        let next_idx = self.modules.len();
-        self.modules.push(file);
-        Ok(next_idx)
-    }
+        for module_dir in self.module_paths.iter() 
+        {
+            let target_file_path = module_dir.join(&filename_path);
+            if target_file_path.exists() 
+            {
+                let filepath_str = expect!(target_file_path.to_str().ok_or(()), "ファイルパスに許されない文字列が含まれています。");
+                let file = expect!(SourceFile::open(filepath_str), "ファイルを開けませんでした。");
+
+                let next_idx = self.modules.len();
+                self.modules.push(file);
+                return Ok(next_idx);
+            }
+        }
+
+        Err(())
+    } 
 
     pub fn lookup_by_name(&self, name: &str) -> Option<usize>
     {
@@ -157,7 +171,6 @@ fn main()
     let arguments: Vec<String> = env::args().collect();
     let mut globals = Global::new();
     let mut vm = vm::VirtualMachine::new();
-    println!("ルートパス: {:?}", &globals.root_path);
 
     if arguments.len() <= 1 
     { 
@@ -165,11 +178,12 @@ fn main()
         println!("usage: isekai [filename].kai");
         return;
     }
-    let root = globals.open_and_add_module(&arguments[1]).unwrap(); 
+    let root = globals.open_and_add_module(&arguments[1]).unwrap();
+    let root_file = &globals.modules[root];
 
-    /*
-    let tokens = Tokenizer::new(&globals, root).scan().unwrap();
-    let ast    = Parser::new(root_file, &tokens).parse().unwrap();
-    println!("{:?}", ast);
-    */
+    let tokens  = Tokenizer::new(root_file.code.len()).scan(root_file).unwrap();
+    let mut ast = Parser::new(root_file, &tokens).parse().unwrap();
+    semantic::analysis(&mut ast).unwrap();
+    let bc      = bytecode::generate_bytecode(&ast).unwrap();
+    vm::start_vm(&mut vm, &root_file, &bc);
 }

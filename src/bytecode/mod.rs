@@ -31,9 +31,9 @@ pub struct Compiler
     codes: Vec<IRCode>,
     patch: Vec<Patch>,
     depth: u16,
-    global: HashMap<String, Type>,
     local: Vec<Local>,
     consts: Vec<Value>,
+    function_id: HashMap<String, usize>,
 }
 
 impl Compiler
@@ -44,9 +44,9 @@ impl Compiler
             codes: Vec::with_capacity(5000),
             patch: Vec::with_capacity(255),
             depth: 0,
-            global: HashMap::new(),
             local: Vec::with_capacity(255),
             consts: Vec::with_capacity(255),
+            function_id: HashMap::with_capacity(256),
         }
     }
 

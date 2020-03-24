@@ -9,8 +9,9 @@ use super::{
 struct SymbolTable
 {
     symbol: HashMap<String, Symbol>,
+    locals: Vec<Symbol>,
+    last_local_scope: usize,
     // pub scopes: HashMap<StmtId, Scopes>,
-    imports: HashSet<String>,
 }
 
 #[derive(Debug)]
@@ -18,6 +19,7 @@ struct Symbol
 {
     name: String,
     types: Option<Type>,
+    span: CodeSpan,
     is_global: bool,
 }
 
@@ -25,16 +27,18 @@ pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     let mut table = SymbolTable {
         symbol: HashMap::with_capacity(255),
-        imports: HashSet::with_capacity(255),
+        locals: Vec::with_capacity(64),
+        last_local_scope: 0,
     };
 
     // resolve_directive(ast)?;
-    resolve_symbols(&mut table, ast)?;
+    resolve_toplevel(&mut table, ast)?;
+    println!("{:#?}", &table);
 
     Ok(())
 }
 
-fn resolve_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_toplevel(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     for stmt in ast.root.iter()
     {
@@ -44,6 +48,16 @@ fn resolve_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), 
         {
             Stmt::Declaration(ref decl) =>
             {
+                // Check Global declaration, and spit an error if it exists.
+                if table.symbol.contains_key(&decl.name)
+                {
+                    let message = format!("変数 {} が複数回定義されています。", &decl.name);
+                    root.report("Duplicated Declaration", &message);
+                    return Err(());
+                }
+
+                // Infer or Check the type.
+                // TODO - @Imcomplete: It can be separated into different code.
                 let maybe_type = if decl.is_annotated()
                 {
                     match maybe_parse_annotated_type(&decl.dectype)
@@ -88,6 +102,7 @@ fn resolve_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), 
                 let symbol = Symbol {
                     name: decl.name.clone(),
                     is_global: true,
+                    span: root.span,
                     types: maybe_type,
                 };
 
@@ -97,6 +112,75 @@ fn resolve_symbols(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), 
             Stmt::Function(targ) => 
             {
                 let func = ast.functions.get_mut(targ).unwrap();
+
+                // Check global declaration, and spit an error if it exists.
+                // TODO - @Incomplete: Do something with _exists, because it has Span too,
+                // maybe you can report in "info" style?
+                if let Some(_exists) = table.symbol.get(&func.it.name)
+                {
+                    let message = format!("変数 {} が複数回定義されています。", &func.it.name);
+                    root.report("Duplicated Declaration", &message);
+                    return Err(());
+                }
+
+                // Check annotated return type, or just say None, which means that 
+                // it'll get inferred by function's body.
+                let mut annotated_return_type = None;
+                if func.it.is_annotated() 
+                {
+                    annotated_return_type = match maybe_parse_annotated_type(&func.it.dectype) 
+                    {
+                        Ok(uncertain_type) => uncertain_type,
+                        Err((title, message)) => {
+                            root.report(title, message);
+                            return Err(());
+                        }
+                    }
+                }
+
+                // Determine each argument's type.
+                // TODO - @Incomplete: we forget the name of argument here: it has same problem
+                // as the local variables. how should we handle this?
+                // TODO - @Incomplete: Default argument support...?
+                let arg_types: Vec<Type> = if func.args.is_empty() 
+                {
+                    vec![]
+                }
+                else
+                {
+                    let mut arg_type_holder = Vec::with_capacity(func.args.len());
+
+                    for arg_decl in func.args.iter() 
+                    {
+                        match maybe_parse_annotated_type(&arg_decl.dectype) 
+                        {
+                             Ok(Some(trivial_type)) => arg_type_holder.push(trivial_type),
+                             Ok(None) => {
+                                 let message = format!("関数の引数 {} に型指定がありません。\n
+                                                       関数の引数には必ず型指定をして下さい。",
+                                                       arg_decl.name);
+                                 root.report("Untyped Argument Declaration", &message);
+                                 return Err(());
+                             }
+                             Err((title, message)) => {
+                                 root.report(title, message);
+                                 return Err(());
+                            }
+                        }
+                    }
+                    arg_type_holder
+                };
+
+                let final_type = Type::function(annotated_return_type.map(Box::new),
+                                                arg_types);
+
+                let symbol = Symbol {
+                    name: func.it.name.clone(),
+                    types: Some(final_type),
+                    span: root.span,
+                    is_global: true,
+                };
+                table.symbol.insert(func.it.name.clone(), symbol);
             }
             _ => (),
         }

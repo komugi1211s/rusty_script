@@ -133,11 +133,11 @@ impl Type
         }
     }
 
-    pub fn function(returns: Box<Self>, arg_require: Vec<Self>) -> Self
+    pub fn function(returns: Option<Box<Self>>, arg_require: Vec<Self>) -> Self
     {
         Self {
             kind: TypeKind::Function,
-            return_type: Some(returns),
+            return_type: returns,
             arg_type: arg_require,
             ..Default::default()
         }

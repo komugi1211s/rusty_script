@@ -2,7 +2,6 @@
 TODO:
     (468) Literal型をstructからenum variantsにし、自分で変換済みのデータを取り扱うように
     (17) ASTをマージできるようにしてディレクティブに対応できるように
-
  * */
 
 use super::{
@@ -46,8 +45,18 @@ impl<'m> Parser<'m>
     {
         while !self.is_at_end()
         {
-            let declaration = self.declaration()?;
-            self.ast.add_root(declaration);
+            /*
+            if self.is(TokenType::AtMark) 
+            {
+                let directive = self.directive()?;
+                self.ast.add_directive(directive);
+            }
+            else
+            */    
+            {
+                let declaration = self.declaration()?;
+                self.ast.add_root(declaration);
+            }
         }
         Ok(self.ast)
     }
@@ -64,6 +73,7 @@ impl<'m> Parser<'m>
 
     fn declaration(&mut self) -> Result<StmtId, ()>
     {
+
         let res = if self.is(TokenType::Iden) && self.is_next(TokenType::Colon)
         {
             self.parse_variable()
@@ -74,6 +84,11 @@ impl<'m> Parser<'m>
         };
 
         res
+    }
+
+    fn directive(&mut self) -> Result<StmtId, ()>
+    {
+        unimplemented!()
     }
 
     fn expression(&mut self) -> Result<Expression<'m>, ()>

@@ -93,7 +93,7 @@ pub fn traverse_statement(
             traverse_block(compiler, ast, innerblock);
             Ok(())
         }
-        //        Function(func_idx)    => declare_function(compiler, ast, func_idx),
+        // Function(func_idx) => declare_function(compiler, ast, func_idx),
         Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
 
         Break =>
@@ -104,6 +104,10 @@ pub fn traverse_statement(
         Continue =>
         {
             compiler.mark_continue();
+            Ok(())
+        }
+        Function(id) => 
+        {
             Ok(())
         }
         _ =>

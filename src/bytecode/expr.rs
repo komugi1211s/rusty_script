@@ -44,6 +44,8 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         }
 
         Literal => emit_constants(compiler, &expr.literal.as_ref().unwrap()),
+
+        FunctionCall => emit_function_call(compiler, &expr),
         _ =>
         {
             let msg = format!("{:?} は実装前です。", expr.kind);
@@ -51,6 +53,29 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
             panic!();
         }
     };
+}
+
+fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
+{
+    // at this point, we know that:
+    // Function exists, and properly declared as a function.
+    // Function will return an intended type.
+    // Receiver variable(if exists) and function holds the same type.
+    // argument has the same type.
+    // Functions are already emitted, we know which index we should jump.
+    assert!(expr.lhs.is_some(), "Function Call: lhs is empty, we don't know what it called.");
+    assert!(expr.lhs.as_ref().unwrap().kind == ExprKind::Variable,
+            "Function Call: Called something that's not a Variable.");
+    
+    let func_name = expr.lhs.as_ref().unwrap().variable_name.as_ref().unwrap().clone();
+    let func_index = compiler.get_func_ep(func_name);
+    
+    for arg_expr in expr.arg_types.iter().rev()
+    {
+        traverse_expression(compiler, arg_expr);
+    }
+
+    compiler.emit_op(IRCode::Call(func_index as u32));
 }
 
 fn emit_from_oper(compiler: &mut Compiler, oper: Operator)
