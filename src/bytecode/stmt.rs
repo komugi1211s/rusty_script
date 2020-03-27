@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::{
     trace::prelude::*,
     ast::*,
@@ -39,50 +41,53 @@ pub fn traverse_statement(
             let expr = ast.get_expr(*cond_expr);
             traverse_expression(compiler, expr);
 
-            let jnt_patch = compiler.reserve_one(); // Conditional Jump Position
+            let jnt_position = compiler.reserve_one();
             traverse_statement(compiler, ast, *if_id);
 
             if let Some(else_id) = else_block
             {
-                let jump_patch = compiler.reserve_one();
+                let jump_position = compiler.reserve_one();
+
                 let start_of_else = compiler.codes.len();
                 traverse_statement(compiler, ast, *else_id);
                 let end_of_else = compiler.codes.len();
 
-                compiler.patch(jnt_patch, IRCode::JNT(start_of_else as u32));
-                compiler.patch(jump_patch, IRCode::Jump(end_of_else as u32));
+                compiler.patch(jnt_position, IRCode::JNT(start_of_else as u32));
+                compiler.patch(jump_position, IRCode::Jump(end_of_else as u32));
             }
             else
             {
                 let end_if = compiler.codes.len();
-                compiler.patch(jnt_patch, IRCode::JNT(end_if as u32));
+                compiler.patch(jnt_position, IRCode::JNT(end_if as u32));
             }
             Ok(())
         }
 
         While(expr_id, inner_stmt) =>
         {
-            let before_expr = compiler.codes.len();
             let expr = ast.get_expr(*expr_id);
+
+            let conditional_expr = compiler.codes.len();
             traverse_expression(compiler, expr);
-            let jnt_patch = compiler.reserve_one();
 
-            let captured = capture_patch(compiler, |enclosed| {
-                traverse_statement(enclosed, ast, *inner_stmt);
-                enclosed.emit_op(IRCode::Jump(before_expr as u32));
+            let jnt_position = compiler.reserve_one();
+            let mut reserve_patches = Vec::with_capacity(255);
+            mem::swap(&mut compiler.patch, &mut reserve_patches);
 
-                let end_of_while = enclosed.codes.len();
-                enclosed.patch(jnt_patch, IRCode::JNT(end_of_while as u32));
-            });
+            traverse_statement(compiler, ast, *inner_stmt);
+            compiler.emit_op(IRCode::Jump(conditional_expr as u32));
 
             let end_of_while = compiler.codes.len();
-            for patch in &captured
+            compiler.patch(jnt_position, IRCode::JNT(end_of_while as u32));
+
+            mem::swap(&mut compiler.patch, &mut reserve_patches);
+            for patch in reserve_patches
             {
                 match patch.kind
                 {
                     PatchKind::Generic => unreachable!(),
-                    PatchKind::Break => compiler.patch(*patch, IRCode::Jump(end_of_while as u32)),
-                    PatchKind::Continue => compiler.patch(*patch, IRCode::Jump(before_expr as u32)),
+                    PatchKind::Break => compiler.patch(patch, IRCode::Jump(end_of_while as u32)),
+                    PatchKind::Continue => compiler.patch(patch, IRCode::Jump(conditional_expr as u32)),
                 }
             }
             Ok(())
@@ -147,12 +152,3 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
     };
 }
 
-use std::mem;
-fn capture_patch(compiler: &mut Compiler, func: impl FnOnce(&mut Compiler)) -> Vec<Patch>
-{
-    let mut old_vec = Vec::with_capacity(255);
-    mem::swap(&mut compiler.patch, &mut old_vec);
-    func(compiler);
-    mem::swap(&mut old_vec, &mut compiler.patch);
-    old_vec
-}

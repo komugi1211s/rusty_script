@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use super::{
     trace::prelude::*,
+    global::Global,
     ast::*,
+    semantic::{ SymbolTable, SymTable, Symbol },
     ir::IRCode,
-    types::{Type, Value},
+    types::{ Type, Value },
 };
 
 mod expr;
@@ -26,21 +28,24 @@ struct Local
 }
 
 #[derive(Debug)]
-pub struct Compiler
+pub struct Compiler<'s>
 {
+    table: &'s SymTable,
     codes: Vec<IRCode>,
     patch: Vec<Patch>,
-    depth: u16,
-    local: Vec<Local>,
     consts: Vec<Value>,
+    depth: u16,
+
+    local: Vec<Local>,
     function_id: HashMap<String, usize>,
 }
 
-impl Compiler
+impl<'s> Compiler<'s>
 {
-    fn new() -> Self
+    fn new(table: &'s SymTable) -> Self
     {
         Compiler {
+            table: table,
             codes: Vec::with_capacity(5000),
             patch: Vec::with_capacity(255),
             depth: 0,
@@ -67,6 +72,20 @@ impl Compiler
         self.depth -= 1;
         let depth = self.depth;
         self.local.retain(|x| x.depth <= depth);
+    }
+
+    fn search_local(&self, name: &str) -> Option<usize>
+    {
+        let last_idx = self.local.len() - 1;
+        for (idx, local) in self.local.iter().rev().enumerate()
+        {
+            let real_idx = last_idx - idx;
+            if local.name == name
+            {
+                return Some(real_idx);
+            }
+        }
+        None
     }
 
     #[inline(always)]
@@ -138,9 +157,19 @@ pub struct Patch
     position: usize,
 }
 
-pub fn generate_bytecode(ast: &ASTree) -> Result<CompiledCode, ()>
+
+pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, ()>
 {
-    let mut compiler = Compiler::new();
+    // TODO: This is not how it supposed to work.
+    // You cannot make "import" or "use" or any kind of module-type system work.
+    let mut compiler = Compiler::new(&global.symtable);
+
+    /*
+    for func_node in ast.functions.iter()
+    {
+        prepare_function(&mut compiler, ast, *func_node)
+    }
+    */
 
     for node in ast.root.iter()
     {

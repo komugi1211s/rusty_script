@@ -60,6 +60,11 @@ pub enum IRCode
     SStore(u32),
     BStore(u32),
 
+    Load(u32),
+    Store(u32),
+    GLoad(u32),
+    GStore(u32),
+
     Interrupt,
     DebugPrint,
 }

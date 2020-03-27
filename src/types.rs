@@ -16,6 +16,7 @@ pub enum TypeKind
     Ptr,
     Array,
     Function,
+    Union,
 
     // User_Defined.
     Struct,
@@ -155,8 +156,8 @@ impl Type
     {
         Self {
             // TODO - @Broken: Move optional into TypeKind::Union
-            kind: TypeKind::Struct,
-            struct_name: Some(format!("Option<{}>", &of)),
+            kind: TypeKind::Union,
+            struct_name: Some(format!("{}?", &of)),
             struct_members: vec![of, Self::null()],
             ..Default::default()
         }
@@ -226,7 +227,7 @@ impl std::fmt::Display for Type
                         String::from("nullptr")
                     }
                 }
-                Struct | Enum =>
+                Struct | Enum | Union =>
                 {
                     let struct_name = if let Some(ref name) = self.struct_name
                     {
@@ -234,7 +235,7 @@ impl std::fmt::Display for Type
                     }
                     else
                     {
-                        String::from("<NoNameStruct>")
+                        format!("<NoNameAbt> :: {:?}", self.kind)
                     };
 
                     let members = self

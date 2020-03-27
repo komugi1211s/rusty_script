@@ -194,7 +194,7 @@ impl<'m> Parser<'m>
             let dectype = self.parse_type(&prefix)?;
 
             let decl_info = ast::DeclarationData {
-                kind: ast::DeclKind::Argument,
+                kind: ast::DeclKind::Variable,
                 name,
                 dectype,
                 prefix,

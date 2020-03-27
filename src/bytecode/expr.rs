@@ -32,7 +32,10 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
 
         Assign =>
         {
-            expr.report("Unimplemented!", "代入は実装前です。");
+            let lhs = expr.lhs.as_ref().unwrap();
+            let rhs = expr.rhs.as_ref().unwrap();
+            traverse_expression(compiler, &*rhs);
+            emit_store(compiler, &*lhs);
             panic!();
         }
 
@@ -41,6 +44,12 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
             let lhs = expr.lhs.as_ref().unwrap();
             traverse_expression(compiler, &*lhs);
             emit_from_oper(compiler, expr.oper.unwrap());
+        }
+
+        Grouping => 
+        {
+            let lhs = expr.lhs.as_ref().unwrap();
+            traverse_expression(compiler, &*lhs);
         }
 
         Literal => emit_constants(compiler, &expr.literal.as_ref().unwrap()),
@@ -68,15 +77,31 @@ fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
             "Function Call: Called something that's not a Variable.");
     
     let func_name = expr.lhs.as_ref().unwrap().variable_name.as_ref().unwrap().clone();
-    let func_index = compiler.get_func_ep(func_name);
+    // let func_index = compiler.get_func_ep(func_name);
     
-    for arg_expr in expr.arg_types.iter().rev()
+    for arg_expr in expr.arg_expr.iter().rev()
     {
         traverse_expression(compiler, arg_expr);
     }
 
-    compiler.emit_op(IRCode::Call(func_index as u32));
+    compiler.emit_op(IRCode::Interrupt);
 }
+
+fn emit_store(compiler: &mut Compiler, target: &Expression<'_>) 
+{
+    let var_name = target.variable_name.as_ref().unwrap();
+    if let Some(index) = compiler.search_local(var_name)
+    {
+        compiler.emit_op(IRCode::Store(index as u32));
+    }
+    else
+    {
+        let message = format!("変数 {} を探しましたが、見つかりませんでした。", var_name);
+        target.report("Undefined Local Variable", &message);
+        panic!()
+    }
+}
+
 
 fn emit_from_oper(compiler: &mut Compiler, oper: Operator)
 {

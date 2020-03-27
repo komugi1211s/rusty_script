@@ -1,49 +1,56 @@
-use std::collections::{HashMap, HashSet};
+use std::sync::{ Arc, Mutex };
+use std::collections::{ HashMap, HashSet };
 use super::{
     ast::*,
-    types::Type,
+    types::{ Type, TypeKind },
     trace::prelude::*,
 };
 
-#[derive(Debug)]
-struct SymbolTable
+
+pub type SymbolTable = Arc<Mutex<SymTable>>;
+
+#[derive(Debug, Clone)]
+pub struct SymTable
 {
-    symbol: HashMap<String, Symbol>,
-    locals: Vec<Symbol>,
-    last_local_scope: usize,
+    pub symbol: HashMap<String, Symbol>,
+    pub locals: Vec<Symbol>,
     // pub scopes: HashMap<StmtId, Scopes>,
 }
 
-#[derive(Debug)]
-struct Symbol
+#[derive(Debug, Clone)]
+pub struct Symbol
 {
-    name: String,
-    types: Option<Type>,
-    span: CodeSpan,
-    is_global: bool,
+    pub name: String,
+    pub types: Option<Type>,
+    pub span: CodeSpan,
+    pub is_global: bool,
 }
 
-pub fn analysis(ast: &mut ASTree<'_>) -> Result<(), ()>
+pub fn new_symboltable() -> SymbolTable
 {
-    let mut table = SymbolTable {
+    let mut table = SymTable {
         symbol: HashMap::with_capacity(255),
         locals: Vec::with_capacity(64),
-        last_local_scope: 0,
     };
 
+    return Arc::new(Mutex::new(table));
+}
+
+pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+{
     // resolve_directive(ast)?;
-    resolve_toplevel(&mut table, ast)?;
+    resolve_toplevel(table, ast)?;
+    resolve_function_and_body(table, ast)?;
     println!("{:#?}", &table);
 
     Ok(())
 }
 
-fn resolve_toplevel(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     for stmt in ast.root.iter()
     {
         let root = ast.stmt.get(stmt.0 as usize).unwrap();
-
         match root.data
         {
             Stmt::Declaration(ref decl) =>
@@ -51,14 +58,14 @@ fn resolve_toplevel(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(),
                 // Check Global declaration, and spit an error if it exists.
                 if table.symbol.contains_key(&decl.name)
                 {
-                    let message = format!("変数 {} が複数回定義されています。", &decl.name);
+                    let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
                     root.report("Duplicated Declaration", &message);
                     return Err(());
                 }
 
                 // Infer or Check the type.
                 // TODO - @Imcomplete: It can be separated into different code.
-                let maybe_type = if decl.is_annotated()
+                let declared_type = if decl.is_annotated()
                 {
                     match maybe_parse_annotated_type(&decl.dectype)
                     {
@@ -72,24 +79,35 @@ fn resolve_toplevel(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(),
                 }
                 else
                 {
-                    if let Some(expr_id) = decl.expr
+                    None
+                };
+
+                let expr_type = if let Some(expr_id) = decl.expr
+                {
+                    if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                     {
-                        if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
-                        {
-                            // try_folding_literal(expr, 0)?;
-                            expr.end_type.clone()
-                        }
-                        else
-                        {
-                            // TODO: It can be okay if it's optional.
-                            root.report(
-                                "internal",
-                                "初期化時に式を期待しましたが、取得できませんでした。",
-                            );
-                            panic!();
-                        }
+                        // try_folding_literal(expr, 0)?;
+                        solve_type(table, expr)?;
+                        expr.end_type.clone()
                     }
                     else
+                    {
+                        // TODO: It can be okay if it's optional.
+                        root.report(
+                            "internal",
+                            "初期化時に式を期待しましたが、取得できませんでした。",
+                        );
+                        panic!();
+                    }
+                }
+                else
+                {
+                    Some(Type::null())
+                };
+
+                match (declared_type, expr_type)
+                {
+                    (None, None) => 
                     {
                         root.report(
                             "Empty Annotation/Initialization",
@@ -97,21 +115,52 @@ fn resolve_toplevel(table: &mut SymbolTable, ast: &mut ASTree<'_>) -> Result<(),
                         );
                         return Err(());
                     }
-                };
 
-                let symbol = Symbol {
-                    name: decl.name.clone(),
-                    is_global: true,
-                    span: root.span,
-                    types: maybe_type,
-                };
-
-                table.symbol.insert(decl.name.clone(), symbol);
+                    (Some(x), None) =>
+                    {
+                        let symbol = Symbol {
+                            name: decl.name.clone(),
+                            is_global: true,
+                            span: root.span,
+                            types: Some(x),
+                        };
+                        table.symbol.insert(decl.name.clone(), symbol);
+                    }
+                    (None, Some(x)) =>
+                    {
+                        let symbol = Symbol {
+                            name: decl.name.clone(),
+                            is_global: true,
+                            span: root.span,
+                            types: Some(x),
+                        };
+                        table.symbol.insert(decl.name.clone(), symbol);
+                    }
+                    (Some(x), Some(y)) => 
+                    {
+                        if type_match(&x, &y)
+                        {
+                            let symbol = Symbol {
+                                name: decl.name.clone(),
+                                is_global: true,
+                                span: root.span,
+                                types: Some(x),
+                            };
+                            table.symbol.insert(decl.name.clone(), symbol);
+                        }
+                        else
+                        {
+                            let message = &format!("変数の型 ({}) と式の結果型 ({}) が一致しませんでした。", x, y);
+                            root.report("Type Mismatch", message);
+                            return Err(());
+                        }
+                    }
+                }
             }
 
             Stmt::Function(targ) => 
             {
-                let func = ast.functions.get_mut(targ).unwrap();
+                let func = ast.functions.get(targ).unwrap();
 
                 // Check global declaration, and spit an error if it exists.
                 // TODO - @Incomplete: Do something with _exists, because it has Span too,
@@ -225,8 +274,7 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
-                let pointer_of = Box::new(type_of);
-                Ok(Some(Type::ptr(pointer_of)))
+                Ok(Some(Type::optional(type_of)))
             }
             else
             {
@@ -244,22 +292,13 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
 
 
 /*
+TODO - @Improvement: Currently, Literal folding is impossible due to the way Literal is
+structured - It carries a Token around instead of an actual value.
+It should be switched to "enum Literal { Int(i64), Str(String) .. }" if possible.
 
-
-// TODO - @Improvement: Currently, Literal folding is impossible to implement thanks to the
-structure of Literal data - It carries Token around instead of an actual value.
-It should be switched into " enum Literal { Int(i64), Str(String) .. } " if possible.
-
-Binary,
-Logical,
-FunctionCall,
-Assign,
-
-Literal,
-Grouping,
-Unary,
-Variable,
-Empty,
+It's supposed to be used as a source for error reporting when we need to.
+but since this data is always wrapped around Expression and never passed around as-is,
+this design decision is completely redundant.
 
 const MAX_FOLD_DEPTH: u32 = 3;
 fn try_folding_literal(expr: &mut Expression<'_>, depth: u32) -> Result<bool, ()> {
@@ -325,29 +364,161 @@ fn try_folding_literal(expr: &mut Expression<'_>, depth: u32) -> Result<bool, ()
         _ => unexpected_path(expr)
     }
 }
-
 fn fold_literal_binop<'b>(base: &'b Expression<'b>, lhs: &Literal<'_>, rhs: &Literal<'_>, oper: Operator) -> Literal<'b> {
 }
-
 */
 
-fn type_match(lhs: &Expression<'_>, rhs: &Expression<'_>) -> bool
+fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(), ()>
 {
-    lhs.end_type == rhs.end_type
+    for func in ast.functions.iter()
+    {
+        let statements = ast.get_stmt(func.block_id);
+        let mut actually_returned = false;
+        let mut func_return_type = None;
+
+        if let Stmt::Block(ref block_data) = statements.data 
+        {
+            for inner_stmt_id in block_data.statements.clone()
+            {
+                let inner_stmt = ast.stmt.get(inner_stmt_id.0 as usize).expect("Resolve Func stmt error");
+                match inner_stmt.data
+                {
+                    Stmt::Return(Some(expr_id)) => 
+                    {
+                        let expr = ast.expr.get_mut(expr_id.0 as usize).expect("No Expr Error");
+                        solve_type(table, expr);
+                        if func_return_type.is_none() && !actually_returned
+                        {
+                            func_return_type = expr.end_type.clone();
+                            actually_returned = true;
+                        }
+                        else
+                        {
+                            if actually_returned 
+                            {
+                                let message = format!("関数の戻り値の型に一貫性がありません\n
+                                    (複数の違う型: 最初にnullが、次に{}が返されました)",
+                                    expr.end_type.as_ref().unwrap());
+                                inner_stmt.report("Type Mismatch", &message);
+                            }
+                            else if !type_match(func_return_type.as_ref().unwrap(), expr.end_type.as_ref().unwrap())
+                            {
+                                let message = format!("関数の戻り値の型に一貫性がありません\n
+                                    (複数の違う型: 最初に{}が、次に{}が返されました)",
+                                    func_return_type.as_ref().unwrap(), expr.end_type.as_ref().unwrap());
+                                inner_stmt.report("Type Mismatch", &message);
+                            }
+                        }
+                    }
+                    Stmt::Return(None) =>
+                    {
+                        if !actually_returned { actually_returned = true; }
+                        if func_return_type.is_some()
+                        {
+                            let message = format!("関数の戻り値の型に一貫性がありません\n
+                                (複数の違う型: 最初に{}が、次にnullが返されました)",
+                                func_return_type.as_ref().unwrap());
+                            inner_stmt.report("Type Mismatch", &message);
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+        else
+        {
+            statements.report("internal", "関数の内部ブロックを期待しましたが、
+                ブロック以外が見つかりました。");
+            panic!()
+        }
+
+        if let Some(symbol) = table.symbol.get_mut(&func.it.name)
+        {
+            
+        }
+        else
+        {
+            let message = format!(
+                "セマンティクス解析中に関数 {} が見つかりませんでした。", 
+                &func.it.name
+            );
+            report("internal", &message);
+            return Err(());
+        }
+    }
+    Ok(())
 }
 
-fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), ()>
+fn type_match(lhs: &Type, rhs: &Type) -> bool
 {
+    use TypeKind::*;
+    match (lhs.kind, rhs.kind)
+    {
+        (Struct, Struct) | (Union, Union) =>
+        {
+            if lhs.struct_members.len() != rhs.struct_members.len() { return false; }
+
+            lhs.struct_members.iter()
+                              .zip(rhs.struct_members.iter())
+                              .all(|(lht, rht)| type_match(lht, rht))
+
+        }
+        (Enum, Enum) =>
+        {
+            lhs.struct_name == rhs.struct_name
+        }
+        (Function, Function) =>
+        {
+            let lhs_ret = lhs.return_type.as_ref().unwrap();
+            let rhs_ret = rhs.return_type.as_ref().unwrap();
+            if !type_match(&*lhs_ret, &*rhs_ret) { return false; }
+            if lhs.arg_type.len() != rhs.arg_type.len() { return false; }
+
+            lhs.arg_type.iter().zip(rhs.arg_type.iter()).all(|(lht, rht)| type_match(lht, rht))
+        }
+        (Ptr, Ptr) =>
+        {
+            let lhs_ptr = lhs.pointer_to.as_ref().unwrap();
+            let rhs_ptr = rhs.pointer_to.as_ref().unwrap();
+            type_match(&*lhs_ptr, &*rhs_ptr)
+        }
+        (Union, _) => 
+        {
+            for lhs_type in lhs.struct_members.iter()
+            {
+                if type_match(lhs_type, rhs)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        (Array, Array) => 
+        {
+            if lhs.is_array_dynamic != rhs.is_array_dynamic { return false; }
+            if lhs.array_size != rhs.array_size { return false; }
+            let lhs_inner_type = lhs.array_type.as_ref().unwrap();
+            let rhs_inner_type = rhs.array_type.as_ref().unwrap();
+
+            type_match(&*lhs_inner_type, &*rhs_inner_type)
+        }
+        (x, y) => x == y
+    }
+}
+
+fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
+{
+    if expr.end_type.is_some() { return Ok(()); }
+
     use ExprKind::*;
     match expr.kind
     {
-        Literal => Ok(()),
-        Assign => 
+        Literal =>  // if it hits here, it should be a problem on it's own
         {
-            // TODO: Actually emit something
-            Err(())
-        }        
-        Binary =>
+            expr.report("internal", "リテラル値に型が設定されていません。パーサー上の実装に問題があります。");
+            panic!()
+        }
+        Binary | Assign =>
         {
             let mut lhs = expr.lhs.as_mut().unwrap();
             let mut rhs = expr.rhs.as_mut().unwrap();
@@ -355,7 +526,9 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             if lhs.end_type.is_none() { solve_type(table, lhs.as_mut())?; }
             if rhs.end_type.is_none() { solve_type(table, rhs.as_mut())?; }
 
-            if type_match(lhs.as_ref(), rhs.as_ref())
+            let lhs_type = lhs.end_type.as_ref().unwrap();
+            let rhs_type = rhs.end_type.as_ref().unwrap();
+            if type_match(lhs_type, rhs_type)
             {
                 expr.end_type = lhs.end_type.clone();
                 Ok(())
@@ -363,8 +536,8 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             else
             {
                 let message = format!(
-                        "右辺値({})と左辺値({})で型が一致しませんでした。",
-                        lhs.end_type.as_ref().unwrap(), rhs.end_type.as_ref().unwrap()
+                        "右辺値の型 ({}) と左辺値の型 ({}) が一致しませんでした。",
+                        lhs_type, rhs_type
                     );
                 expr.report(
                     "Type Mismatch",
@@ -389,7 +562,9 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
                 solve_type(table, rhs.as_mut())?;
             }
 
-            if type_match(lhs.as_ref(), rhs.as_ref())
+            let lhs_type = lhs.end_type.as_ref().unwrap();
+            let rhs_type = rhs.end_type.as_ref().unwrap();
+            if type_match(lhs_type, rhs_type)
             {
                 expr.end_type = Some(Type::boolean());
                 Ok(())
@@ -397,8 +572,8 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             else
             {
                 let message = format!(
-                        "{} != {}: 右辺値と左辺値で型が一致しませんでした。",
-                        lhs.end_type.as_ref().unwrap(), rhs.end_type.as_ref().unwrap()
+                        "右辺値の型 ({}) と左辺値の型 ({}) が一致しませんでした。",
+                        lhs_type, rhs_type
                     );
                 expr.report(
                     "Type Mismatch",
@@ -407,7 +582,6 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
                 Err(())
             }
         }
-
         Unary =>
         {
             let mut var = expr.lhs.as_mut().unwrap();
@@ -415,19 +589,27 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
             {
                 solve_type(table, var.as_mut())?;
             }
-            var.report("Unimplemented", "Unaryはまだ実装できていません。");
+            expr.end_type = var.end_type.clone();
             Err(())
         }
         FunctionCall =>
         {
-            let mut lhs = expr.lhs.as_mut().unwrap();
-            if lhs.kind != Variable
+            let mut callee = expr.lhs.as_mut().unwrap();
+            if callee.end_type.is_none() 
             {
-                lhs.report("Uncallable", "呼び出そうとした対象は関数ではありません。");
+                solve_type(table, callee.as_mut())?;
+            }
+
+            let callee_type = callee.end_type.as_ref().unwrap();
+            if callee_type.kind != TypeKind::Function
+            {
+                let message = format!("呼び出そうとした対象 ({}) は関数ではありません。", callee_type);
+                expr.report("Type Mismatch", &message);
                 return Err(());
             }
 
-            expr.end_type = lhs.end_type.clone();
+            let return_type = callee_type.return_type.clone().unwrap();
+            expr.end_type = Some(*return_type);
             Err(())
         }
         Grouping =>
@@ -439,8 +621,27 @@ fn solve_type(table: &mut SymbolTable, expr: &mut Expression<'_>) -> Result<(), 
         }
         Variable =>
         {
-            expr.report("Unimplemented", "変数は実装されていません。");
-            Err(())
+            let var_name = expr.variable_name.as_ref().unwrap();
+            if let Some(symbol) = table.symbol.get(var_name)
+            {
+                if let Some(certain_type) = &symbol.types 
+                {
+                    expr.end_type = symbol.types.clone();
+                    Ok(())
+                }
+                else
+                {
+                    let message = format!("変数 {} の型の推論に失敗しました。 ", var_name);
+                    expr.report("Type Inference Failed", &message);
+                    Err(())
+                }
+            }
+            else
+            {
+                let message = format!("変数 {} は定義されていません。", var_name);
+                expr.report("Undefined Variable", &message);
+                Err(())
+            }
         }
         Empty =>
         {
