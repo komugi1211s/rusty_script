@@ -1,7 +1,7 @@
 use super::Parser;
 use crate::{
     ast::{BlockData, Statement, Stmt, StmtId},
-    tokenizer::token::{Token, TokenType},
+    tokenizer::token::{TokenType},
     trace::prelude::*,
 };
 

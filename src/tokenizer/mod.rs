@@ -120,7 +120,7 @@ impl<'m> Tokenizer<'m>
                         {
                             if self.peek() == '\n'
                             {
-                                self.add_newline();
+                                self.add_newline()?;
                             }
                             if self.peek() == '\0'
                             {
@@ -184,9 +184,6 @@ impl<'m> Tokenizer<'m>
 
     fn add_string(&mut self, module: &'m SourceFile) -> TResult
     {
-        let starting_line = self.current_line;
-        let starting_idx = self.current;
-
         while !self.is_at_end() && self.peek() != '"'
         {
             if self.source[self.current] == '\n'
@@ -200,7 +197,7 @@ impl<'m> Tokenizer<'m>
         if self.is_at_end()
         {
             report("Unterminated String", "\n文字列が閉じられていません。\n");
-            spit_line(module,&self.create_current_span());
+            spit_line(module, &self.create_current_span());
             return Err(());
         }
 
@@ -333,99 +330,4 @@ impl<'m> Tokenizer<'m>
         self.source.len() <= self.current
     }
 }
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[cfg(test)]
-    fn assert_lexed_token(token: &Token, requiretype: TokenType, requirelex: &str) {
-        assert_eq!(token.tokentype, requiretype);
-        assert!(token.lexeme.is_some());
-        assert_eq!(token.lexeme.as_ref().unwrap().as_str(), requirelex);
-    }
-
-    #[cfg(test)]
-    fn assert_simple_token(token: &Token, requiretype: TokenType) {
-        assert_eq!(token.tokentype, requiretype);
-        assert!(token.lexeme.is_none());
-    }
-
-    #[test]
-    fn tokenizer_arithmetic() {
-        let code = SourceFile::repl("10 + 2 - 5.2 * 10 / 12 % 9");
-        let result = Tokenizer::new(10).scan(&code);
-
-        assert!(result.is_ok());
-        let tokens = result.unwrap();
-
-        assert_eq!(tokens.len(), 10);
-
-        assert_lexed_token(&tokens[0], TokenType::Digit, "10");
-        assert_simple_token(&tokens[1], TokenType::Plus);
-        assert_lexed_token(&tokens[0], TokenType::Digit, "2");
-        assert_simple_token(&tokens[0], TokenType::Minus);
-        assert_lexed_token(&tokens[0], TokenType::Digit, "5.2");
-        assert_simple_token(&tokens[0], TokenType::Asterisk);
-        assert_lexed_token(&tokens[0], TokenType::Digit, "10");
-        assert_simple_token(&tokens[0], TokenType::Slash);
-        assert_lexed_token(&tokens[0], TokenType::Digit, "12");
-        assert_simple_token(&tokens[0], TokenType::Percent);
-        assert_lexed_token(&tokens[0], TokenType::Digit, "9");
-    }
-
-    #[test]
-    fn tokenize_string() {
-        let correct = SourceFile::repl(r#" "Hello World." "#);
-
-        let correct_result = Tokenizer::new(&correct).scan();
-        assert!(correct_result.is_ok());
-
-        let correct_vec = correct_result.unwrap();
-        assert_eq!(correct_vec.len(), 2);
-        assert_lexed_token(&correct_vec[0], TokenType::Str, "Hello World.");
-    }
-
-    #[test]
-    fn ignore_comments() {
-        let only_comment = SourceFile::repl(r"// Oh Hey mark.");
-        let result = Tokenizer::new(&only_comment).scan().unwrap();
-        assert_eq!(result.len(), 1);
-    }
-
-    #[test]
-    fn ignore_block_comments() {
-        let only_comment = SourceFile::repl(r"/* Hello there */ /* general reposti */");
-        let result = Tokenizer::new(&only_comment).scan().unwrap();
-        assert_eq!(result.len(), 1);
-    }
-
-    #[test]
-    fn reject_unterminated_string() {
-        let invalid = SourceFile::repl(r#" "This string is unterminated "#);
-        let invalid_result = Tokenizer::new(&invalid).scan();
-        assert!(invalid_result.is_err());
-    }
-
-    #[test]
-    fn reject_unknown_char() {
-        let unknown = SourceFile::repl("🌔");
-        let invalid_result = Tokenizer::new(&unknown).scan();
-        assert!(invalid_result.is_err());
-    }
-
-    #[test]
-    fn different_line_break() {
-        let windows_style = SourceFile::repl("100\r\n");
-        let unix_style = SourceFile::repl("100\n");
-        let windows_result = Tokenizer::new(&windows_style).scan();
-        let unix_result = Tokenizer::new(&unix_style).scan();
-        assert!(windows_result.is_ok());
-        assert!(unix_result.is_ok());
-
-        let win_vec = windows_result.unwrap();
-        let unix_vec = unix_result.unwrap();
-        assert_eq!(win_vec[0], unix_vec[0]);
-    }
-}
-*/

@@ -23,6 +23,7 @@ pub trait Reportable
 
 pub static ERROR_REPORTED: AtomicBool = AtomicBool::new(false);
 
+#[allow(dead_code)]
 pub fn error_reported() -> bool
 {
     ERROR_REPORTED.load(std::sync::atomic::Ordering::Relaxed)

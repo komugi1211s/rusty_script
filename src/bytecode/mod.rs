@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use super::{
-    trace::prelude::*,
     global::Global,
     ast::*,
-    semantic::{ SymbolTable, SymTable, Symbol },
+    semantic::{ SymTable },
     ir::IRCode,
     types::{ Type, Value },
 };
@@ -175,9 +174,10 @@ pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, 
 
     for node in ast.root.iter()
     {
-        traverse_statement(&mut compiler, ast, *node);
+        traverse_statement(&mut compiler, ast, *node)?;
     }
 
+    compiler.emit_op(IRCode::Return);
     Ok(CompiledCode {
         code: compiler.codes,
         consts: compiler.consts,

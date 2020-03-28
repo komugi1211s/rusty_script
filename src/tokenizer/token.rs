@@ -1,6 +1,7 @@
 use std::fmt;
 use crate::trace::prelude::*;
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenType
 {
@@ -117,11 +118,6 @@ impl<'m> Token<'m>
             span,
             lexeme: Some(lexeme),
         }
-    }
-
-    pub fn is_simple(&self) -> bool
-    {
-        self.lexeme.is_none()
     }
 
     pub fn report(&self, title: &str, message: &str)

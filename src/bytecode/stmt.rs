@@ -1,14 +1,13 @@
 use std::mem;
-
+#[allow(unused_imports)]
 use crate::{
     trace::prelude::*,
     ast::*,
     ir::IRCode,
-    types::{Type, Value},
 };
 
 use super::expr::traverse_expression;
-use super::{Compiler, Patch, PatchKind};
+use super::{Compiler, PatchKind};
 
 pub fn traverse_statement(
     compiler: &mut Compiler,
@@ -42,14 +41,14 @@ pub fn traverse_statement(
             traverse_expression(compiler, expr);
 
             let jnt_position = compiler.reserve_one();
-            traverse_statement(compiler, ast, *if_id);
+            traverse_statement(compiler, ast, *if_id)?;
 
             if let Some(else_id) = else_block
             {
                 let jump_position = compiler.reserve_one();
 
                 let start_of_else = compiler.codes.len();
-                traverse_statement(compiler, ast, *else_id);
+                traverse_statement(compiler, ast, *else_id)?;
                 let end_of_else = compiler.codes.len();
 
                 compiler.patch(jnt_position, IRCode::JNT(start_of_else as u32));
@@ -74,7 +73,7 @@ pub fn traverse_statement(
             let mut reserve_patches = Vec::with_capacity(255);
             mem::swap(&mut compiler.patch, &mut reserve_patches);
 
-            traverse_statement(compiler, ast, *inner_stmt);
+            traverse_statement(compiler, ast, *inner_stmt)?;
             compiler.emit_op(IRCode::Jump(conditional_expr as u32));
 
             let end_of_while = compiler.codes.len();
@@ -93,11 +92,8 @@ pub fn traverse_statement(
             Ok(())
         }
 
-        Block(innerblock) =>
-        {
-            traverse_block(compiler, ast, innerblock);
-            Ok(())
-        }
+        Block(innerblock) => traverse_block(compiler, ast, innerblock),
+
         // Function(func_idx) => declare_function(compiler, ast, func_idx),
         Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
 
@@ -111,7 +107,7 @@ pub fn traverse_statement(
             compiler.mark_continue();
             Ok(())
         }
-        Function(id) => 
+        Function(_) => 
         {
             Ok(())
         }
@@ -123,14 +119,15 @@ pub fn traverse_statement(
     }
 }
 
-fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData)
+fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) -> Result<(), ()>
 {
     compiler.deepen_nest();
     for stmt_id in &inner.statements
     {
-        traverse_statement(compiler, ast, *stmt_id);
+        traverse_statement(compiler, ast, *stmt_id)?;
     }
     compiler.shallowen_nest();
+    Ok(())
 }
 
 fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData)

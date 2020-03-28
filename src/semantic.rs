@@ -1,12 +1,12 @@
 use std::sync::{ Arc, Mutex };
-use std::collections::{ HashMap, HashSet };
+use std::collections::{ HashMap };
 use super::{
     ast::*,
     types::{ Type, TypeKind, NULL_TYPE },
     trace::prelude::*,
 };
 
-
+#[allow(dead_code)]
 pub type SymbolTable = Arc<Mutex<SymTable>>;
 
 #[derive(Debug, Clone)]
@@ -48,6 +48,7 @@ pub struct Symbol
     pub is_global: bool,
 }
 
+/*
 pub fn new_symboltable() -> SymbolTable
 {
     let table = SymTable {
@@ -58,6 +59,7 @@ pub fn new_symboltable() -> SymbolTable
 
     return Arc::new(Mutex::new(table));
 }
+*/
 
 pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
@@ -308,8 +310,8 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
                 todo!("Error Logging");
             }
         }
-        Struct(defs) => Err(("internal", "structは未実装です。")),
-        Userdef(defs) => Err(("internal", "userdefは未実装です。")),
+        Struct(_) => Err(("internal", "structは未実装です。")),
+        Userdef(_) => Err(("internal", "userdefは未実装です。")),
         Unknown => Err((
             "internal",
             "アノテーションがあるべき関数内で推論を必要とする定義に接触しました。",
@@ -562,8 +564,8 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
         }
         Binary | Assign =>
         {
-            let mut lhs = expr.lhs.as_mut().unwrap();
-            let mut rhs = expr.rhs.as_mut().unwrap();
+            let lhs = expr.lhs.as_mut().unwrap();
+            let rhs = expr.rhs.as_mut().unwrap();
 
             if lhs.end_type.is_none() { solve_type(table, lhs.as_mut())?; }
             if rhs.end_type.is_none() { solve_type(table, rhs.as_mut())?; }
@@ -591,8 +593,8 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
 
         Logical =>
         {
-            let mut lhs = expr.lhs.as_mut().unwrap();
-            let mut rhs = expr.rhs.as_mut().unwrap();
+            let lhs = expr.lhs.as_mut().unwrap();
+            let rhs = expr.rhs.as_mut().unwrap();
 
             if lhs.end_type.is_none()
             {
@@ -626,7 +628,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
         }
         Unary =>
         {
-            let mut var = expr.lhs.as_mut().unwrap();
+            let var = expr.lhs.as_mut().unwrap();
             if var.end_type.is_none()
             {
                 solve_type(table, var.as_mut())?;
@@ -636,7 +638,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
         }
         FunctionCall =>
         {
-            let mut callee = expr.lhs.as_mut().unwrap();
+            let callee = expr.lhs.as_mut().unwrap();
             if callee.end_type.is_none() 
             {
                 solve_type(table, callee.as_mut())?;
@@ -656,7 +658,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
         }
         Grouping =>
         {
-            let mut lhs = expr.lhs.as_mut().unwrap();
+            let lhs = expr.lhs.as_mut().unwrap();
             solve_type(table, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
@@ -666,7 +668,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
             let var_name = expr.variable_name.as_ref().unwrap();
             if let Some(symbol) = table.symbol.get(var_name)
             {
-                if let Some(certain_type) = &symbol.types 
+                if symbol.types.is_some()
                 {
                     expr.end_type = symbol.types.clone();
                     Ok(())

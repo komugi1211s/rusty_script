@@ -2,6 +2,7 @@
 
 // オペランドを持つ類のものは全てu32のオペランドを持つ
 // usizeとかu16とか使い分けたかったけど無理
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Hash, PartialEq)]
 pub enum IRCode
 {
@@ -69,10 +70,3 @@ pub enum IRCode
     DebugPrint,
 }
 
-pub fn print_ir_vec(ir_vec: &[IRCode])
-{
-    for (i, ir) in ir_vec.iter().enumerate()
-    {
-        println!("{} | {:?}", i, ir);
-    }
-}

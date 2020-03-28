@@ -28,7 +28,7 @@ impl VirtualMachine
     }
 }
 
-pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode) -> ()
+pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCode) -> ()
 {
     let code_length = bin.code.len();
 
@@ -120,6 +120,17 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
             {
                 println!("Interrupt hit.");
                 break;
+            }
+            IRCode::Return =>
+            {
+                if let Some(ret_idx) = vm.callst.pop()
+                {
+                    vm.inst_idx = ret_idx;
+                }
+                else
+                {
+                    break;
+                }
             }
             _ => unimplemented!(),
         }

@@ -1,14 +1,6 @@
 use std::cmp;
 use std::fmt;
 
-// 意図的にInvalidなスパンを作ってそれをEmptyとして使う
-pub const EMPTY_SPAN: CodeSpan = CodeSpan {
-    row_start: 0,
-    row_len: 0,
-    col_start: 0,
-    col_len: 0,
-};
-
 // ソースコード内で特定の範囲を指定するStruct
 // 誰も4,294,967,295行以上のコードなんて書くわけがないので
 // どっちもu32で固定
@@ -46,11 +38,6 @@ impl CodeSpan
             col_start: col_st as u32,
             col_len: col_len as u32,
         }
-    }
-
-    pub fn oneline(row: usize, col_st: usize, col_len: usize) -> Self
-    {
-        Self::new(row, 0, col_st, col_len)
     }
 
     pub fn combine(a: &CodeSpan, b: &CodeSpan) -> Self
@@ -112,11 +99,6 @@ impl CodeSpan
         self.row_len == 0
     }
 
-    #[inline(always)]
-    pub fn is_invalid(&self) -> bool
-    {
-        self.row_start == 0 && self.row_len == 0 && self.col_start == 0 && self.col_len == 0
-    }
 }
 // This test is old and it's kind of pointless
 // So i'm partially removing it

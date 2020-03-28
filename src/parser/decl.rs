@@ -6,7 +6,7 @@ use super::Parser;
 
 use crate::{
     ast,
-    tokenizer::token::{Token, TokenType},
+    tokenizer::token::{TokenType},
     trace::prelude::*,
 };
 
@@ -19,14 +19,6 @@ fn is_prefix_banned(cand: &str) -> bool
     }
 }
 
-fn is_suffix_banned(cand: &str) -> bool
-{
-    match cand
-    {
-        "struct" => true,
-        _ => false,
-    }
-}
 
 impl<'m> Parser<'m>
 {
@@ -118,6 +110,7 @@ impl<'m> Parser<'m>
         Ok(core_type)
     }
 
+    #[allow(dead_code)]
     fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()>
     {
         Err(())
@@ -133,12 +126,12 @@ impl<'m> Parser<'m>
                 TokenType::Constant =>
                 {
                     self.advance();
-                    prefix.insert(ast::DeclPrefix::Const);
+                    prefix.insert(ast::DeclPrefix::CONST);
                 }
                 TokenType::Public =>
                 {
                     self.advance();
-                    prefix.insert(ast::DeclPrefix::Public);
+                    prefix.insert(ast::DeclPrefix::PUBLIC);
                 }
                 _ => break,
             }

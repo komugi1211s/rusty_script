@@ -18,6 +18,7 @@ mod ir;
 mod vm;
 
 mod global {
+    #[allow(unused_imports)]
     use std::{
         env,
         collections::HashMap,
@@ -25,6 +26,7 @@ mod global {
         path::{ PathBuf, Path },
     };
 
+    #[allow(unused_imports)]
     use super::{
         ast::ASTree,
         semantic::{ SymbolTable, SymTable },
@@ -51,11 +53,7 @@ mod global {
             {
                 module_paths: vector,
                 modules: Vec::with_capacity(32),
-                symtable: SymTable {
-                    symbol: HashMap::with_capacity(255),
-                    locals: Vec::with_capacity(64),
-                    global_idx: 0,
-                }
+                symtable: SymTable::new(),
             }
         }
 
@@ -80,6 +78,7 @@ mod global {
             Err(())
         } 
 
+        /*
         pub fn lookup_by_name(&self, name: &str) -> Option<usize>
         {
             for (idx, module) in self.modules.iter().enumerate()
@@ -91,24 +90,19 @@ mod global {
             }
             None
         }
+        */
     }
 }
 
-use std::{
-    env,
-    time::Instant,
-    sync::{ Arc, Mutex },
-    cell::RefCell,
-    collections::HashMap,
-    path::{ PathBuf, Path },
-};
 
-use ast::ASTree;
 use parser::Parser;
 use tokenizer::Tokenizer;
-use semantic::{ SymbolTable, SymTable };
+
 use trace::prelude::*;
 use global::Global;
+use std::{
+    env,
+};
 
 fn main()
 {
@@ -173,6 +167,5 @@ fn main()
         }
     };
 
-    println!("{:#?}", &bc);
     vm::start_vm(&mut vm, &root_file, &bc);
 }

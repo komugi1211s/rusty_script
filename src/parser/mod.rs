@@ -86,6 +86,7 @@ impl<'m> Parser<'m>
         res
     }
 
+    #[allow(dead_code)]
     fn directive(&mut self) -> Result<StmtId, ()>
     {
         unimplemented!()
@@ -151,7 +152,7 @@ impl<'m> Parser<'m>
             expr = ExprInit {
                 kind: ExprKind::Logical,
                 module: Some(self.module),
-                span: Some(CodeSpan::combine(&start_span, &end_span)),
+                span: Some(span),
                 lhs: Some(Box::new(expr)),
                 rhs: Some(Box::new(right)),
                 oper: Some(Operator::Or),
@@ -444,6 +445,7 @@ impl<'m> Parser<'m>
         (!self.is_at_end() && self.get_next().tokentype == _type)
     }
 
+    #[allow(dead_code)]
     fn is_previous(&mut self, _type: TokenType) -> bool
     {
         (!self.is_at_end() && self.get_previous().tokentype == _type)
@@ -455,6 +457,7 @@ impl<'m> Parser<'m>
         x
     }
 
+    #[allow(dead_code)]
     fn get_previous(&self) -> &Token<'m>
     {
         let x = self.tokens.get(self.current - 1).unwrap();

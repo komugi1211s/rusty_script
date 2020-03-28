@@ -1,8 +1,7 @@
 use crate::{
     ast::*,
-    trace::prelude::*,
     ir::IRCode,
-    types::{Type, Value},
+    types::{ Value },
 };
 
 use super::Compiler;
@@ -94,7 +93,7 @@ fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
     assert!(expr.lhs.as_ref().unwrap().kind == ExprKind::Variable,
             "Function Call: Called something that's not a Variable.");
     
-    let func_name = expr.lhs.as_ref().unwrap().variable_name.as_ref().unwrap().clone();
+    // let func_name = expr.lhs.as_ref().unwrap().variable_name.as_ref().unwrap().clone();
     // let func_index = compiler.get_func_ep(func_name);
     
     for arg_expr in expr.arg_expr.iter().rev()

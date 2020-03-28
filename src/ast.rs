@@ -117,10 +117,6 @@ impl<'m> Expression<'m>
         spit_line(self.module, &self.span);
     }
 
-    pub fn is_literal(&self) -> bool
-    {
-        self.kind == ExprKind::Literal
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -230,7 +226,7 @@ impl Default for ExprKind
         ExprKind::Empty
     }
 }
-
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt
 {
@@ -250,6 +246,7 @@ pub enum Stmt
     Empty,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Operator
 {
@@ -314,49 +311,11 @@ impl std::fmt::Display for Operator
                 Wrap => "?",
                 Unwrap => "!",
                 Asgn => "=",
-                _ => "??",
             }
         )
     }
 }
 
-impl Operator
-{
-    // NOTE: 新しくオペレータを追加した時エラーがでてほしいので全部手打ち
-    pub fn is_arithmetic(&self) -> bool
-    {
-        // NOTE - @Improvement: Unaryのマイナスって計算式に入る？
-        use Operator::*;
-        match self
-        {
-            Add | Sub | Div | Mul | Mod | Neg => true,
-            EqEq | NotEq | LessEq | MoreEq | Less | More | Not | Ref | Deref | Wrap | Unwrap
-            | And | Or | Asgn => false,
-        }
-    }
-
-    pub fn is_comparison(&self) -> bool
-    {
-        use Operator::*;
-        match self
-        {
-            EqEq | NotEq | LessEq | MoreEq | Less | More => true,
-            Add | Sub | Div | Mul | Mod | Neg | Not | And | Or | Asgn | Ref | Deref | Wrap
-            | Unwrap => false,
-        }
-    }
-
-    pub fn is_logic(&self) -> bool
-    {
-        use Operator::*;
-        match self
-        {
-            And | Or | Not => true,
-            EqEq | NotEq | LessEq | MoreEq | Less | More | Add | Sub | Div | Mul | Mod | Ref
-            | Deref | Wrap | Unwrap | Neg | Asgn => false,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal<'m>
@@ -410,35 +369,6 @@ impl<'m> Literal<'m>
         Self::new(LiteralKind::Float, tok)
     }
 
-    pub fn is_str(&self) -> bool
-    {
-        self.kind == LiteralKind::Str
-    }
-
-    pub fn is_int(&self) -> bool
-    {
-        self.kind == LiteralKind::Int
-    }
-
-    pub fn is_float(&self) -> bool
-    {
-        self.kind == LiteralKind::Float
-    }
-
-    pub fn is_bool(&self) -> bool
-    {
-        self.kind == LiteralKind::Bool
-    }
-
-    pub fn is_null(&self) -> bool
-    {
-        self.kind == LiteralKind::Null
-    }
-
-    pub fn is_numeric(&self) -> bool
-    {
-        self.is_int() || self.is_float()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -459,17 +389,13 @@ impl DeclarationData
         self.prefix.is_empty() && self.dectype == ParsedType::Unknown
     }
 
-    pub fn is_constant(&self) -> bool
-    {
-        self.prefix.contains(DeclPrefix::Const)
-    }
-
     pub fn is_annotated(&self) -> bool
     {
         !self.is_inferred()
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedType
 {
@@ -502,11 +428,12 @@ impl ParsedType
 
 bitflags! {
     pub struct DeclPrefix: u16 {
-        const Const  = 1 << 1;
-        const Public = 1 << 2;
+        const CONST  = 1 << 1;
+        const PUBLIC = 1 << 2;
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclKind
 {
