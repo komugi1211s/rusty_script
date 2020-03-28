@@ -2,7 +2,7 @@ use std::sync::{ Arc, Mutex };
 use std::collections::{ HashMap, HashSet };
 use super::{
     ast::*,
-    types::{ Type, TypeKind },
+    types::{ Type, TypeKind, NULL_TYPE },
     trace::prelude::*,
 };
 
@@ -14,12 +14,34 @@ pub struct SymTable
 {
     pub symbol: HashMap<String, Symbol>,
     pub locals: Vec<Symbol>,
+
+    pub global_idx: usize,
     // pub scopes: HashMap<StmtId, Scopes>,
+}
+
+impl SymTable
+{
+    pub fn new() -> Self
+    {
+        SymTable {
+            symbol: HashMap::with_capacity(255),
+            locals: Vec::with_capacity(64),
+            global_idx: 0,
+        }
+    }
+
+    pub fn global_idx(&mut self) -> usize
+    {
+        let tmp = self.global_idx;
+        self.global_idx += 1;
+        tmp
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Symbol
 {
+    pub idx: usize,
     pub name: String,
     pub types: Option<Type>,
     pub span: CodeSpan,
@@ -28,9 +50,10 @@ pub struct Symbol
 
 pub fn new_symboltable() -> SymbolTable
 {
-    let mut table = SymTable {
+    let table = SymTable {
         symbol: HashMap::with_capacity(255),
         locals: Vec::with_capacity(64),
+        global_idx: 0,
     };
 
     return Arc::new(Mutex::new(table));
@@ -119,6 +142,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                     (Some(x), None) =>
                     {
                         let symbol = Symbol {
+                            idx: table.global_idx(),
                             name: decl.name.clone(),
                             is_global: true,
                             span: root.span,
@@ -129,6 +153,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                     (None, Some(x)) =>
                     {
                         let symbol = Symbol {
+                            idx: table.global_idx(),
                             name: decl.name.clone(),
                             is_global: true,
                             span: root.span,
@@ -141,6 +166,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                         if type_match(&x, &y)
                         {
                             let symbol = Symbol {
+                                idx: table.global_idx(),
                                 name: decl.name.clone(),
                                 is_global: true,
                                 span: root.span,
@@ -204,7 +230,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                         match maybe_parse_annotated_type(&arg_decl.dectype) 
                         {
                              Ok(Some(trivial_type)) => arg_type_holder.push(trivial_type),
-                             Ok(None) => {
+                             Ok(None) => {   
                                  let message = format!("関数の引数 {} に型指定がありません。\n
                                                        関数の引数には必ず型指定をして下さい。",
                                                        arg_decl.name);
@@ -224,6 +250,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                                                 arg_types);
 
                 let symbol = Symbol {
+                    idx: table.global_idx(),
                     name: func.it.name.clone(),
                     types: Some(final_type),
                     span: root.span,
@@ -372,11 +399,11 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
 {
     for func in ast.functions.iter()
     {
-        let statements = ast.get_stmt(func.block_id);
+        let statements = ast.stmt.get(func.block_id.0 as usize).unwrap();
         let mut actually_returned = false;
         let mut func_return_type = None;
 
-        if let Stmt::Block(ref block_data) = statements.data 
+        if let Stmt::Block(ref block_data) = statements.data
         {
             for inner_stmt_id in block_data.statements.clone()
             {
@@ -386,27 +413,20 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
                     Stmt::Return(Some(expr_id)) => 
                     {
                         let expr = ast.expr.get_mut(expr_id.0 as usize).expect("No Expr Error");
-                        solve_type(table, expr);
-                        if func_return_type.is_none() && !actually_returned
+                        solve_type(table, expr)?;
+                        if !actually_returned
                         {
                             func_return_type = expr.end_type.clone();
                             actually_returned = true;
                         }
                         else
                         {
-                            if actually_returned 
+                            if !type_match(func_return_type.as_ref().unwrap_or(&NULL_TYPE), expr.end_type.as_ref().unwrap_or(&NULL_TYPE))
                             {
-                                let message = format!("関数の戻り値の型に一貫性がありません\n
-                                    (複数の違う型: 最初にnullが、次に{}が返されました)",
-                                    expr.end_type.as_ref().unwrap());
+                                let message = format!("関数の戻り値の型に一貫性がありません\n(複数の違う型: 最初に{}が、次に{}が返されました)",
+                                    func_return_type.as_ref().unwrap_or(&NULL_TYPE), expr.end_type.as_ref().unwrap_or(&NULL_TYPE));
                                 inner_stmt.report("Type Mismatch", &message);
-                            }
-                            else if !type_match(func_return_type.as_ref().unwrap(), expr.end_type.as_ref().unwrap())
-                            {
-                                let message = format!("関数の戻り値の型に一貫性がありません\n
-                                    (複数の違う型: 最初に{}が、次に{}が返されました)",
-                                    func_return_type.as_ref().unwrap(), expr.end_type.as_ref().unwrap());
-                                inner_stmt.report("Type Mismatch", &message);
+                                return Err(());
                             }
                         }
                     }
@@ -415,10 +435,10 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
                         if !actually_returned { actually_returned = true; }
                         if func_return_type.is_some()
                         {
-                            let message = format!("関数の戻り値の型に一貫性がありません\n
-                                (複数の違う型: 最初に{}が、次にnullが返されました)",
+                            let message = format!("関数の戻り値の型に一貫性がありません\n(複数の違う型: 最初に{}が、次にnullが返されました)",
                                 func_return_type.as_ref().unwrap());
                             inner_stmt.report("Type Mismatch", &message);
+                            return Err(());
                         }
                     }
                     _ => (),
@@ -427,14 +447,36 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
         }
         else
         {
-            statements.report("internal", "関数の内部ブロックを期待しましたが、
-                ブロック以外が見つかりました。");
+            statements.report("internal", "関数の内部ブロックを期待しましたが、ブロック以外が見つかりました。");
             panic!()
         }
 
-        if let Some(symbol) = table.symbol.get_mut(&func.it.name)
+
+        if let Some(ref mut symbol) = table.symbol.get_mut(&func.it.name)
         {
-            
+            match symbol.types
+            {
+                Some(Type { kind: TypeKind::Function, return_type: Some(ref ret_type), .. }) =>
+                {
+                    if !type_match(&*ret_type, func_return_type.as_ref().unwrap_or(&NULL_TYPE))
+                    {
+                        let message = format!(
+                            "関数 {} の戻り値 ({}) の定義と実際の戻り値 ({}) が一致していません。", 
+                            &symbol.name, &*ret_type, func_return_type.as_ref().unwrap_or(&NULL_TYPE)
+                        );
+                        statements.report("Type Mismatch", &message);
+                        return Err(());
+                    }
+                }
+                Some(ref mut inner_type @ Type { kind: TypeKind::Function, return_type: None, .. }) =>
+                {
+                    inner_type.return_type = Some(Box::new(func_return_type.unwrap_or(Type::null())));
+                }
+                Some(_) | None => 
+                {
+                    unreachable!();
+                }
+            }
         }
         else
         {
@@ -536,7 +578,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
             else
             {
                 let message = format!(
-                        "右辺値の型 ({}) と左辺値の型 ({}) が一致しませんでした。",
+                        "左辺値の型 ({}) と右辺値の型 ({}) が一致しませんでした。",
                         lhs_type, rhs_type
                     );
                 expr.report(
@@ -610,7 +652,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
 
             let return_type = callee_type.return_type.clone().unwrap();
             expr.end_type = Some(*return_type);
-            Err(())
+            Ok(())
         }
         Grouping =>
         {

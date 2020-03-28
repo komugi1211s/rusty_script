@@ -55,8 +55,26 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         Literal => emit_constants(compiler, &expr.literal.as_ref().unwrap()),
 
         FunctionCall => emit_function_call(compiler, &expr),
-        _ =>
+        Variable =>
         {
+            let var_name = expr.variable_name.as_ref().unwrap();
+            if let Some(idx) = compiler.search_local(var_name)
+            {
+                compiler.emit_op(IRCode::Load(idx as u32));
+            }
+            else
+            {
+                if let Some(global_symbol) = compiler.table.symbol.get(var_name)
+                {
+                    compiler.emit_op(IRCode::GLoad(global_symbol.idx as u32));
+                }
+                else
+                {
+                    unreachable!()
+                }
+            }
+        }
+        _ => {
             let msg = format!("{:?} は実装前です。", expr.kind);
             expr.report("Unimplemented!", &msg);
             panic!();
@@ -97,7 +115,7 @@ fn emit_store(compiler: &mut Compiler, target: &Expression<'_>)
     else
     {
         let message = format!("変数 {} を探しましたが、見つかりませんでした。", var_name);
-        target.report("Undefined Local Variable", &message);
+        target.report("Undefined Variable", &message);
         panic!()
     }
 }

@@ -4,15 +4,15 @@ use super::{
     trace::prelude::*,
     types::Value,
 };
-
+use std::collections::HashMap;
 #[derive(Debug)]
 pub struct VirtualMachine
 {
     // Instruction Pointer :: current instruction.
     inst_idx: usize,
     callst: Vec<usize>,
-
     stack: Vec<Value>,
+    globals: HashMap<u32, Value>,
 }
 
 impl VirtualMachine
@@ -23,6 +23,7 @@ impl VirtualMachine
             inst_idx: 0,
             callst: Vec::with_capacity(65535),
             stack: Vec::with_capacity(65535),
+            globals: HashMap::with_capacity(512),
         }
     }
 }
@@ -104,6 +105,22 @@ pub fn start_vm(vm: &mut VirtualMachine, module: &SourceFile, bin: &CompiledCode
                 println!("{}", value);
             }
 
+            IRCode::GLoad(idx) =>
+            {
+                let value = vm.globals.get(idx).unwrap().clone();
+                vm.stack.push(value);
+            }
+            IRCode::GStore(idx) =>
+            {
+                let top_stack = vm.stack.pop().unwrap();
+                vm.globals.insert(*idx, top_stack);
+            }
+
+            IRCode::Interrupt =>
+            {
+                println!("Interrupt hit.");
+                break;
+            }
             _ => unimplemented!(),
         }
 

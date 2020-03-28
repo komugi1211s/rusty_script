@@ -68,6 +68,8 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan)
             );
         }
     }
+
+    println!("");
 }
 
 pub fn report(title: &str, message: &str)
@@ -75,12 +77,12 @@ pub fn report(title: &str, message: &str)
     if title == "internal"
     {
         println!("{:-<50}", "\x1b[31m[Isekai]\x1b[0m :: 内部エラー ");
-        println!("{}", message);
+        println!("{}\n", message);
         return;
     }
 
     println!("{:-<50}", format!("\x1b[31m[Isekai]\x1b[0m :: {} ", title));
-    println!("{}", message);
+    println!("{}\n", message);
     ERROR_REPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 

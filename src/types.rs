@@ -2,6 +2,10 @@ use std::fmt;
 use std::mem;
 use std::ops;
 
+lazy_static! {
+    pub static ref NULL_TYPE: Type = Type::null();
+}
+
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub enum TypeKind
 {

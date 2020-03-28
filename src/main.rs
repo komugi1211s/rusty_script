@@ -2,6 +2,7 @@
 //extern crate test;
 
 #[macro_use] extern crate bitflags;
+#[macro_use] extern crate lazy_static;
 
 mod trace;
 mod ast;
@@ -53,6 +54,7 @@ mod global {
                 symtable: SymTable {
                     symbol: HashMap::with_capacity(255),
                     locals: Vec::with_capacity(64),
+                    global_idx: 0,
                 }
             }
         }
@@ -124,17 +126,53 @@ fn main()
     let root_file = &globals.modules[root];
 
     let tokens   = {
-        Tokenizer::new(root_file.code.len()).scan(root_file).unwrap()
+        match Tokenizer::new(root_file.code.len()).scan(root_file)
+        {
+            Ok(x) => x,
+            Err(()) => 
+            {
+                println!("コンパイルに失敗しました: Tokenizer エラー");
+                return;
+            }
+        }
     };
 
     let mut ast  = {
-        Parser::new(root_file, &tokens).parse().unwrap()
+        match Parser::new(root_file, &tokens).parse()
+        {
+            Ok(x) => x,
+            Err(()) => 
+            {
+                println!("コンパイルに失敗しました: Parser エラー");
+                return;
+            }
+        }
     };
 
-    let symtable = {
-        semantic::analysis(&mut globals.symtable, &mut ast).unwrap()
+    {
+        match semantic::analysis(&mut globals.symtable, &mut ast)
+        {
+            Ok(x) => x,
+            Err(()) => 
+            {
+                println!("コンパイルに失敗しました: Semantic Analysis エラー");
+                return;
+            }
+        }
+    }
+
+    let bc       = {
+        match bytecode::generate_bytecode(&globals, &ast) 
+        {
+            Ok(x) => x,
+            Err(()) => 
+            {
+                println!("コンパイルに失敗しました: Bytecode Generator エラー");
+                return;
+            }
+        }
     };
 
-    let bc       = bytecode::generate_bytecode(&globals, &ast).unwrap();
+    println!("{:#?}", &bc);
     vm::start_vm(&mut vm, &root_file, &bc);
 }

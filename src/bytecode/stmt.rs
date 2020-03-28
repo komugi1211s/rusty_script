@@ -126,7 +126,7 @@ pub fn traverse_statement(
 fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData)
 {
     compiler.deepen_nest();
-    for (stmt_id) in &inner.statements
+    for stmt_id in &inner.statements
     {
         traverse_statement(compiler, ast, *stmt_id);
     }
@@ -135,20 +135,23 @@ fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData)
 
 fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData)
 {
-    let expr_type = if let Some(expr) = decl.expr
+    if let Some(expr) = decl.expr
     {
         let expr = ast.get_expr(expr);
-        traverse_expression(compiler, expr)
+        traverse_expression(compiler, expr);
     }
-    else
-    {
-    };
 
-    let declaration_type = if decl.is_annotated()
+    if let Some(local_idx) = compiler.search_local(&decl.name)
     {
+        compiler.emit_op(IRCode::Store(local_idx as u32));
+    }
+    else if let Some(symbol) = compiler.table.symbol.get(&decl.name)
+    {
+        compiler.emit_op(IRCode::GStore(symbol.idx as u32));
     }
     else
     {
-    };
+        unreachable!();
+    }
 }
 

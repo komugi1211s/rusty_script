@@ -20,7 +20,7 @@ pub struct CompiledCode
 }
 
 #[derive(Debug)]
-struct Local
+struct Defn
 {
     name: String,
     dtype: Type,
@@ -36,7 +36,7 @@ pub struct Compiler<'s>
     consts: Vec<Value>,
     depth: u16,
 
-    local: Vec<Local>,
+    local: Vec<Defn>,
     function_id: HashMap<String, usize>,
 }
 
@@ -76,6 +76,8 @@ impl<'s> Compiler<'s>
 
     fn search_local(&self, name: &str) -> Option<usize>
     {
+        if self.local.is_empty() { return None; }
+        
         let last_idx = self.local.len() - 1;
         for (idx, local) in self.local.iter().rev().enumerate()
         {
