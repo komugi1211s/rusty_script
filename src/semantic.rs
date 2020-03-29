@@ -54,7 +54,7 @@ use std::cell::RefCell;
 struct Locals 
 {
     current_block: Cell<u32>,
-    locals: RefCell<Vec<Symbol>>,
+    stack: RefCell<Vec<Symbol>>,
 }
 
 impl Locals
@@ -68,18 +68,18 @@ impl Locals
     {
         let new_depth = self.current_block.get() - 1;
         self.current_block.set(new_depth);
-        self.locals.borrow_mut().retain(|x| x.depth <= new_depth);
+        self.stack.borrow_mut().retain(|x| x.depth <= new_depth);
     }
 
     fn clear(&self)
     {
         self.current_block.set(0);
-        self.locals.borrow_mut().clear();
+        self.stack.borrow_mut().clear();
     }
 
     fn search(&self, name: &str) -> Option<usize>
     {
-        let locals = self.locals.borrow();
+        let locals = self.stack.borrow();
         if locals.is_empty() { return None; }
         
         let last_idx = locals.len() - 1;
@@ -96,7 +96,7 @@ impl Locals
     fn is_declared_within(&self, name: &str) -> bool
     {
         let depth = self.current_block.get();
-        let locals = self.locals.borrow();
+        let locals = self.stack.borrow();
 
         for local in locals.iter().rev()
         {
@@ -131,7 +131,7 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
     resolve_function_and_body(table, ast)?;
     
     let locals = Locals {
-        locals: RefCell::new(Vec::with_capacity(64)),
+        stack: RefCell::new(Vec::with_capacity(64)),
         current_block: Cell::new(0),
     };
 
@@ -356,6 +356,123 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
         }
     }
     Ok(())
+}
+
+fn resolve_fully(table: &mut SymTable, local: &Locals, ast: &mut ASTree) -> Result<(), ()>
+{
+    for stmt_id in ast.root.iter()
+    {
+        resolve_statement(table, local, ast, *stmt_id)?;
+    }
+    Ok(())
+}
+
+fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
+{
+    let stmt = ast.get_stmt(stmt_id);
+
+    match stmt.data
+    {
+        Stmt::Declaration(ref decl) =>
+        {
+            if local.is_declared_within(&decl.name)
+            {
+                let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
+                stmt.report("Duplicated Declaration", &message);
+                return Err(());
+            }
+            // Infer or Check the type.
+            // TODO - @Imcomplete: It can be separated into different code.
+            let declared_type = if decl.is_annotated()
+            {
+                match maybe_parse_annotated_type(&decl.dectype)
+                {
+                    Ok(x) => x,
+                    Err((title, message)) =>
+                    {
+                        stmt.report(title, message);
+                        return Err(());
+                    }
+                }
+            }
+            else
+            {
+                None
+            };
+
+            let expr_type = if let Some(expr_id) = decl.expr
+            {
+                if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
+                {
+                    // try_folding_literal(expr, 0)?;
+                    solve_type(table, Some(local), expr)?;
+                    expr.end_type.clone()
+                }
+                else
+                {
+                    // TODO: It can be okay if it's optional.
+                    stmt.report(
+                        "internal",
+                        "初期化時に式を期待しましたが、取得できませんでした。",
+                    );
+                    panic!();
+                }
+            }
+            else
+            {
+                Some(Type::null())
+            };
+
+            let local_idx = local.stack.borrow().len();
+            let local_depth = local.current_block.get();
+            let mut symbol = Symbol {
+                idx: local_idx,
+                name: decl.name.clone(),
+                span: stmt.span,
+                types: None,
+                depth: local_depth,
+            };
+
+            match (declared_type, expr_type)
+            {
+                (None, None) => 
+                {
+                    stmt.report(
+                        "Empty Annotation/Initialization",
+                        "変数の初期化も型指定もされていないため、型の推論が出来ません。",
+                    );
+                    return Err(());
+                }
+
+                (Some(x), None) =>
+                {
+                    symbol.types = Some(x);
+                    local.stack.borrow_mut().push(symbol);
+                }
+                (None, Some(x)) =>
+                {
+                    symbol.types = Some(x);
+                    local.stack.borrow_mut().push(symbol);
+                }
+                (Some(x), Some(y)) => 
+                {
+                    if type_match(&x, &y)
+                    {
+                        symbol.types = Some(x);
+                        local.stack.borrow_mut().push(symbol);
+                    }
+                    else
+                    {
+                        let message = &format!("変数の型 ({}) と式の結果型 ({}) が一致しませんでした。", x, y);
+                        stmt.report("Type Mismatch", message);
+                        return Err(());
+                    }
+                }
+            }
+
+            return Ok(());
+        }
+    }
 }
 
 fn resolve_locals(table: &mut SymTable, locals: &Locals, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
@@ -598,7 +715,6 @@ fn resolve_local_within_blocks(table: &mut SymTable, local: &Locals, ast: &mut A
     }
     Ok(())
 }
-
 
 fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
 {
