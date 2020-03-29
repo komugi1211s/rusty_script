@@ -105,11 +105,31 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 println!("{}", value);
             }
 
+            IRCode::Load(idx) =>
+            {
+                let value = vm.stack.get((*idx) as usize).unwrap().clone();
+                vm.stack.push(value);
+            }
+
+            IRCode::Store(idx) =>
+            {
+                let top_stack = vm.stack.pop().unwrap();
+                vm.stack[*idx as usize] = top_stack;
+            }
+            IRCode::True =>
+            {
+                vm.stack.push(Value::Boolean(true));
+            }
+            IRCode::False => 
+            {
+                vm.stack.push(Value::Boolean(false));
+            }
             IRCode::GLoad(idx) =>
             {
                 let value = vm.globals.get(idx).unwrap().clone();
                 vm.stack.push(value);
             }
+
             IRCode::GStore(idx) =>
             {
                 let top_stack = vm.stack.pop().unwrap();
@@ -132,7 +152,10 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                     break;
                 }
             }
-            _ => unimplemented!(),
+            x => {
+                println!("{:?}", x);
+                unimplemented!()
+            }
         }
 
         vm.inst_idx += 1;

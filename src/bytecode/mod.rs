@@ -4,7 +4,7 @@ use super::{
     ast::*,
     semantic::{ SymTable },
     ir::IRCode,
-    types::{ Type, Value },
+    types::{ Value },
 };
 
 mod expr;
@@ -22,7 +22,6 @@ pub struct CompiledCode
 struct Defn
 {
     name: String,
-    dtype: Type,
     depth: u16,
 }
 

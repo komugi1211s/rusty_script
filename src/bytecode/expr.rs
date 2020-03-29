@@ -57,7 +57,8 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         Variable =>
         {
             let var_name = expr.variable_name.as_ref().unwrap();
-            if let Some(idx) = compiler.search_local(var_name)
+            let variable_idx = expr.local_idx.clone();
+            if let Some(idx) = variable_idx
             {
                 compiler.emit_op(IRCode::Load(idx as u32));
             }

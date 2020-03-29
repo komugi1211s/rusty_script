@@ -137,18 +137,9 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
         let expr = ast.get_expr(expr);
         traverse_expression(compiler, expr);
     }
-
-    if let Some(local_idx) = compiler.search_local(&decl.name)
-    {
-        compiler.emit_op(IRCode::Store(local_idx as u32));
-    }
-    else if let Some(symbol) = compiler.table.symbol.get(&decl.name)
+    if let Some(symbol) = compiler.table.symbol.get(&decl.name)
     {
         compiler.emit_op(IRCode::GStore(symbol.idx as u32));
-    }
-    else
-    {
-        unreachable!();
     }
 }
 

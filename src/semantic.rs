@@ -45,7 +45,68 @@ pub struct Symbol
     pub name: String,
     pub types: Option<Type>,
     pub span: CodeSpan,
-    pub is_global: bool,
+    pub depth: u32,
+}
+
+use std::cell::Cell;
+use std::cell::RefCell;
+#[derive(Debug, Clone)]
+struct Locals 
+{
+    current_block: Cell<u32>,
+    locals: RefCell<Vec<Symbol>>,
+}
+
+impl Locals
+{
+    fn deepen(&self)
+    {
+        self.current_block.set(self.current_block.get() + 1);
+    }
+
+    fn shallowen(&self)
+    {
+        let new_depth = self.current_block.get() - 1;
+        self.current_block.set(new_depth);
+        self.locals.borrow_mut().retain(|x| x.depth <= new_depth);
+    }
+
+    fn clear(&self)
+    {
+        self.current_block.set(0);
+        self.locals.borrow_mut().clear();
+    }
+
+    fn search(&self, name: &str) -> Option<usize>
+    {
+        let locals = self.locals.borrow();
+        if locals.is_empty() { return None; }
+        
+        let last_idx = locals.len() - 1;
+        for (idx, local) in locals.iter().rev().enumerate()
+        {
+            let real_idx = last_idx - idx;
+            if local.name == name
+            {
+                return Some(real_idx);
+            }
+        }
+        None
+    }
+    fn is_declared_within(&self, name: &str) -> bool
+    {
+        let depth = self.current_block.get();
+        let locals = self.locals.borrow();
+
+        for local in locals.iter().rev()
+        {
+            if local.depth < depth { return false; }
+            if local.depth == depth && local.name == name {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 /*
@@ -64,16 +125,23 @@ pub fn new_symboltable() -> SymbolTable
 pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     // resolve_directive(ast)?;
-    resolve_toplevel(table, ast)?;
-    resolve_function_and_body(table, ast)?;
-    println!("{:#?}", &table);
+    let root_stmt = ast.root.clone();
 
+    resolve_toplevel(table, &root_stmt, ast)?;
+    resolve_function_and_body(table, ast)?;
+    
+    let locals = Locals {
+        locals: RefCell::new(Vec::with_capacity(64)),
+        current_block: Cell::new(0),
+    };
+
+    resolve_locals(table, &locals, &root_stmt, ast)?;
     Ok(())
 }
 
-fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
-    for stmt in ast.root.iter()
+    for stmt in root
     {
         let root = ast.stmt.get(stmt.0 as usize).unwrap();
         match root.data
@@ -112,7 +180,7 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                     if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                     {
                         // try_folding_literal(expr, 0)?;
-                        solve_type(table, expr)?;
+                        solve_type(table, None, expr)?;
                         expr.end_type.clone()
                     }
                     else
@@ -146,9 +214,9 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                         let symbol = Symbol {
                             idx: table.global_idx(),
                             name: decl.name.clone(),
-                            is_global: true,
                             span: root.span,
                             types: Some(x),
+                            depth: 0,
                         };
                         table.symbol.insert(decl.name.clone(), symbol);
                     }
@@ -157,9 +225,9 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                         let symbol = Symbol {
                             idx: table.global_idx(),
                             name: decl.name.clone(),
-                            is_global: true,
                             span: root.span,
                             types: Some(x),
+                            depth: 0,
                         };
                         table.symbol.insert(decl.name.clone(), symbol);
                     }
@@ -170,9 +238,9 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                             let symbol = Symbol {
                                 idx: table.global_idx(),
                                 name: decl.name.clone(),
-                                is_global: true,
                                 span: root.span,
                                 types: Some(x),
+                                depth: 0,
                             };
                             table.symbol.insert(decl.name.clone(), symbol);
                         }
@@ -256,15 +324,281 @@ fn resolve_toplevel(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()
                     name: func.it.name.clone(),
                     types: Some(final_type),
                     span: root.span,
-                    is_global: true,
+                    depth: 0,
                 };
                 table.symbol.insert(func.it.name.clone(), symbol);
+            }
+
+            Stmt::Expression(ref expr) => 
+            {
+                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
+                solve_type(table, None, expr)?;
+            }
+
+            Stmt::Print(ref expr) =>
+            {
+                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
+                solve_type(table, None, expr)?;
+            }
+
+            Stmt::If(expr, _, _) =>
+            {
+                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
+                solve_type(table, None, expr)?;
+            }
+
+            Stmt::While(expr, _) =>
+            {
+                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
+                solve_type(table, None, expr)?; 
             }
             _ => (),
         }
     }
     Ok(())
 }
+
+fn resolve_locals(table: &mut SymTable, locals: &Locals, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
+{
+    for stmt in root
+    {
+        let root_stmt = ast.get_stmt(*stmt);
+        match root_stmt.data
+        {
+            Stmt::Function(func_id) =>
+            {
+                let func_block = {
+                    let func_data = ast.functions.get(func_id).unwrap();
+                    let inner_stmt_block = ast.get_stmt(func_data.block_id);
+                    if let Stmt::Block(ref block_data) = inner_stmt_block.data 
+                    {
+                        block_data.clone()
+                    }
+                    else
+                    {
+                        let message = format!("関数 {} にブロックがありません。", &func_data.it.name);
+                        inner_stmt_block.report("Not a block", &message);
+                        return Err(());
+                    }
+                };
+                locals.deepen();
+                resolve_local_within_blocks(table, locals, ast, &func_block)?;
+                // ensure_function_declaration_type(table, ast, func_block)?;
+            }
+            Stmt::Block(ref block_data) =>
+            {
+                locals.deepen();
+                let cloned_block = block_data.clone();
+                resolve_local_within_blocks(table, locals, ast, &cloned_block)?;
+                locals.shallowen();
+            }
+
+            Stmt::If(_, if_b, else_b) => 
+            {
+                if let Stmt::Block(ref block_data) = ast.stmt.get(if_b.0 as usize).unwrap().data
+                {
+                    locals.deepen();
+                    let cloned_block = block_data.clone();
+                    resolve_local_within_blocks(table, locals, ast, &cloned_block)?;
+                    locals.shallowen();
+                }
+
+                if let Some(else_block_id) = else_b
+                {
+                    if let Stmt::Block(ref block_data) = ast.get_stmt(else_block_id).data
+                    {
+                        locals.deepen();
+                        let block = block_data.clone();
+                        resolve_local_within_blocks(table, locals, ast, &block)?;
+                        locals.shallowen();
+                    }
+                }
+            }
+
+            Stmt::While(_, while_b) =>
+            {
+                if let Stmt::Block(ref block_data) = ast.get_stmt(while_b).data
+                {
+                    locals.deepen();
+                    let block = block_data.clone();
+                    resolve_local_within_blocks(table, locals, ast, &block)?;
+                    locals.shallowen();
+                }
+            }
+            _ => (),
+        }
+        locals.clear();
+    }
+    Ok(())
+}
+
+fn resolve_local_within_blocks(table: &mut SymTable, local: &Locals, ast: &mut ASTree, block: &BlockData) -> Result<(), ()>
+{
+    for stmt_id in block.statements.iter()
+    {
+        let stmt = ast.stmt.get(stmt_id.0 as usize).unwrap();
+        match stmt.data
+        {
+            Stmt::Declaration(ref decl) =>
+            {
+                if local.is_declared_within(&decl.name)
+                {
+                    let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
+                    stmt.report("Duplicated Declaration", &message);
+                    return Err(());
+                }
+                // Infer or Check the type.
+                // TODO - @Imcomplete: It can be separated into different code.
+                let declared_type = if decl.is_annotated()
+                {
+                    match maybe_parse_annotated_type(&decl.dectype)
+                    {
+                        Ok(x) => x,
+                        Err((title, message)) =>
+                        {
+                            stmt.report(title, message);
+                            return Err(());
+                        }
+                    }
+                }
+                else
+                {
+                    None
+                };
+
+                let expr_type = if let Some(expr_id) = decl.expr
+                {
+                    if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
+                    {
+                        // try_folding_literal(expr, 0)?;
+                        solve_type(table, Some(local), expr)?;
+                        expr.end_type.clone()
+                    }
+                    else
+                    {
+                        // TODO: It can be okay if it's optional.
+                        stmt.report(
+                            "internal",
+                            "初期化時に式を期待しましたが、取得できませんでした。",
+                        );
+                        panic!();
+                    }
+                }
+                else
+                {
+                    Some(Type::null())
+                };
+
+                let local_idx = local.locals.borrow().len();
+                let local_depth = local.current_block.get();
+                let mut symbol = Symbol {
+                    idx: local_idx,
+                    name: decl.name.clone(),
+                    span: stmt.span,
+                    types: None,
+                    depth: local_depth,
+                };
+
+                match (declared_type, expr_type)
+                {
+                    (None, None) => 
+                    {
+                        stmt.report(
+                            "Empty Annotation/Initialization",
+                            "変数の初期化も型指定もされていないため、型の推論が出来ません。",
+                        );
+                        return Err(());
+                    }
+
+                    (Some(x), None) =>
+                    {
+                        symbol.types = Some(x);
+                        local.locals.borrow_mut().push(symbol);
+                    }
+                    (None, Some(x)) =>
+                    {
+                        symbol.types = Some(x);
+                        local.locals.borrow_mut().push(symbol);
+                    }
+                    (Some(x), Some(y)) => 
+                    {
+                        if type_match(&x, &y)
+                        {
+                            symbol.types = Some(x);
+                            local.locals.borrow_mut().push(symbol);
+                        }
+                        else
+                        {
+                            let message = &format!("変数の型 ({}) と式の結果型 ({}) が一致しませんでした。", x, y);
+                            stmt.report("Type Mismatch", message);
+                            return Err(());
+                        }
+                    }
+                }
+            }
+            Stmt::Expression(expr_id) => 
+            {
+                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
+                solve_type(table, Some(local), expr)?;
+            }
+            Stmt::Print(expr_id) =>
+            {
+                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
+                solve_type(table, Some(local), expr)?;
+            }
+            Stmt::Return(Some(expr_id)) => 
+            {
+                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
+                solve_type(table, Some(local), expr)?;
+            }
+            Stmt::While(expr_id, stmt_id) =>
+            {
+                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
+                solve_type(table, Some(local), expr)?;
+
+                if let Stmt::Block(ref block_data) = ast.get_stmt(stmt_id).data
+                {
+                    local.deepen();
+                    let block = block_data.clone();
+                    resolve_local_within_blocks(table, local, ast, &block)?;
+                    local.shallowen();
+                }
+            }
+            Stmt::If(expr_id, if_id, else_id) =>
+            {
+                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
+                solve_type(table, Some(local), expr)?;
+                if let Stmt::Block(ref block_data) = ast.get_stmt(if_id).data
+                {
+                    local.deepen();
+                    let block = block_data.clone();
+                    resolve_local_within_blocks(table, local, ast, &block)?;
+                    local.shallowen();
+                }
+                if let Some(stmt_id) = else_id 
+                {
+                    if let Stmt::Block(ref block_data) = ast.get_stmt(stmt_id).data
+                    {
+                        local.deepen();
+                        let block = block_data.clone();
+                        resolve_local_within_blocks(table, local, ast, &block)?;
+                        local.shallowen();
+                    }
+                }
+            }
+            Stmt::Block(ref block_data) =>
+            {
+                local.deepen();
+                let block = block_data.clone();
+                resolve_local_within_blocks(table, local, ast, &block)?;
+                local.shallowen();
+            }
+            _ => (),
+        }
+    }
+    Ok(())
+}
+
 
 fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
 {
@@ -415,7 +749,7 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
                     Stmt::Return(Some(expr_id)) => 
                     {
                         let expr = ast.expr.get_mut(expr_id.0 as usize).expect("No Expr Error");
-                        solve_type(table, expr)?;
+                        solve_type(table, None, expr)?;
                         if !actually_returned
                         {
                             func_return_type = expr.end_type.clone();
@@ -550,7 +884,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
     }
 }
 
-fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
+fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expression<'_>) -> Result<(), ()>
 {
     if expr.end_type.is_some() { return Ok(()); }
 
@@ -567,8 +901,8 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
             let lhs = expr.lhs.as_mut().unwrap();
             let rhs = expr.rhs.as_mut().unwrap();
 
-            if lhs.end_type.is_none() { solve_type(table, lhs.as_mut())?; }
-            if rhs.end_type.is_none() { solve_type(table, rhs.as_mut())?; }
+            if lhs.end_type.is_none() { solve_type(table, locals, lhs.as_mut())?; }
+            if rhs.end_type.is_none() { solve_type(table, locals, rhs.as_mut())?; }
 
             let lhs_type = lhs.end_type.as_ref().unwrap();
             let rhs_type = rhs.end_type.as_ref().unwrap();
@@ -598,12 +932,12 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
 
             if lhs.end_type.is_none()
             {
-                solve_type(table, lhs.as_mut())?;
+                solve_type(table, locals, lhs.as_mut())?;
             }
 
             if rhs.end_type.is_none()
             {
-                solve_type(table, rhs.as_mut())?;
+                solve_type(table, locals, rhs.as_mut())?;
             }
 
             let lhs_type = lhs.end_type.as_ref().unwrap();
@@ -631,7 +965,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
             let var = expr.lhs.as_mut().unwrap();
             if var.end_type.is_none()
             {
-                solve_type(table, var.as_mut())?;
+                solve_type(table, locals, var.as_mut())?;
             }
             expr.end_type = var.end_type.clone();
             Err(())
@@ -641,7 +975,7 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
             let callee = expr.lhs.as_mut().unwrap();
             if callee.end_type.is_none() 
             {
-                solve_type(table, callee.as_mut())?;
+                solve_type(table, locals, callee.as_mut())?;
             }
 
             let callee_type = callee.end_type.as_ref().unwrap();
@@ -659,13 +993,36 @@ fn solve_type(table: &mut SymTable, expr: &mut Expression<'_>) -> Result<(), ()>
         Grouping =>
         {
             let lhs = expr.lhs.as_mut().unwrap();
-            solve_type(table, lhs.as_mut())?;
+            solve_type(table, locals, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
         Variable =>
         {
             let var_name = expr.variable_name.as_ref().unwrap();
+            if let Some(locals) = locals
+            {
+                if let Some(symbol_idx) = locals.search(var_name)
+                {
+                    {
+                        let mut local_borrowed = locals.locals.borrow_mut();
+                        let symbol = local_borrowed.get_mut(symbol_idx).unwrap();
+                        if symbol.types.is_some()
+                        {
+                            expr.end_type = symbol.types.clone();
+                            expr.local_idx = Some(symbol_idx as u32);
+                            return Ok(());
+                        }
+                        else
+                        {
+                            let message = format!("変数 {} の型の推論に失敗しました。 ", var_name);
+                            expr.report("Type Inference Failed", &message);
+                            return Err(());
+                        }
+                    }
+                }
+            }
+
             if let Some(symbol) = table.symbol.get(var_name)
             {
                 if symbol.types.is_some()

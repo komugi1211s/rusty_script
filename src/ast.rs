@@ -52,12 +52,12 @@ impl<'m> ASTree<'m>
         self.root.push(stmt_id);
     }
 
-    pub fn get_expr(&'m self, id: ExprId) -> &'m Expression
+    pub fn get_expr<'a>(&'m self, id: ExprId) -> &'a Expression<'m>
     {
         self.expr.get(id.0 as usize).unwrap()
     }
 
-    pub fn get_stmt(&'m self, id: StmtId) -> &'m Statement
+    pub fn get_stmt<'a>(&'m self, id: StmtId) -> &'a Statement<'m>
     {
         self.stmt.get(id.0 as usize).unwrap()
     }
@@ -70,18 +70,12 @@ pub struct StmtId(pub u32);
 pub struct ExprId(pub u32);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FunctionData
+pub struct Statement<'m>
 {
-    pub it: DeclarationData,
-    pub args: Vec<DeclarationData>,
-    pub block_id: StmtId,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BlockData
-{
-    pub local_count: usize,
-    pub statements: Vec<StmtId>,
+    pub span: CodeSpan,
+    pub module: &'m SourceFile,
+    pub data: Stmt,
+    pub parent: Option<StmtId>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,10 +91,26 @@ pub struct Expression<'m>
     pub oper: Option<Operator>,
 
     pub variable_name: Option<String>,
+    pub local_idx: Option<u32>,
     pub arg_expr: Vec<Expression<'m>>,
     pub literal: Option<Literal<'m>>,
 
     pub end_type: Option<Type>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionData
+{
+    pub it: DeclarationData,
+    pub args: Vec<DeclarationData>,
+    pub block_id: StmtId,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockData
+{
+    pub local_count: usize,
+    pub statements: Vec<StmtId>,
 }
 
 impl Reportable for Expression<'_> 
@@ -151,20 +161,12 @@ impl<'m> ExprInit<'m>
             rhs: self.rhs,
             oper: self.oper,
             variable_name: self.variable_name,
+            local_idx: None,
             arg_expr: self.arg_expr,
             literal: self.literal,
             end_type: self.end_type,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Statement<'m>
-{
-    pub span: CodeSpan,
-    pub module: &'m SourceFile,
-    pub data: Stmt,
-    pub parent: Option<StmtId>,
 }
 
 impl Reportable for Statement<'_> 
