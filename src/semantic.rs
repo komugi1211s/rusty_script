@@ -516,13 +516,60 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
 
         Stmt::Function(func_id) =>
         {
-            let func_block_id = {
+            locals.deepen();
+            let local_depth = locals.current_block.get();
+            {
                 let func_data = expect_opt!(ast.functions.get(func_id),
                 "指定された関数({})が見つかりませんでした。", func_id);
-                func_data.block_id
+                
+                for decl in func_data.args.iter()
+                {
+                    // Infer or Check the type.
+                    // TODO - @Imcomplete: It can be separated into different code.
+                    if decl.is_inferred()
+                    {
+                        stmt.report("Type Annotation Required", "関数の引数には型を指定してください。");
+                        return Err(());
+                    }
+                    let declared_type = match maybe_parse_annotated_type(&decl.dectype)
+                    {
+                        Ok(x) => x,
+                        Err((title, message)) =>
+                        {
+                            stmt.report(title, message);
+                            return Err(());
+                        }
+                    };
+                    let local_idx = locals.stack.borrow().len();
+                    
+                    let symbol = Symbol {
+                        idx: local_idx,
+                        name: decl.name.clone(),
+                        span: stmt.span,
+                        types: declared_type,
+                        depth: local_depth,
+                    };
+                    locals.stack.borrow_mut().push(symbol);
+                }
             };
 
-            resolve_statement(table, locals, ast, func_block_id)?;
+            let func_block_id = expect_opt!(ast.functions.get(func_id),
+                "指定された関数({})が見つかりませんでした。", func_id).block_id;
+            {
+                let stmt_inner = expect_opt!(ast.stmt.get(func_block_id.0 as usize), 
+                "指定された文({:?})が見つかりませんでした。", stmt_id);
+
+                if let Stmt::Block(ref block_data) = stmt_inner.data
+                {
+                    let cloned = block_data.statements.clone();
+                    for inner_stmt in cloned.iter()
+                    {
+                        resolve_statement(table, locals, ast, *inner_stmt)?;
+                    }
+                }
+            }
+            locals.shallowen();
+
             // ensure_function_declaration_type(table, locals, ast, func_block_id)?;
         }
 
@@ -997,21 +1044,21 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
                 if symbol.types.is_some()
                 {
                     expr.end_type = symbol.types.clone();
-                    Ok(())
+                    return Ok(());
                 }
                 else
                 {
                     let message = format!("変数 {} の型の推論に失敗しました。 ", var_name);
                     expr.report("Type Inference Failed", &message);
-                    Err(())
+                    return Err(());
                 }
             }
-            else
-            {
-                let message = format!("変数 {} は定義されていません。", var_name);
-                expr.report("Undefined Variable", &message);
-                Err(())
-            }
+
+            println!("{:#?} {:#?}", table, locals);
+            panic!();
+            let message = format!("変数 {} は定義されていません。", var_name);
+            expr.report("Undefined Variable", &message);
+            Err(())
         }
         Empty =>
         {

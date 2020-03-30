@@ -5,9 +5,9 @@ use crate::{
     trace::prelude::*
 };
 
-use super::Compiler;
+use super::{ Compiler };
 
-pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
+pub fn traverse_expression(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'_>)
 {
     use ExprKind::*;
     match expr.kind
@@ -16,8 +16,8 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         {
             let lhs = expr.lhs.as_ref().unwrap();
             let rhs = expr.rhs.as_ref().unwrap();
-            traverse_expression(compiler, &*lhs);
-            traverse_expression(compiler, &*rhs);
+            traverse_expression(compiler, ast, &*lhs);
+            traverse_expression(compiler, ast, &*rhs);
             emit_from_oper(compiler, expr.oper.unwrap());
         }
 
@@ -25,8 +25,8 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         {
             let lhs = expr.lhs.as_ref().unwrap();
             let rhs = expr.rhs.as_ref().unwrap();
-            traverse_expression(compiler, &*lhs);
-            traverse_expression(compiler, &*rhs);
+            traverse_expression(compiler, ast, &*lhs);
+            traverse_expression(compiler, ast, &*rhs);
             emit_from_oper(compiler, expr.oper.unwrap());
         }
 
@@ -34,26 +34,26 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         {
             let rhs = expr.rhs.as_ref().unwrap();
             let lhs = expr.lhs.as_ref().unwrap();
-            traverse_expression(compiler, &*rhs);
+            traverse_expression(compiler, ast, &*rhs);
             emit_store(compiler, &*lhs);
         }
 
         Unary =>
         {
             let rhs = expr.rhs.as_ref().unwrap();
-            traverse_expression(compiler, &*rhs);
+            traverse_expression(compiler, ast, &*rhs);
             emit_from_oper(compiler, expr.oper.unwrap());
         }
 
         Grouping => 
         {
             let lhs = expr.lhs.as_ref().unwrap();
-            traverse_expression(compiler, &*lhs);
+            traverse_expression(compiler, ast, &*lhs);
         }
 
         Literal => emit_constants(compiler, &expr.literal.as_ref().unwrap()),
 
-        FunctionCall => emit_function_call(compiler, &expr),
+        FunctionCall => emit_function_call(compiler, ast, &expr),
         Variable =>
         {
             let var_name = expr.variable_name.as_ref().unwrap();
@@ -81,14 +81,13 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
     };
 }
 
-fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
+fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'_>)
 {
     // at this point, we know that:
     // Function exists, and properly declared as a function.
     // Function will return an intended type.
     // Receiver variable(if exists) and function holds the same type.
     // argument has the same type.
-    // Functions are already emitted, we know which index we should jump.
     
     assert!(expr.lhs.is_some(), "Function Call: lhs is empty, we don't know what it called.");
     
@@ -97,18 +96,10 @@ fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
 
     for arg_expr in expr.arg_expr.iter().rev()
     {
-        traverse_expression(compiler, arg_expr);
+        traverse_expression(compiler, ast, arg_expr);
     }
 
-    let index = match compiler.function_idx.get(name)
-    {
-        Some(x) => x,
-        None =>
-        {
-            
-        }
-    }
-
+    let index = *expect_opt!(compiler.function_idx.get(name), "関数 {} の定義に失敗しました。", name);
     compiler.emit_op(IRCode::Call(index));
 }
 

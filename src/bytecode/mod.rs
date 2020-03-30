@@ -14,15 +14,9 @@ use stmt::traverse_statement;
 #[derive(Debug)]
 pub struct CompiledCode
 {
+    pub ep: usize,
     pub code: Vec<IRCode>,
     pub consts: Vec<Value>,
-}
-
-#[derive(Debug)]
-struct Defn
-{
-    name: String,
-    depth: u16,
 }
 
 #[derive(Debug)]
@@ -126,6 +120,19 @@ pub struct Patch
     position: usize,
 }
 
+fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionData) -> Result<(), ()>
+{
+    if compiler.function_idx.contains_key(&func_node.it.name) 
+    {
+        return Ok(());
+    }
+
+    let index = compiler.codes.len();
+    traverse_statement(compiler, ast, func_node.block_id)?;
+    compiler.function_idx.insert(func_node.it.name.clone(), index as u32);
+    Ok(())
+}
+
 
 pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, ()>
 {
@@ -133,13 +140,12 @@ pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, 
     // You cannot make "import" or "use" or any kind of module-type system work.
     let mut compiler = Compiler::new(&global.symtable);
 
-    /*
     for func_node in ast.functions.iter()
     {
-        prepare_function(&mut compiler, ast, *func_node)
+        prepare_function(&mut compiler, ast, func_node)?;
     }
-    */
 
+    let ep = compiler.codes.len();
     for node in ast.root.iter()
     {
         traverse_statement(&mut compiler, ast, *node)?;
@@ -147,6 +153,7 @@ pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, 
 
     compiler.emit_op(IRCode::Return);
     Ok(CompiledCode {
+        ep,
         code: compiler.codes,
         consts: compiler.consts,
     })

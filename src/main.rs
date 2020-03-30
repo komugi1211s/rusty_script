@@ -167,5 +167,18 @@ fn main()
         }
     };
 
+    if ::std::cfg!(debug_assertions) 
+    {
+        use std::fs::File;
+        use std::io::Write;
+        let mut file = File::create("dump").expect("failed to create a dump file.");
+        for i in bc.code.iter()
+        {
+            writeln!(file, "{:?}", i).expect("Hey?");
+        }
+        file.flush().expect("File Flushing Failed.");
+    }
+
+
     vm::start_vm(&mut vm, &root_file, &bc);
 }

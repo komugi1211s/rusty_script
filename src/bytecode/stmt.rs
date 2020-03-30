@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::expr::traverse_expression;
-use super::{Compiler, PatchKind};
+use super::{ Compiler, PatchKind };
 
 pub fn traverse_statement(
     compiler: &mut Compiler,
@@ -23,14 +23,14 @@ pub fn traverse_statement(
         Expression(expr_id) =>
         {
             let expr = ast.get_expr(*expr_id);
-            traverse_expression(compiler, expr);
+            traverse_expression(compiler, ast, expr);
             Ok(())
         }
 
         Print(expr_id) =>
         {
             let expr = ast.get_expr(*expr_id);
-            traverse_expression(compiler, expr);
+            traverse_expression(compiler, ast, expr);
             compiler.emit_op(IRCode::DebugPrint);
             Ok(())
         }
@@ -38,7 +38,7 @@ pub fn traverse_statement(
         If(cond_expr, if_id, else_block) =>
         {
             let expr = ast.get_expr(*cond_expr);
-            traverse_expression(compiler, expr);
+            traverse_expression(compiler, ast, expr);
 
             let jnt_position = compiler.reserve_one();
             traverse_statement(compiler, ast, *if_id)?;
@@ -67,7 +67,7 @@ pub fn traverse_statement(
             let expr = ast.get_expr(*expr_id);
 
             let conditional_expr = compiler.codes.len();
-            traverse_expression(compiler, expr);
+            traverse_expression(compiler, ast, expr);
 
             let jnt_position = compiler.reserve_one();
             let mut reserve_patches = Vec::with_capacity(255);
@@ -105,10 +105,25 @@ pub fn traverse_statement(
             compiler.mark_continue();
             Ok(())
         }
-        Function(idx) => 
+        Return(maybe_expr) =>
         {
-
+            match maybe_expr
+            {
+                Some(expr_id) =>
+                {
+                    let expr = ast.get_expr(*expr_id);
+                    traverse_expression(compiler, ast, expr);
+                }
+                None =>
+                {
+                    compiler.emit_op(IRCode::Null);
+                }
+            }
+            
+            compiler.emit_op(IRCode::Return);
+            Ok(())
         }
+        Function(_) => Ok(()),
         _ =>
         {
             statement.report("Unimplemented", "実装前です");
@@ -131,7 +146,7 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
     if let Some(expr) = decl.expr
     {
         let expr = ast.get_expr(expr);
-        traverse_expression(compiler, expr);
+        traverse_expression(compiler, ast, expr);
         if let Some(local_idx) = expr.local_idx
         {
             compiler.emit_op(IRCode::Store(local_idx as u32));

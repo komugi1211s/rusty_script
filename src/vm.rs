@@ -30,6 +30,7 @@ impl VirtualMachine
 
 pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCode) -> ()
 {
+    vm.inst_idx = bin.ep;
     let code_length = bin.code.len();
     while code_length > vm.inst_idx
     {
@@ -122,6 +123,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 }
             }
 
+
             IRCode::JNT(to) =>
             {
                 let cond = vm.stack.pop().unwrap();
@@ -129,6 +131,22 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 {
                     vm.inst_idx = *to as usize;
                     continue;
+                }
+            }
+
+            IRCode::Call(index) =>
+            {
+                vm.callst.push(vm.inst_idx);
+                vm.inst_idx = *index as usize;
+                continue;
+            }
+
+            IRCode::Return =>
+            {
+                match vm.callst.pop()
+                {
+                    Some(x) =>vm.inst_idx = x,
+                    None => break,
                 }
             }
 
@@ -156,6 +174,10 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
             IRCode::False => 
             {
                 vm.stack.push(Value::Boolean(false));
+            }  
+            IRCode::Null =>
+            {
+                vm.stack.push(Value::Null);
             }
             IRCode::GLoad(idx) =>
             {
@@ -174,17 +196,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 println!("Interrupt hit.");
                 break;
             }
-            IRCode::Return =>
-            {
-                if let Some(ret_idx) = vm.callst.pop()
-                {
-                    vm.inst_idx = ret_idx;
-                }
-                else
-                {
-                    break;
-                }
-            }
+
             x => {
                 println!("{:?}", x);
                 unimplemented!()
