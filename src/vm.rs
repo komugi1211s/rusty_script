@@ -21,8 +21,8 @@ impl VirtualMachine
     {
         Self {
             inst_idx: 0,
-            callst: Vec::with_capacity(65535),
-            stack: Vec::with_capacity(65535),
+            callst:  Vec::with_capacity(512),
+            stack:   Vec::with_capacity(512),
             globals: HashMap::with_capacity(512),
         }
     }
@@ -31,7 +31,6 @@ impl VirtualMachine
 pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCode) -> ()
 {
     let code_length = bin.code.len();
-
     while code_length > vm.inst_idx
     {
         let instruction = &bin.code[vm.inst_idx];
@@ -70,6 +69,40 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                     IRCode::Div => lhs / rhs,
                     _ => unreachable!(),
                 };
+                vm.stack.push(result);
+            }
+
+            IRCode::EqEq | IRCode::NotEq 
+            | IRCode::LessEq | IRCode::MoreEq 
+            | IRCode::More | IRCode::Less =>
+            {
+                let rhs = vm.stack.pop().unwrap();
+                let lhs = vm.stack.pop().unwrap();
+
+                let result = match instruction
+                {
+                    IRCode::EqEq => lhs == rhs,
+                    IRCode::NotEq => lhs != rhs,
+                    IRCode::LessEq => lhs <= rhs,
+                    IRCode::MoreEq => lhs >= rhs,
+                    IRCode::Less => lhs < rhs,
+                    IRCode::More => lhs > rhs,
+                    _ => unreachable!(),
+                }.into();
+                vm.stack.push(result);
+            }
+
+            IRCode::Not =>
+            {
+                let lhs = vm.stack.pop().unwrap();
+                let result = !lhs.is_truthy();
+                vm.stack.push(result.into());
+            }
+
+            IRCode::Neg =>
+            {
+                let lhs = vm.stack.pop().unwrap();
+                let result = -lhs;
                 vm.stack.push(result);
             }
 
@@ -113,7 +146,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::Store(idx) =>
             {
-                let top_stack = vm.stack.pop().unwrap();
+                let top_stack = vm.stack.last().unwrap().clone();
                 vm.stack[*idx as usize] = top_stack;
             }
             IRCode::True =>

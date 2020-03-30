@@ -14,8 +14,6 @@ pub struct SymTable
 {
     pub symbol: HashMap<String, Symbol>,
     pub locals: Vec<Symbol>,
-
-    pub global_idx: usize,
     // pub scopes: HashMap<StmtId, Scopes>,
 }
 
@@ -26,15 +24,7 @@ impl SymTable
         SymTable {
             symbol: HashMap::with_capacity(255),
             locals: Vec::with_capacity(64),
-            global_idx: 0,
         }
-    }
-
-    pub fn global_idx(&mut self) -> usize
-    {
-        let tmp = self.global_idx;
-        self.global_idx += 1;
-        tmp
     }
 }
 
@@ -135,15 +125,17 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
         current_block: Cell::new(0),
     };
 
-    resolve_locals(table, &locals, &root_stmt, ast)?;
+    resolve_fully(table, &locals, &root_stmt, ast)?;
     Ok(())
 }
 
 fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
+    let mut global_idx: usize = 0;
+
     for stmt in root
     {
-        let root = ast.stmt.get(stmt.0 as usize).unwrap();
+        let root = expect_opt!(ast.stmt.get(stmt.0 as usize), "ルートに指定された文が見つかりませんでした。");
         match root.data
         {
             Stmt::Declaration(ref decl) =>
@@ -198,6 +190,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                     Some(Type::null())
                 };
 
+                global_idx += 1;
                 match (declared_type, expr_type)
                 {
                     (None, None) => 
@@ -212,7 +205,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                     (Some(x), None) =>
                     {
                         let symbol = Symbol {
-                            idx: table.global_idx(),
+                            idx: global_idx,
                             name: decl.name.clone(),
                             span: root.span,
                             types: Some(x),
@@ -223,7 +216,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                     (None, Some(x)) =>
                     {
                         let symbol = Symbol {
-                            idx: table.global_idx(),
+                            idx: global_idx,
                             name: decl.name.clone(),
                             span: root.span,
                             types: Some(x),
@@ -236,7 +229,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                         if type_match(&x, &y)
                         {
                             let symbol = Symbol {
-                                idx: table.global_idx(),
+                                idx: global_idx,
                                 name: decl.name.clone(),
                                 span: root.span,
                                 types: Some(x),
@@ -256,7 +249,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
 
             Stmt::Function(targ) => 
             {
-                let func = ast.functions.get(targ).unwrap();
+                let func = expect_opt!(ast.functions.get(targ), "関数のインデックスが不正です。");
 
                 // Check global declaration, and spit an error if it exists.
                 // TODO - @Incomplete: Do something with _exists, because it has Span too,
@@ -319,8 +312,9 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                 let final_type = Type::function(annotated_return_type.map(Box::new),
                                                 arg_types);
 
+                global_idx += 1;
                 let symbol = Symbol {
-                    idx: table.global_idx(),
+                    idx: global_idx,
                     name: func.it.name.clone(),
                     types: Some(final_type),
                     span: root.span,
@@ -329,53 +323,77 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                 table.symbol.insert(func.it.name.clone(), symbol);
             }
 
-            Stmt::Expression(ref expr) => 
-            {
-                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
-                solve_type(table, None, expr)?;
-            }
+            // Stmt::Expression(ref expr) => 
+            // {
+            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
+            //     solve_type(table, None, expr)?;
+            // }
 
-            Stmt::Print(ref expr) =>
-            {
-                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
-                solve_type(table, None, expr)?;
-            }
+            // Stmt::Print(ref expr) =>
+            // {
+            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
+            //     solve_type(table, None, expr)?;
+            // }
 
-            Stmt::If(expr, _, _) =>
-            {
-                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
-                solve_type(table, None, expr)?;
-            }
+            // Stmt::If(expr, _, _) =>
+            // {
+            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
+            //     solve_type(table, None, expr)?;
+            // }
 
-            Stmt::While(expr, _) =>
-            {
-                let expr = ast.expr.get_mut(expr.0 as usize).unwrap();
-                solve_type(table, None, expr)?; 
-            }
+            // Stmt::While(expr, _) =>
+            // {
+            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
+            //     solve_type(table, None, expr)?; 
+            // }
             _ => (),
         }
     }
     Ok(())
 }
 
-fn resolve_fully(table: &mut SymTable, local: &Locals, ast: &mut ASTree) -> Result<(), ()>
+fn resolve_fully(table: &mut SymTable, local: &Locals, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
 {
-    for stmt_id in ast.root.iter()
+    for stmt_id in root
     {
         resolve_statement(table, local, ast, *stmt_id)?;
+        local.clear();
     }
     Ok(())
 }
 
-fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
+fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
 {
-    let stmt = ast.get_stmt(stmt_id);
+    let stmt = expect_opt!(ast.stmt.get(stmt_id.0 as usize), 
+        "指定された文({:?})が見つかりませんでした。", stmt_id);
 
     match stmt.data
     {
-        Stmt::Declaration(ref decl) =>
+        // Expr Type:
+        Stmt::Expression(expr_id) => 
         {
-            if local.is_declared_within(&decl.name)
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
+
+            solve_type(table, Some(locals), expr)?;
+        }
+        Stmt::Print(expr_id) =>
+        {
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
+
+            solve_type(table, Some(locals), expr)?;
+        }
+        Stmt::Return(Some(expr_id)) => 
+        {
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
+
+            solve_type(table, Some(locals), expr)?;
+        }
+        Stmt::Declaration(ref decl) if locals.current_block.get() > 0 =>
+        {
+            if locals.is_declared_within(&decl.name)
             {
                 let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
                 stmt.report("Duplicated Declaration", &message);
@@ -400,12 +418,15 @@ fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stm
                 None
             };
 
+            let local_idx = locals.stack.borrow().len();
+            let local_depth = locals.current_block.get();
             let expr_type = if let Some(expr_id) = decl.expr
             {
                 if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                 {
                     // try_folding_literal(expr, 0)?;
-                    solve_type(table, Some(local), expr)?;
+                    solve_type(table, Some(locals), expr)?;
+                    expr.local_idx = Some(local_idx as u32);
                     expr.end_type.clone()
                 }
                 else
@@ -423,8 +444,6 @@ fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stm
                 Some(Type::null())
             };
 
-            let local_idx = local.stack.borrow().len();
-            let local_depth = local.current_block.get();
             let mut symbol = Symbol {
                 idx: local_idx,
                 name: decl.name.clone(),
@@ -447,19 +466,19 @@ fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stm
                 (Some(x), None) =>
                 {
                     symbol.types = Some(x);
-                    local.stack.borrow_mut().push(symbol);
+                    locals.stack.borrow_mut().push(symbol);
                 }
                 (None, Some(x)) =>
                 {
                     symbol.types = Some(x);
-                    local.stack.borrow_mut().push(symbol);
+                    locals.stack.borrow_mut().push(symbol);
                 }
                 (Some(x), Some(y)) => 
                 {
                     if type_match(&x, &y)
                     {
                         symbol.types = Some(x);
-                        local.stack.borrow_mut().push(symbol);
+                        locals.stack.borrow_mut().push(symbol);
                     }
                     else
                     {
@@ -472,247 +491,61 @@ fn resolve_statement(table: &mut SymTable, local: &Locals, ast: &mut ASTree, stm
 
             return Ok(());
         }
-    }
-}
 
-fn resolve_locals(table: &mut SymTable, locals: &Locals, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
-{
-    for stmt in root
-    {
-        let root_stmt = ast.get_stmt(*stmt);
-        match root_stmt.data
+        Stmt::If(expr_id, if_block_id, opt_else_block_id) =>
         {
-            Stmt::Function(func_id) =>
-            {
-                let func_block = {
-                    let func_data = ast.functions.get(func_id).unwrap();
-                    let inner_stmt_block = ast.get_stmt(func_data.block_id);
-                    if let Stmt::Block(ref block_data) = inner_stmt_block.data 
-                    {
-                        block_data.clone()
-                    }
-                    else
-                    {
-                        let message = format!("関数 {} にブロックがありません。", &func_data.it.name);
-                        inner_stmt_block.report("Not a block", &message);
-                        return Err(());
-                    }
-                };
-                locals.deepen();
-                resolve_local_within_blocks(table, locals, ast, &func_block)?;
-                // ensure_function_declaration_type(table, ast, func_block)?;
-            }
-            Stmt::Block(ref block_data) =>
-            {
-                locals.deepen();
-                let cloned_block = block_data.clone();
-                resolve_local_within_blocks(table, locals, ast, &cloned_block)?;
-                locals.shallowen();
-            }
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            Stmt::If(_, if_b, else_b) => 
-            {
-                if let Stmt::Block(ref block_data) = ast.stmt.get(if_b.0 as usize).unwrap().data
-                {
-                    locals.deepen();
-                    let cloned_block = block_data.clone();
-                    resolve_local_within_blocks(table, locals, ast, &cloned_block)?;
-                    locals.shallowen();
-                }
+            solve_type(table, Some(locals), expr)?;
 
-                if let Some(else_block_id) = else_b
-                {
-                    if let Stmt::Block(ref block_data) = ast.get_stmt(else_block_id).data
-                    {
-                        locals.deepen();
-                        let block = block_data.clone();
-                        resolve_local_within_blocks(table, locals, ast, &block)?;
-                        locals.shallowen();
-                    }
-                }
+            resolve_statement(table, locals, ast, if_block_id)?;
+            if let Some(else_block_id) = opt_else_block_id {
+                resolve_statement(table, locals, ast, else_block_id)?;
             }
-
-            Stmt::While(_, while_b) =>
-            {
-                if let Stmt::Block(ref block_data) = ast.get_stmt(while_b).data
-                {
-                    locals.deepen();
-                    let block = block_data.clone();
-                    resolve_local_within_blocks(table, locals, ast, &block)?;
-                    locals.shallowen();
-                }
-            }
-            _ => (),
         }
-        locals.clear();
-    }
-    Ok(())
-}
 
-fn resolve_local_within_blocks(table: &mut SymTable, local: &Locals, ast: &mut ASTree, block: &BlockData) -> Result<(), ()>
-{
-    for stmt_id in block.statements.iter()
-    {
-        let stmt = ast.stmt.get(stmt_id.0 as usize).unwrap();
-        match stmt.data
+        Stmt::While(expr_id, while_block_id) =>
         {
-            Stmt::Declaration(ref decl) =>
-            {
-                if local.is_declared_within(&decl.name)
-                {
-                    let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
-                    stmt.report("Duplicated Declaration", &message);
-                    return Err(());
-                }
-                // Infer or Check the type.
-                // TODO - @Imcomplete: It can be separated into different code.
-                let declared_type = if decl.is_annotated()
-                {
-                    match maybe_parse_annotated_type(&decl.dectype)
-                    {
-                        Ok(x) => x,
-                        Err((title, message)) =>
-                        {
-                            stmt.report(title, message);
-                            return Err(());
-                        }
-                    }
-                }
-                else
-                {
-                    None
-                };
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
 
-                let expr_type = if let Some(expr_id) = decl.expr
-                {
-                    if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
-                    {
-                        // try_folding_literal(expr, 0)?;
-                        solve_type(table, Some(local), expr)?;
-                        expr.end_type.clone()
-                    }
-                    else
-                    {
-                        // TODO: It can be okay if it's optional.
-                        stmt.report(
-                            "internal",
-                            "初期化時に式を期待しましたが、取得できませんでした。",
-                        );
-                        panic!();
-                    }
-                }
-                else
-                {
-                    Some(Type::null())
-                };
-
-                let local_idx = local.locals.borrow().len();
-                let local_depth = local.current_block.get();
-                let mut symbol = Symbol {
-                    idx: local_idx,
-                    name: decl.name.clone(),
-                    span: stmt.span,
-                    types: None,
-                    depth: local_depth,
-                };
-
-                match (declared_type, expr_type)
-                {
-                    (None, None) => 
-                    {
-                        stmt.report(
-                            "Empty Annotation/Initialization",
-                            "変数の初期化も型指定もされていないため、型の推論が出来ません。",
-                        );
-                        return Err(());
-                    }
-
-                    (Some(x), None) =>
-                    {
-                        symbol.types = Some(x);
-                        local.locals.borrow_mut().push(symbol);
-                    }
-                    (None, Some(x)) =>
-                    {
-                        symbol.types = Some(x);
-                        local.locals.borrow_mut().push(symbol);
-                    }
-                    (Some(x), Some(y)) => 
-                    {
-                        if type_match(&x, &y)
-                        {
-                            symbol.types = Some(x);
-                            local.locals.borrow_mut().push(symbol);
-                        }
-                        else
-                        {
-                            let message = &format!("変数の型 ({}) と式の結果型 ({}) が一致しませんでした。", x, y);
-                            stmt.report("Type Mismatch", message);
-                            return Err(());
-                        }
-                    }
-                }
-            }
-            Stmt::Expression(expr_id) => 
-            {
-                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
-                solve_type(table, Some(local), expr)?;
-            }
-            Stmt::Print(expr_id) =>
-            {
-                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
-                solve_type(table, Some(local), expr)?;
-            }
-            Stmt::Return(Some(expr_id)) => 
-            {
-                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
-                solve_type(table, Some(local), expr)?;
-            }
-            Stmt::While(expr_id, stmt_id) =>
-            {
-                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
-                solve_type(table, Some(local), expr)?;
-
-                if let Stmt::Block(ref block_data) = ast.get_stmt(stmt_id).data
-                {
-                    local.deepen();
-                    let block = block_data.clone();
-                    resolve_local_within_blocks(table, local, ast, &block)?;
-                    local.shallowen();
-                }
-            }
-            Stmt::If(expr_id, if_id, else_id) =>
-            {
-                let expr = ast.expr.get_mut(expr_id.0 as usize).unwrap();
-                solve_type(table, Some(local), expr)?;
-                if let Stmt::Block(ref block_data) = ast.get_stmt(if_id).data
-                {
-                    local.deepen();
-                    let block = block_data.clone();
-                    resolve_local_within_blocks(table, local, ast, &block)?;
-                    local.shallowen();
-                }
-                if let Some(stmt_id) = else_id 
-                {
-                    if let Stmt::Block(ref block_data) = ast.get_stmt(stmt_id).data
-                    {
-                        local.deepen();
-                        let block = block_data.clone();
-                        resolve_local_within_blocks(table, local, ast, &block)?;
-                        local.shallowen();
-                    }
-                }
-            }
-            Stmt::Block(ref block_data) =>
-            {
-                local.deepen();
-                let block = block_data.clone();
-                resolve_local_within_blocks(table, local, ast, &block)?;
-                local.shallowen();
-            }
-            _ => (),
+            solve_type(table, Some(locals), expr)?;
+            resolve_statement(table, locals, ast, while_block_id)?;
         }
+
+        Stmt::Function(func_id) =>
+        {
+            let func_block_id = {
+                let func_data = expect_opt!(ast.functions.get(func_id),
+                "指定された関数({})が見つかりませんでした。", func_id);
+                func_data.block_id
+            };
+
+            resolve_statement(table, locals, ast, func_block_id)?;
+            // ensure_function_declaration_type(table, locals, ast, func_block_id)?;
+        }
+
+        Stmt::Block(ref block_data) =>
+        {
+            locals.deepen();
+            let block_inner = block_data.statements.clone();
+            for inner_stmt in block_inner.iter() 
+            {
+                resolve_statement(table, locals, ast, *inner_stmt)?;
+            }
+            locals.shallowen();
+        }
+
+        Stmt::Empty => 
+        {
+            stmt.report("Empty Statement", "空の文が支給されました。");
+            return Err(());
+        }
+
+        _ => ()
     }
+
     Ok(())
 }
 
@@ -851,13 +684,16 @@ fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(
 {
     for func in ast.functions.iter()
     {
-        let statements = ast.stmt.get(func.block_id.0 as usize).unwrap();
+        let statements = expect_opt!(ast.stmt.get(func.block_id.0 as usize), 
+            "指定された文({:?})が見つかりませんでした。", func.block_id);
+
         let mut actually_returned = false;
         let mut func_return_type = None;
 
         if let Stmt::Block(ref block_data) = statements.data
         {
-            for inner_stmt_id in block_data.statements.clone()
+            let cloned = block_data.statements.clone();
+            for inner_stmt_id in cloned.iter()
             {
                 let inner_stmt = ast.stmt.get(inner_stmt_id.0 as usize).expect("Resolve Func stmt error");
                 match inner_stmt.data
@@ -963,8 +799,8 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
         }
         (Function, Function) =>
         {
-            let lhs_ret = lhs.return_type.as_ref().unwrap();
-            let rhs_ret = rhs.return_type.as_ref().unwrap();
+            let lhs_ret = expect_opt!(lhs.return_type.as_ref(), "左辺値 関数 の戻り値が解決していません。");
+            let rhs_ret = expect_opt!(rhs.return_type.as_ref(), "右辺値 関数 の戻り値が解決していません。");
             if !type_match(&*lhs_ret, &*rhs_ret) { return false; }
             if lhs.arg_type.len() != rhs.arg_type.len() { return false; }
 
@@ -972,8 +808,8 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
         }
         (Ptr, Ptr) =>
         {
-            let lhs_ptr = lhs.pointer_to.as_ref().unwrap();
-            let rhs_ptr = rhs.pointer_to.as_ref().unwrap();
+            let lhs_ptr = expect_opt!(lhs.pointer_to.as_ref(), "LHS ポインタ型が正常に解決されませんでした。");
+            let rhs_ptr = expect_opt!(rhs.pointer_to.as_ref(), "RHS ポインタ型が正常に解決されませんでした。");
             type_match(&*lhs_ptr, &*rhs_ptr)
         }
         (Union, _) => 
@@ -991,8 +827,8 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
         {
             if lhs.is_array_dynamic != rhs.is_array_dynamic { return false; }
             if lhs.array_size != rhs.array_size { return false; }
-            let lhs_inner_type = lhs.array_type.as_ref().unwrap();
-            let rhs_inner_type = rhs.array_type.as_ref().unwrap();
+            let lhs_inner_type = expect_opt!(lhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
+            let rhs_inner_type = expect_opt!(rhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
 
             type_match(&*lhs_inner_type, &*rhs_inner_type)
         }
@@ -1003,8 +839,8 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
 fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expression<'_>) -> Result<(), ()>
 {
     if expr.end_type.is_some() { return Ok(()); }
-
     use ExprKind::*;
+
     match expr.kind
     {
         Literal =>  // if it hits here, it should be a problem on it's own
@@ -1014,14 +850,14 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
         }
         Binary | Assign =>
         {
-            let lhs = expr.lhs.as_mut().unwrap();
-            let rhs = expr.rhs.as_mut().unwrap();
+            let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
+            let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
 
             if lhs.end_type.is_none() { solve_type(table, locals, lhs.as_mut())?; }
             if rhs.end_type.is_none() { solve_type(table, locals, rhs.as_mut())?; }
 
-            let lhs_type = lhs.end_type.as_ref().unwrap();
-            let rhs_type = rhs.end_type.as_ref().unwrap();
+            let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
+            let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
             if type_match(lhs_type, rhs_type)
             {
                 expr.end_type = lhs.end_type.clone();
@@ -1043,8 +879,8 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
 
         Logical =>
         {
-            let lhs = expr.lhs.as_mut().unwrap();
-            let rhs = expr.rhs.as_mut().unwrap();
+            let lhs = expect_opt!(expr.lhs.as_mut(), "Logical演算に必要なデータが足りません。");
+            let rhs = expect_opt!(expr.rhs.as_mut(), "Logical演算に必要なデータが足りません。");
 
             if lhs.end_type.is_none()
             {
@@ -1056,8 +892,8 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
                 solve_type(table, locals, rhs.as_mut())?;
             }
 
-            let lhs_type = lhs.end_type.as_ref().unwrap();
-            let rhs_type = rhs.end_type.as_ref().unwrap();
+            let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
+            let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
             if type_match(lhs_type, rhs_type)
             {
                 expr.end_type = Some(Type::boolean());
@@ -1066,7 +902,7 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
             else
             {
                 let message = format!(
-                        "右辺値の型 ({}) と左辺値の型 ({}) が一致しませんでした。",
+                        "左辺値の型 ({}) と右辺値の型 ({}) が一致しませんでした。",
                         lhs_type, rhs_type
                     );
                 expr.report(
@@ -1078,23 +914,20 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
         }
         Unary =>
         {
-            let var = expr.lhs.as_mut().unwrap();
+            let var = expect_opt!(expr.rhs.as_mut(), "Unary演算に必要なデータが足りません。");
             if var.end_type.is_none()
             {
                 solve_type(table, locals, var.as_mut())?;
             }
             expr.end_type = var.end_type.clone();
-            Err(())
+            Ok(())
         }
         FunctionCall =>
         {
-            let callee = expr.lhs.as_mut().unwrap();
-            if callee.end_type.is_none() 
-            {
-                solve_type(table, locals, callee.as_mut())?;
-            }
+            let callee = expect_opt!(expr.lhs.as_mut(), "関数呼び出しに必要なデータが足りません。");
+            if callee.end_type.is_none() { solve_type(table, locals, callee.as_mut())?; }
 
-            let callee_type = callee.end_type.as_ref().unwrap();
+            let callee_type = expect_opt!(callee.end_type.as_ref(), "呼び出される関数の型が解決していません。");
             if callee_type.kind != TypeKind::Function
             {
                 let message = format!("呼び出そうとした対象 ({}) は関数ではありません。", callee_type);
@@ -1102,27 +935,47 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
                 return Err(());
             }
 
-            let return_type = callee_type.return_type.clone().unwrap();
+            if expr.arg_expr.len() != callee_type.arg_type.len() 
+            {
+                expr.report("Insufficient Argument", "引数の数が一致していません。");
+                return Err(());
+            }
+
+            for (ref mut arg_expr, ref intended_type) in expr.arg_expr.iter_mut().zip(callee_type.arg_type.iter())
+            {
+                if arg_expr.end_type.is_none() { solve_type(table, locals, arg_expr)?; }
+                let arg_type = expect_opt!(arg_expr.end_type.as_ref(), "引数の型が解決できませんでした。");
+
+                if !type_match(arg_type, intended_type)
+                {
+                    let message = format!("引数で定義された型 ({}) と実際の型 ({}) が一致していません。",
+                        intended_type, arg_type);
+                    arg_expr.report("Type Mismatch", &message);
+                    return Err(());
+                }
+            }
+
+            let return_type = expect_opt!(callee_type.return_type.clone(), "関数の戻り値が解決していません。");
             expr.end_type = Some(*return_type);
             Ok(())
         }
         Grouping =>
         {
-            let lhs = expr.lhs.as_mut().unwrap();
+            let lhs = expect_opt!(expr.lhs.as_mut(), "Grouping演算に必要なデータが足りません。");
             solve_type(table, locals, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
         Variable =>
         {
-            let var_name = expr.variable_name.as_ref().unwrap();
+            let var_name = expect_opt!(expr.variable_name.as_ref(), "式データは変数として登録されていますが、変数名が存在しません。");
             if let Some(locals) = locals
             {
                 if let Some(symbol_idx) = locals.search(var_name)
                 {
                     {
-                        let mut local_borrowed = locals.locals.borrow_mut();
-                        let symbol = local_borrowed.get_mut(symbol_idx).unwrap();
+                        let mut local_borrowed = locals.stack.borrow_mut();
+                        let symbol = local_borrowed.get_mut(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
                         if symbol.types.is_some()
                         {
                             expr.end_type = symbol.types.clone();

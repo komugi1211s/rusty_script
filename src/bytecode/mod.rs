@@ -33,9 +33,7 @@ pub struct Compiler<'s>
     patch: Vec<Patch>,
     consts: Vec<Value>,
     depth: u16,
-
-    local: Vec<Defn>,
-    function_id: HashMap<String, usize>,
+    function_idx: HashMap<String, u32>,
 }
 
 impl<'s> Compiler<'s>
@@ -47,9 +45,8 @@ impl<'s> Compiler<'s>
             codes: Vec::with_capacity(5000),
             patch: Vec::with_capacity(255),
             depth: 0,
-            local: Vec::with_capacity(255),
             consts: Vec::with_capacity(255),
-            function_id: HashMap::with_capacity(256),
+            function_idx: HashMap::with_capacity(256),
         }
     }
 
@@ -58,34 +55,6 @@ impl<'s> Compiler<'s>
         let current = self.consts.len();
         self.consts.push(value);
         current
-    }
-
-    fn deepen_nest(&mut self)
-    {
-        self.depth += 1;
-    }
-
-    fn shallowen_nest(&mut self)
-    {
-        self.depth -= 1;
-        let depth = self.depth;
-        self.local.retain(|x| x.depth <= depth);
-    }
-
-    fn search_local(&self, name: &str) -> Option<usize>
-    {
-        if self.local.is_empty() { return None; }
-        
-        let last_idx = self.local.len() - 1;
-        for (idx, local) in self.local.iter().rev().enumerate()
-        {
-            let real_idx = last_idx - idx;
-            if local.name == name
-            {
-                return Some(real_idx);
-            }
-        }
-        None
     }
 
     #[inline(always)]

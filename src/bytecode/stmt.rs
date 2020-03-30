@@ -93,8 +93,6 @@ pub fn traverse_statement(
         }
 
         Block(innerblock) => traverse_block(compiler, ast, innerblock),
-
-        // Function(func_idx) => declare_function(compiler, ast, func_idx),
         Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
 
         Break =>
@@ -107,9 +105,9 @@ pub fn traverse_statement(
             compiler.mark_continue();
             Ok(())
         }
-        Function(_) => 
+        Function(idx) => 
         {
-            Ok(())
+
         }
         _ =>
         {
@@ -121,12 +119,10 @@ pub fn traverse_statement(
 
 fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) -> Result<(), ()>
 {
-    compiler.deepen_nest();
     for stmt_id in &inner.statements
     {
         traverse_statement(compiler, ast, *stmt_id)?;
     }
-    compiler.shallowen_nest();
     Ok(())
 }
 
@@ -136,10 +132,19 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
     {
         let expr = ast.get_expr(expr);
         traverse_expression(compiler, expr);
-    }
-    if let Some(symbol) = compiler.table.symbol.get(&decl.name)
-    {
-        compiler.emit_op(IRCode::GStore(symbol.idx as u32));
+        if let Some(local_idx) = expr.local_idx
+        {
+            compiler.emit_op(IRCode::Store(local_idx as u32));
+        }
+        else if let Some(symbol) = compiler.table.symbol.get(&decl.name)
+        {
+            compiler.emit_op(IRCode::GStore(symbol.idx as u32));
+        }
+        else
+        {
+            expr.report("internal", "データを割り当てる変数が見つかりませんでした。Bytecode上のエラーです。");
+            panic!();
+        }
     }
 }
 

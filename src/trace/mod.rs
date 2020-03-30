@@ -5,8 +5,8 @@ pub mod prelude
 {
     pub use super::position::CodeSpan;
     pub use super::source::SourceFile;
-    pub use crate::{ err_fatal, expect };
-    pub use super::{error_reported, report, spit_line};
+    pub use crate::{ err_fatal, expect, expect_opt };
+    pub use super::{ error_reported, report, spit_line, report_compiler_bug };
     pub use super::Reportable;
 }
 
@@ -71,6 +71,15 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan)
     }
 
     println!("");
+}
+
+pub fn report_compiler_bug(message: &str, file: &str, line: u32, problematic_string: &str)
+{
+        println!("{:-<50}", "\x1b[31m[Isekai]\x1b[0m :: コンパイラーバグ ");
+        println!("{}\n", message);
+
+        println!("このエラーはユーザ側で解決の出来ないバグです。");
+        println!("発生: ファイル{} {}行目、{}を呼ぼうとした時", file, line, problematic_string);
 }
 
 pub fn report(title: &str, message: &str)

@@ -2,6 +2,7 @@ use crate::{
     ast::*,
     ir::IRCode,
     types::{ Value },
+    trace::prelude::*
 };
 
 use super::Compiler;
@@ -31,17 +32,16 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
 
         Assign =>
         {
-            let lhs = expr.lhs.as_ref().unwrap();
             let rhs = expr.rhs.as_ref().unwrap();
+            let lhs = expr.lhs.as_ref().unwrap();
             traverse_expression(compiler, &*rhs);
             emit_store(compiler, &*lhs);
-            panic!();
         }
 
         Unary =>
         {
-            let lhs = expr.lhs.as_ref().unwrap();
-            traverse_expression(compiler, &*lhs);
+            let rhs = expr.rhs.as_ref().unwrap();
+            traverse_expression(compiler, &*rhs);
             emit_from_oper(compiler, expr.oper.unwrap());
         }
 
@@ -57,10 +57,9 @@ pub fn traverse_expression(compiler: &mut Compiler, expr: &Expression<'_>)
         Variable =>
         {
             let var_name = expr.variable_name.as_ref().unwrap();
-            let variable_idx = expr.local_idx.clone();
-            if let Some(idx) = variable_idx
+            if let Some(idx) = expr.local_idx
             {
-                compiler.emit_op(IRCode::Load(idx as u32));
+                compiler.emit_op(IRCode::Load(idx));
             }
             else
             {
@@ -90,32 +89,44 @@ fn emit_function_call(compiler: &mut Compiler, expr: &Expression<'_>)
     // Receiver variable(if exists) and function holds the same type.
     // argument has the same type.
     // Functions are already emitted, we know which index we should jump.
+    
     assert!(expr.lhs.is_some(), "Function Call: lhs is empty, we don't know what it called.");
-    assert!(expr.lhs.as_ref().unwrap().kind == ExprKind::Variable,
-            "Function Call: Called something that's not a Variable.");
     
-    // let func_name = expr.lhs.as_ref().unwrap().variable_name.as_ref().unwrap().clone();
-    // let func_index = compiler.get_func_ep(func_name);
-    
+    let variable = expect_opt!(expr.lhs.as_ref(), "関数の呼び出し対象が解決できていません。");
+    let name = expect_opt!(variable.variable_name.as_ref(), "呼び出す関数の名前が分かりませんでした。");
+
     for arg_expr in expr.arg_expr.iter().rev()
     {
         traverse_expression(compiler, arg_expr);
     }
 
-    compiler.emit_op(IRCode::Interrupt);
+    let index = match compiler.function_idx.get(name)
+    {
+        Some(x) => x,
+        None =>
+        {
+            
+        }
+    }
+
+    compiler.emit_op(IRCode::Call(index));
 }
 
 fn emit_store(compiler: &mut Compiler, target: &Expression<'_>) 
 {
     let var_name = target.variable_name.as_ref().unwrap();
-    if let Some(index) = compiler.search_local(var_name)
+    if let Some(local_idx) = target.local_idx 
     {
-        compiler.emit_op(IRCode::Store(index as u32));
+        compiler.emit_op(IRCode::Store(local_idx));
+    }
+    else if let Some(symbol) = compiler.table.symbol.get(var_name)
+    {
+        compiler.emit_op(IRCode::GStore(symbol.idx as u32));
     }
     else
     {
-        let message = format!("変数 {} を探しましたが、見つかりませんでした。", var_name);
-        target.report("Undefined Variable", &message);
+        let message = format!("変数 {} を探しましたが、見つかりませんでした。\nこの変数はセマンティクス解析の時点で発見されているべきです。コンパイラーのエラーです。", var_name);
+        target.report("internal", &message);
         panic!()
     }
 }
@@ -130,7 +141,20 @@ fn emit_from_oper(compiler: &mut Compiler, oper: Operator)
         Operator::Mul => compiler.emit_op(IRCode::Mul),
         Operator::Div => compiler.emit_op(IRCode::Div),
         Operator::Mod => compiler.emit_op(IRCode::Mod),
-        _ => (),
+
+        Operator::EqEq => compiler.emit_op(IRCode::EqEq),
+        Operator::NotEq => compiler.emit_op(IRCode::NotEq),
+        Operator::LessEq => compiler.emit_op(IRCode::LessEq),
+        Operator::MoreEq => compiler.emit_op(IRCode::MoreEq),
+        Operator::Less => compiler.emit_op(IRCode::Less),
+        Operator::More => compiler.emit_op(IRCode::More),
+
+        Operator::Not => compiler.emit_op(IRCode::Not),
+        Operator::Neg => compiler.emit_op(IRCode::Neg),
+
+        Operator::And => compiler.emit_op(IRCode::And),
+        Operator::Or => compiler.emit_op(IRCode::Or),
+        _ => panic!(), 
     }
 }
 
@@ -152,7 +176,6 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal)
         {
             match lexeme
             {
-                // TODO - @DumbCode: Hardcoded Index.
                 "true" => compiler.emit_op(IRCode::True),
                 "false" => compiler.emit_op(IRCode::False),
                 _ => unreachable!(),

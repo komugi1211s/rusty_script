@@ -117,8 +117,8 @@ impl<'m> Parser<'m>
                 let assign = ExprInit {
                     kind: ExprKind::Assign,
                     module: Some(self.module),
-                    lhs: Some(Box::new(value)),
-                    rhs: Some(Box::new(left_hand)),
+                    lhs: Some(Box::new(left_hand)),
+                    rhs: Some(Box::new(value)),
                     span: Some(CodeSpan::combine(&start_span, &end_span)),
                     end_type: None,
                     ..Default::default()
