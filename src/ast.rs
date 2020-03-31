@@ -92,6 +92,8 @@ pub struct Expression<'m>
 
     pub variable_name: Option<String>,
     pub local_idx: Option<u32>,
+
+    pub array_expr: Vec<Expression<'m>>,
     pub arg_expr: Vec<Expression<'m>>,
     pub literal: Option<Literal<'m>>,
 
@@ -140,11 +142,11 @@ pub struct ExprInit<'m>
     pub rhs: Option<Box<Expression<'m>>>,
 
     pub oper: Option<Operator>,
-
     pub variable_name: Option<String>,
+
+    pub array_expr: Vec<Expression<'m>>,
     pub arg_expr: Vec<Expression<'m>>,
     pub literal: Option<Literal<'m>>,
-
     pub end_type: Option<Type>,
 }
 
@@ -162,6 +164,7 @@ impl<'m> ExprInit<'m>
             oper: self.oper,
             variable_name: self.variable_name,
             local_idx: None,
+            array_expr: self.array_expr,
             arg_expr: self.arg_expr,
             literal: self.literal,
             end_type: self.end_type,

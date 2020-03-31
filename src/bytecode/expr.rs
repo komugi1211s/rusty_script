@@ -217,6 +217,10 @@ fn emit_constants(compiler: &mut Compiler, literal: &Literal)
             let index = compiler.add_const(Value::Str(lexeme.to_string()));
             compiler.emit_op(IRCode::ConstDyn(index as u32));
         }
-        _ => unimplemented!(),
+
+        LiteralKind::Null =>
+        {
+            compiler.emit_op(IRCode::Null);
+        }
     }
 }

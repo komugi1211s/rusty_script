@@ -117,14 +117,12 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
     // resolve_directive(ast)?;
     let root_stmt = ast.root.clone();
 
-    resolve_toplevel(table, &root_stmt, ast)?;
-    resolve_function_and_body(table, ast)?;
-    
     let locals = Locals {
         stack: RefCell::new(Vec::with_capacity(64)),
         current_block: Cell::new(0),
     };
 
+    resolve_toplevel(table, &root_stmt, ast)?;
     resolve_fully(table, &locals, &root_stmt, ast)?;
     Ok(())
 }
@@ -514,65 +512,11 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
             resolve_statement(table, locals, ast, while_block_id)?;
         }
 
-        Stmt::Function(func_id) =>
+        Stmt::Function(func_id) => 
         {
-            locals.deepen();
-            let local_depth = locals.current_block.get();
-            {
-                let func_data = expect_opt!(ast.functions.get(func_id),
-                "指定された関数({})が見つかりませんでした。", func_id);
-                
-                for decl in func_data.args.iter()
-                {
-                    // Infer or Check the type.
-                    // TODO - @Imcomplete: It can be separated into different code.
-                    if decl.is_inferred()
-                    {
-                        stmt.report("Type Annotation Required", "関数の引数には型を指定してください。");
-                        return Err(());
-                    }
-                    let declared_type = match maybe_parse_annotated_type(&decl.dectype)
-                    {
-                        Ok(x) => x,
-                        Err((title, message)) =>
-                        {
-                            stmt.report(title, message);
-                            return Err(());
-                        }
-                    };
-                    let local_idx = locals.stack.borrow().len();
-                    
-                    let symbol = Symbol {
-                        idx: local_idx,
-                        name: decl.name.clone(),
-                        span: stmt.span,
-                        types: declared_type,
-                        depth: local_depth,
-                    };
-                    locals.stack.borrow_mut().push(symbol);
-                }
-            };
-
-            let func_block_id = expect_opt!(ast.functions.get(func_id),
-                "指定された関数({})が見つかりませんでした。", func_id).block_id;
-            {
-                let stmt_inner = expect_opt!(ast.stmt.get(func_block_id.0 as usize), 
-                "指定された文({:?})が見つかりませんでした。", stmt_id);
-
-                if let Stmt::Block(ref block_data) = stmt_inner.data
-                {
-                    let cloned = block_data.statements.clone();
-                    for inner_stmt in cloned.iter()
-                    {
-                        resolve_statement(table, locals, ast, *inner_stmt)?;
-                    }
-                }
-            }
-            locals.shallowen();
-
-            // ensure_function_declaration_type(table, locals, ast, func_block_id)?;
+            let span = stmt.span; // Because Rustc complains about this.
+            resolve_function_and_body(table, locals, ast, func_id, span)?;
         }
-
         Stmt::Block(ref block_data) =>
         {
             locals.deepen();
@@ -593,6 +537,156 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
         _ => ()
     }
 
+    Ok(())
+}
+
+// TODO - @Improvement: DeclarationData should get it's own CodeSpan really.
+// this Span argument exists because I didn't give DeclarationData it's own codespan.
+fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, func_id: usize, span: CodeSpan) -> Result<(), ()>
+{
+    locals.deepen();
+    let func_block_idx: StmtId;
+    let func_name: String;
+    // Entry Locals.
+    {
+        let func = expect_opt!(ast.functions.get(func_id), "関数 {} が見つかりません。", func_id);
+        func_name = func.it.name.clone();
+        func_block_idx = func.block_id;
+
+        let table_entry = expect_opt!(table.symbol.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
+        {
+            if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
+            {
+                assert!(func.args.len() == arg_type.len());
+                let local_depth = locals.current_block.get();
+                let mut local_stack = locals.stack.borrow_mut();
+                for (decl, dtype) in func.args.iter().zip(arg_type.iter())
+                {
+                    let local_idx = local_stack.len();
+                    local_stack.push(Symbol {
+                        idx: local_idx,
+                        name: decl.name.clone(),
+                        types: Some(dtype.clone()),
+                        span,
+                        depth: local_depth
+                    });
+                }
+            }
+            else
+            {
+                let message = format!("関数 {} は関数ではなく {} として解決されています。", 
+                    &func.it.name, table_entry.types.as_ref().unwrap_or(&*NULL_TYPE));
+                report_compiler_bug(&message, ::std::file!(), ::std::line!(), 
+                    "Some(Type { kind: TypeKind::Function, arg_type, ... }) = table_entry.types");
+            }
+        }
+    }
+
+    // Traverse Function:
+    let func_block_data = {
+        let stmt = ast.get_stmt(func_block_idx);
+        if let Stmt::Block(ref block_data) = stmt.data
+        {
+            block_data.statements.clone()
+        }
+        else
+        {
+            unreachable!()
+        }
+    };
+
+    let mut actually_returned = false;
+    let mut block_return_type = None;
+    for inner_id in func_block_data.iter()
+    {
+        resolve_statement(table, locals, ast, *inner_id)?;
+        let stmt = ast.get_stmt(*inner_id);
+        match stmt.data
+        {
+            Stmt::Return(Some(expr_id)) if actually_returned => 
+            {
+                // Check type consistency.
+                let expr = expect_opt!(ast.expr.get(expr_id.0 as usize),
+                        "指定された式({:?})が見つかりませんでした。", expr_id);
+
+                let block_type = block_return_type.as_ref().unwrap_or(&*NULL_TYPE);
+                let expr_type = expr.end_type.as_ref().unwrap_or(&*NULL_TYPE);
+                if !type_match(block_type, expr_type)
+                {
+                    let message = format!(
+                        "関数 {} の戻り値の型に一貫性がありません。\n(最初: {}, 二度目: {})",
+                        &func_name, block_type, expr_type
+                    );
+                    stmt.report("Return type inconsistent", &message);
+                    return Err(());
+                }
+            }
+
+            Stmt::Return(None) if actually_returned =>
+            {
+                let block_type = block_return_type.as_ref().unwrap_or(&*NULL_TYPE);
+                let expr_type = &*NULL_TYPE;
+                if !type_match(block_type, expr_type)
+                {
+                    let message = format!(
+                        "関数 {} の戻り値の型に一貫性がありません。\n(最初: {}, 二度目: {})",
+                        &func_name, block_type, expr_type
+                    );
+                    stmt.report("Return type inconsistent", &message);
+                    return Err(());
+                }
+            }
+
+            Stmt::Return(Some(expr_id)) if !actually_returned => 
+            {
+                actually_returned = true;
+                let expr = expect_opt!(ast.expr.get(expr_id.0 as usize),
+                        "指定された式({:?})が見つかりませんでした。", expr_id);
+
+                block_return_type = expr.end_type.clone().or(Some(Type::null()));
+            }
+
+            Stmt::Return(None) if !actually_returned =>
+            {
+                actually_returned = true;
+                block_return_type = Some(Type::null());
+            }
+
+            _ => (),
+        }
+    }
+
+    // Determine final type. infer if needed.
+    
+    {
+        if let Some(ref mut symbol) = table.symbol.get_mut(&func_name)
+        {
+            let declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
+            match (&declared_return_type, &block_return_type)
+            {
+                (Some(x), Some(y)) =>
+                {
+                    if !type_match(&x, &y)
+                    {
+                        let message = format!("関数 {} の戻り値が一致していません。\n(定義された型: {}, 型推論器の結論: {})",
+                            &func_name, &x, &y);
+
+                        ast.get_stmt(func_block_idx).report("Type mismatch", &message);
+                        return Err(());
+                    }
+                }
+
+                (None, Some(_)) => *declared_return_type = block_return_type.map(Box::new),
+
+                (_, None) => unreachable!(), // block_return_type WILL get set to Some(Type::null()) eventually.
+            }
+        }
+        else
+        {
+            unreachable!();
+        }
+    }
+    locals.shallowen();
     Ok(())
 }
 
@@ -647,183 +741,6 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
             "アノテーションがあるべき関数内で推論を必要とする定義に接触しました。",
         )),
     }
-}
-
-
-/*
-TODO - @Improvement: Currently, Literal folding is impossible due to the way Literal is
-structured - It carries a Token around instead of an actual value.
-It should be switched to "enum Literal { Int(i64), Str(String) .. }" if possible.
-
-It's supposed to be used as a source for error reporting when we need to.
-but since this data is always wrapped around Expression and never passed around as-is,
-this design decision is completely redundant.
-
-const MAX_FOLD_DEPTH: u32 = 3;
-fn try_folding_literal(expr: &mut Expression<'_>, depth: u32) -> Result<bool, ()> {
-
-    fn unexpected_path(path: &mut Expression<'_>, additional_info: &str) -> ! {
-        path.report("internal", &format!("式の形式が理解できませんでした。追加要素: {}", additional_info));
-        panic!()
-    }
-
-    if depth > MAX_FOLD_DEPTH {
-        return Ok(false);
-    }
-
-    match expr.kind {
-        ExprKind::Empty => unexpected_path(expr, "Empty Expr"),
-
-        ExprKind::Variable
-        | ExprKind::Assign
-        | ExprKind::FunctionCall => Ok(false),
-
-        ExprKind::Grouping => {
-            if let Some(ref mut lhs) = expr.lhs {
-                try_folding_literal(&mut *lhs, depth + 1)
-            } else {
-                unexpected_path(expr, "Empty Grouping")
-            }
-        }
-
-
-        ExprKind::Binary => {
-            match (expr.lhs, expr.rhs) {
-                (Some(ref mut lhs), Some(ref mut rhs)) => {
-                    let lhs_is_literal = try_folding_literal(&mut *lhs, depth + 1)?;
-                    let rhs_is_literal = try_folding_literal(&mut *rhs, depth + 1)?;
-
-                    if !(lhs_is_literal && rhs_is_literal) {
-                        return Ok(false)
-                    }
-
-                    if !type_match(&*lhs, &*rhs) {
-                        let lhs_type = format!("{:?}", lhs.end_type);
-                        let rhs_type = format!("{:?}", rhs.end_type);
-                        expr.report("Type Mismatch", &format!("{} != {}: 右辺値と左辺値で型が一致しませんでした。", lhs_type, rhs_type));
-                        panic!();
-                    }
-
-                    match (lhs.literal, rhs.literal, expr.oper) {
-                        (Some(ref mut x), Some(ref mut y), Some(oper)) => {
-                            let new_literal = fold_literal_binop(x, y, oper);
-                            expr.lhs = None;
-                            expr.rhs = None;
-                            expr.oper = None;
-                        }
-
-                        (_, _, None) => unexpected_path(expr, "Empty Operator in Binary Expr"),
-                        _ => unexpected_path(expr, "One or More Literal are None in Binary Expr"),
-                    }
-
-                }
-                _ => unexpected_path(expr),
-            }
-        }
-        _ => unexpected_path(expr)
-    }
-}
-fn fold_literal_binop<'b>(base: &'b Expression<'b>, lhs: &Literal<'_>, rhs: &Literal<'_>, oper: Operator) -> Literal<'b> {
-}
-*/
-
-fn resolve_function_and_body(table: &mut SymTable, ast: &mut ASTree) -> Result<(), ()>
-{
-    for func in ast.functions.iter()
-    {
-        let statements = expect_opt!(ast.stmt.get(func.block_id.0 as usize), 
-            "指定された文({:?})が見つかりませんでした。", func.block_id);
-
-        let mut actually_returned = false;
-        let mut func_return_type = None;
-
-        if let Stmt::Block(ref block_data) = statements.data
-        {
-            let cloned = block_data.statements.clone();
-            for inner_stmt_id in cloned.iter()
-            {
-                let inner_stmt = ast.stmt.get(inner_stmt_id.0 as usize).expect("Resolve Func stmt error");
-                match inner_stmt.data
-                {
-                    Stmt::Return(Some(expr_id)) => 
-                    {
-                        let expr = ast.expr.get_mut(expr_id.0 as usize).expect("No Expr Error");
-                        solve_type(table, None, expr)?;
-                        if !actually_returned
-                        {
-                            func_return_type = expr.end_type.clone();
-                            actually_returned = true;
-                        }
-                        else
-                        {
-                            if !type_match(func_return_type.as_ref().unwrap_or(&NULL_TYPE), expr.end_type.as_ref().unwrap_or(&NULL_TYPE))
-                            {
-                                let message = format!("関数の戻り値の型に一貫性がありません\n(複数の違う型: 最初に{}が、次に{}が返されました)",
-                                    func_return_type.as_ref().unwrap_or(&NULL_TYPE), expr.end_type.as_ref().unwrap_or(&NULL_TYPE));
-                                inner_stmt.report("Type Mismatch", &message);
-                                return Err(());
-                            }
-                        }
-                    }
-                    Stmt::Return(None) =>
-                    {
-                        if !actually_returned { actually_returned = true; }
-                        if func_return_type.is_some()
-                        {
-                            let message = format!("関数の戻り値の型に一貫性がありません\n(複数の違う型: 最初に{}が、次にnullが返されました)",
-                                func_return_type.as_ref().unwrap());
-                            inner_stmt.report("Type Mismatch", &message);
-                            return Err(());
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-        else
-        {
-            statements.report("internal", "関数の内部ブロックを期待しましたが、ブロック以外が見つかりました。");
-            panic!()
-        }
-
-
-        if let Some(ref mut symbol) = table.symbol.get_mut(&func.it.name)
-        {
-            match symbol.types
-            {
-                Some(Type { kind: TypeKind::Function, return_type: Some(ref ret_type), .. }) =>
-                {
-                    if !type_match(&*ret_type, func_return_type.as_ref().unwrap_or(&NULL_TYPE))
-                    {
-                        let message = format!(
-                            "関数 {} の戻り値 ({}) の定義と実際の戻り値 ({}) が一致していません。", 
-                            &symbol.name, &*ret_type, func_return_type.as_ref().unwrap_or(&NULL_TYPE)
-                        );
-                        statements.report("Type Mismatch", &message);
-                        return Err(());
-                    }
-                }
-                Some(ref mut inner_type @ Type { kind: TypeKind::Function, return_type: None, .. }) =>
-                {
-                    inner_type.return_type = Some(Box::new(func_return_type.unwrap_or(Type::null())));
-                }
-                Some(_) | None => 
-                {
-                    unreachable!();
-                }
-            }
-        }
-        else
-        {
-            let message = format!(
-                "セマンティクス解析中に関数 {} が見つかりませんでした。", 
-                &func.it.name
-            );
-            report("internal", &message);
-            return Err(());
-        }
-    }
-    Ok(())
 }
 
 fn type_match(lhs: &Type, rhs: &Type) -> bool
@@ -1054,8 +971,6 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
                 }
             }
 
-            println!("{:#?} {:#?}", table, locals);
-            panic!();
             let message = format!("変数 {} は定義されていません。", var_name);
             expr.report("Undefined Variable", &message);
             Err(())
