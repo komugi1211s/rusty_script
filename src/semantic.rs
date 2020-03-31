@@ -13,7 +13,6 @@ pub type SymbolTable = Arc<Mutex<SymTable>>;
 pub struct SymTable
 {
     pub symbol: HashMap<String, Symbol>,
-    pub locals: Vec<Symbol>,
     // pub scopes: HashMap<StmtId, Scopes>,
 }
 
@@ -23,7 +22,6 @@ impl SymTable
     {
         SymTable {
             symbol: HashMap::with_capacity(255),
-            locals: Vec::with_capacity(64),
         }
     }
 }
@@ -38,42 +36,42 @@ pub struct Symbol
     pub depth: u32,
 }
 
-use std::cell::Cell;
-use std::cell::RefCell;
 #[derive(Debug, Clone)]
-struct Locals 
+struct Sema 
 {
-    current_block: Cell<u32>,
-    stack: RefCell<Vec<Symbol>>,
+    current_block: u32,
+    locals: Vec<Symbol>,
+
+    last_return: Option<Type>,
 }
 
-impl Locals
+impl Sema
 {
-    fn deepen(&self)
+    fn deepen(&mut self)
     {
-        self.current_block.set(self.current_block.get() + 1);
+        self.current_block += 1;
     }
 
-    fn shallowen(&self)
+    fn shallowen(&mut self)
     {
-        let new_depth = self.current_block.get() - 1;
-        self.current_block.set(new_depth);
-        self.stack.borrow_mut().retain(|x| x.depth <= new_depth);
+        self.current_block -= 1;
+        
+        let depth = self.current_block;
+        self.locals.retain(|x| x.depth <= depth);
     }
 
-    fn clear(&self)
+    fn clear(&mut self)
     {
-        self.current_block.set(0);
-        self.stack.borrow_mut().clear();
+        self.current_block = 0;
+        self.locals.clear();
     }
 
     fn search(&self, name: &str) -> Option<usize>
     {
-        let locals = self.stack.borrow();
-        if locals.is_empty() { return None; }
+        if self.locals.is_empty() { return None; }
         
-        let last_idx = locals.len() - 1;
-        for (idx, local) in locals.iter().rev().enumerate()
+        let last_idx = self.locals.len() - 1;
+        for (idx, local) in self.locals.iter().rev().enumerate()
         {
             let real_idx = last_idx - idx;
             if local.name == name
@@ -85,10 +83,9 @@ impl Locals
     }
     fn is_declared_within(&self, name: &str) -> bool
     {
-        let depth = self.current_block.get();
-        let locals = self.stack.borrow();
+        let depth = self.current_block;
 
-        for local in locals.iter().rev()
+        for local in self.locals.iter().rev()
         {
             if local.depth < depth { return false; }
             if local.depth == depth && local.name == name {
@@ -104,7 +101,7 @@ pub fn new_symboltable() -> SymbolTable
 {
     let table = SymTable {
         symbol: HashMap::with_capacity(255),
-        locals: Vec::with_capacity(64),
+        sema: Vec::with_capacity(64),
         global_idx: 0,
     };
 
@@ -116,14 +113,15 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     // resolve_directive(ast)?;
     let root_stmt = ast.root.clone();
+    resolve_toplevel(table, &root_stmt, ast)?;
 
-    let locals = Locals {
-        stack: RefCell::new(Vec::with_capacity(64)),
-        current_block: Cell::new(0),
+    let mut locals = Sema {
+        locals: Vec::with_capacity(64),
+        current_block: 0,
+        last_return: None,
     };
 
-    resolve_toplevel(table, &root_stmt, ast)?;
-    resolve_fully(table, &locals, &root_stmt, ast)?;
+    resolve_fully(table, &mut locals, &root_stmt, ast)?;
     Ok(())
 }
 
@@ -350,7 +348,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
     Ok(())
 }
 
-fn resolve_fully(table: &mut SymTable, local: &Locals, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
+fn resolve_fully(table: &mut SymTable, local: &mut Sema, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
 {
     for stmt_id in root
     {
@@ -360,7 +358,7 @@ fn resolve_fully(table: &mut SymTable, local: &Locals, root: &[StmtId], ast: &mu
     Ok(())
 }
 
-fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
+fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
 {
     let stmt = expect_opt!(ast.stmt.get(stmt_id.0 as usize), 
         "指定された文({:?})が見つかりませんでした。", stmt_id);
@@ -373,25 +371,20 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, Some(locals), expr)?;
+            solve_type(table, Some(&sema), expr)?;
         }
         Stmt::Print(expr_id) =>
         {
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, Some(locals), expr)?;
+            solve_type(table, Some(&sema), expr)?;
         }
-        Stmt::Return(Some(expr_id)) => 
-        {
-            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
-                    "指定された式({:?})が見つかりませんでした。", expr_id);
+        
 
-            solve_type(table, Some(locals), expr)?;
-        }
-        Stmt::Declaration(ref decl) if locals.current_block.get() > 0 =>
+        Stmt::Declaration(ref decl) if sema.current_block > 0 =>
         {
-            if locals.is_declared_within(&decl.name)
+            if sema.is_declared_within(&decl.name)
             {
                 let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
                 stmt.report("Duplicated Declaration", &message);
@@ -416,14 +409,14 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
                 None
             };
 
-            let local_idx = locals.stack.borrow().len();
-            let local_depth = locals.current_block.get();
+            let local_idx = sema.locals.len();
+            let local_depth = sema.current_block;
             let expr_type = if let Some(expr_id) = decl.expr
             {
                 if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                 {
                     // try_folding_literal(expr, 0)?;
-                    solve_type(table, Some(locals), expr)?;
+                    solve_type(table, Some(&sema), expr)?;
                     expr.local_idx = Some(local_idx as u32);
                     expr.end_type.clone()
                 }
@@ -464,19 +457,19 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
                 (Some(x), None) =>
                 {
                     symbol.types = Some(x);
-                    locals.stack.borrow_mut().push(symbol);
+                    sema.locals.push(symbol);
                 }
                 (None, Some(x)) =>
                 {
                     symbol.types = Some(x);
-                    locals.stack.borrow_mut().push(symbol);
+                    sema.locals.push(symbol);
                 }
                 (Some(x), Some(y)) => 
                 {
                     if type_match(&x, &y)
                     {
                         symbol.types = Some(x);
-                        locals.stack.borrow_mut().push(symbol);
+                        sema.locals.push(symbol);
                     }
                     else
                     {
@@ -495,11 +488,11 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, Some(locals), expr)?;
+            solve_type(table, Some(&sema), expr)?;
 
-            resolve_statement(table, locals, ast, if_block_id)?;
+            resolve_statement(table, sema, ast, if_block_id)?;
             if let Some(else_block_id) = opt_else_block_id {
-                resolve_statement(table, locals, ast, else_block_id)?;
+                resolve_statement(table, sema, ast, else_block_id)?;
             }
         }
 
@@ -508,24 +501,70 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, Some(locals), expr)?;
-            resolve_statement(table, locals, ast, while_block_id)?;
+            solve_type(table, Some(&sema), expr)?;
+            resolve_statement(table, sema, ast, while_block_id)?;
         }
 
         Stmt::Function(func_id) => 
         {
             let span = stmt.span; // Because Rustc complains about this.
-            resolve_function_and_body(table, locals, ast, func_id, span)?;
+            resolve_function_and_body(table, sema, ast, func_id, span)?;
         }
         Stmt::Block(ref block_data) =>
         {
-            locals.deepen();
+            sema.deepen();
             let block_inner = block_data.statements.clone();
             for inner_stmt in block_inner.iter() 
             {
-                resolve_statement(table, locals, ast, *inner_stmt)?;
+                resolve_statement(table, sema, ast, *inner_stmt)?;
             }
-            locals.shallowen();
+            sema.shallowen();
+        }
+
+        Stmt::Return(Some(expr_id)) => 
+        {
+            let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
+                    "指定された式({:?})が見つかりませんでした。", expr_id);
+
+            solve_type(table, Some(&sema), expr)?;
+
+            match sema.last_return
+            {
+                None => sema.last_return = expr.end_type.clone(),
+                Some(ref ret_type) =>
+                {
+                    let end_type = expr.end_type.as_ref().unwrap_or(&*NULL_TYPE);
+                    if !type_match(ret_type, end_type)
+                    {
+                        let message = format!(
+                            "関数の戻す型に一貫性がありません。\n\n最初: {} が返されました \n二度目: {}が返されました",
+                            ret_type, end_type);
+
+                        stmt.report("Return type inconsistent", &message);
+                        return Err(());
+                    }
+                }
+            }
+        }
+        
+        Stmt::Return(None) => 
+        {
+            match sema.last_return
+            {
+                None => sema.last_return = Some(Type::null()),
+                Some(ref ret_type) =>
+                {
+                    if !type_match(ret_type, &*NULL_TYPE)
+                    {
+                        let message = format!(
+                            "関数の戻す型に一貫性がありません。\n\n最初: {} が返されました \n二度目: {}が返されました",
+                            ret_type, &*NULL_TYPE);
+
+                        stmt.report("Return type inconsistent", &message);
+                        return Err(());
+                    }
+                }
+            }
         }
 
         Stmt::Empty => 
@@ -542,11 +581,12 @@ fn resolve_statement(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, st
 
 // TODO - @Improvement: DeclarationData should get it's own CodeSpan really.
 // this Span argument exists because I didn't give DeclarationData it's own codespan.
-fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut ASTree, func_id: usize, span: CodeSpan) -> Result<(), ()>
+fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, func_id: usize, span: CodeSpan) -> Result<(), ()>
 {
-    locals.deepen();
+    sema.deepen();
     let func_block_idx: StmtId;
     let func_name: String;
+
     // Entry Locals.
     {
         let func = expect_opt!(ast.functions.get(func_id), "関数 {} が見つかりません。", func_id);
@@ -558,12 +598,11 @@ fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut AS
             if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
             {
                 assert!(func.args.len() == arg_type.len());
-                let local_depth = locals.current_block.get();
-                let mut local_stack = locals.stack.borrow_mut();
+                let local_depth = sema.current_block;
                 for (decl, dtype) in func.args.iter().zip(arg_type.iter())
                 {
-                    let local_idx = local_stack.len();
-                    local_stack.push(Symbol {
+                    let local_idx = sema.locals.len();
+                    sema.locals.push(Symbol {
                         idx: local_idx,
                         name: decl.name.clone(),
                         types: Some(dtype.clone()),
@@ -595,65 +634,10 @@ fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut AS
         }
     };
 
-    let mut actually_returned = false;
-    let mut block_return_type = None;
+    sema.last_return = None;
     for inner_id in func_block_data.iter()
     {
-        resolve_statement(table, locals, ast, *inner_id)?;
-        let stmt = ast.get_stmt(*inner_id);
-        match stmt.data
-        {
-            Stmt::Return(Some(expr_id)) if actually_returned => 
-            {
-                // Check type consistency.
-                let expr = expect_opt!(ast.expr.get(expr_id.0 as usize),
-                        "指定された式({:?})が見つかりませんでした。", expr_id);
-
-                let block_type = block_return_type.as_ref().unwrap_or(&*NULL_TYPE);
-                let expr_type = expr.end_type.as_ref().unwrap_or(&*NULL_TYPE);
-                if !type_match(block_type, expr_type)
-                {
-                    let message = format!(
-                        "関数 {} の戻り値の型に一貫性がありません。\n(最初: {}, 二度目: {})",
-                        &func_name, block_type, expr_type
-                    );
-                    stmt.report("Return type inconsistent", &message);
-                    return Err(());
-                }
-            }
-
-            Stmt::Return(None) if actually_returned =>
-            {
-                let block_type = block_return_type.as_ref().unwrap_or(&*NULL_TYPE);
-                let expr_type = &*NULL_TYPE;
-                if !type_match(block_type, expr_type)
-                {
-                    let message = format!(
-                        "関数 {} の戻り値の型に一貫性がありません。\n(最初: {}, 二度目: {})",
-                        &func_name, block_type, expr_type
-                    );
-                    stmt.report("Return type inconsistent", &message);
-                    return Err(());
-                }
-            }
-
-            Stmt::Return(Some(expr_id)) if !actually_returned => 
-            {
-                actually_returned = true;
-                let expr = expect_opt!(ast.expr.get(expr_id.0 as usize),
-                        "指定された式({:?})が見つかりませんでした。", expr_id);
-
-                block_return_type = expr.end_type.clone().or(Some(Type::null()));
-            }
-
-            Stmt::Return(None) if !actually_returned =>
-            {
-                actually_returned = true;
-                block_return_type = Some(Type::null());
-            }
-
-            _ => (),
-        }
+        resolve_statement(table, sema, ast, *inner_id)?;
     }
 
     // Determine final type. infer if needed.
@@ -661,6 +645,7 @@ fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut AS
     {
         if let Some(ref mut symbol) = table.symbol.get_mut(&func_name)
         {
+            let block_return_type = sema.last_return.take();
             let declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
             match (&declared_return_type, &block_return_type)
             {
@@ -678,7 +663,11 @@ fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut AS
 
                 (None, Some(_)) => *declared_return_type = block_return_type.map(Box::new),
 
-                (_, None) => unreachable!(), // block_return_type WILL get set to Some(Type::null()) eventually.
+                (x, None) => 
+                {
+                    println!("x: {:?}", x);
+                    unreachable!(); // block_return_type WILL get set to Some(Type::null()) eventually.
+                }
             }
         }
         else
@@ -686,7 +675,7 @@ fn resolve_function_and_body(table: &mut SymTable, locals: &Locals, ast: &mut AS
             unreachable!();
         }
     }
-    locals.shallowen();
+    sema.shallowen();
     Ok(())
 }
 
@@ -800,7 +789,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
     }
 }
 
-fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expression<'_>) -> Result<(), ()>
+fn solve_type(table: &mut SymTable, sema: Option<&Sema>, expr: &mut Expression<'_>) -> Result<(), ()>
 {
     if expr.end_type.is_some() { return Ok(()); }
     use ExprKind::*;
@@ -817,8 +806,8 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
             let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
             let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
 
-            if lhs.end_type.is_none() { solve_type(table, locals, lhs.as_mut())?; }
-            if rhs.end_type.is_none() { solve_type(table, locals, rhs.as_mut())?; }
+            if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
+            if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; }
 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
@@ -848,12 +837,12 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
 
             if lhs.end_type.is_none()
             {
-                solve_type(table, locals, lhs.as_mut())?;
+                solve_type(table, sema, lhs.as_mut())?;
             }
 
             if rhs.end_type.is_none()
             {
-                solve_type(table, locals, rhs.as_mut())?;
+                solve_type(table, sema, rhs.as_mut())?;
             }
 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
@@ -881,7 +870,7 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
             let var = expect_opt!(expr.rhs.as_mut(), "Unary演算に必要なデータが足りません。");
             if var.end_type.is_none()
             {
-                solve_type(table, locals, var.as_mut())?;
+                solve_type(table, sema, var.as_mut())?;
             }
             expr.end_type = var.end_type.clone();
             Ok(())
@@ -889,7 +878,7 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
         FunctionCall =>
         {
             let callee = expect_opt!(expr.lhs.as_mut(), "関数呼び出しに必要なデータが足りません。");
-            if callee.end_type.is_none() { solve_type(table, locals, callee.as_mut())?; }
+            if callee.end_type.is_none() { solve_type(table, sema, callee.as_mut())?; }
 
             let callee_type = expect_opt!(callee.end_type.as_ref(), "呼び出される関数の型が解決していません。");
             if callee_type.kind != TypeKind::Function
@@ -907,7 +896,7 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
 
             for (ref mut arg_expr, ref intended_type) in expr.arg_expr.iter_mut().zip(callee_type.arg_type.iter())
             {
-                if arg_expr.end_type.is_none() { solve_type(table, locals, arg_expr)?; }
+                if arg_expr.end_type.is_none() { solve_type(table, sema, arg_expr)?; }
                 let arg_type = expect_opt!(arg_expr.end_type.as_ref(), "引数の型が解決できませんでした。");
 
                 if !type_match(arg_type, intended_type)
@@ -926,20 +915,19 @@ fn solve_type(table: &mut SymTable, locals: Option<&Locals>, expr: &mut Expressi
         Grouping =>
         {
             let lhs = expect_opt!(expr.lhs.as_mut(), "Grouping演算に必要なデータが足りません。");
-            solve_type(table, locals, lhs.as_mut())?;
+            solve_type(table, sema, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
         Variable =>
         {
             let var_name = expect_opt!(expr.variable_name.as_ref(), "式データは変数として登録されていますが、変数名が存在しません。");
-            if let Some(locals) = locals
+            if let Some(sema) = sema
             {
-                if let Some(symbol_idx) = locals.search(var_name)
+                if let Some(symbol_idx) = sema.search(var_name)
                 {
                     {
-                        let mut local_borrowed = locals.stack.borrow_mut();
-                        let symbol = local_borrowed.get_mut(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
+                        let symbol = sema.locals.get(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
                         if symbol.types.is_some()
                         {
                             expr.end_type = symbol.types.clone();

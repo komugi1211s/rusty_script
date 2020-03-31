@@ -10,18 +10,26 @@ pub struct VirtualMachine
 {
     // Instruction Pointer :: current instruction.
     inst_idx: usize,
-    callst: Vec<usize>,
+    
+    // Stack Pointer :: last stack pointer. 
+    stack_idx: usize,
+
+    // Call stack :: Call stack.
+    callst: Vec<(usize, usize)>,
     stack: Vec<Value>,
     globals: HashMap<u32, Value>,
 }
+
+const CALLSTACK_DEPTH: usize = 1024;
 
 impl VirtualMachine
 {
     pub fn new() -> Self
     {
         Self {
-            inst_idx: 0,
-            callst:  Vec::with_capacity(512),
+            inst_idx:  0,
+            stack_idx: 0,
+            callst:  Vec::with_capacity(CALLSTACK_DEPTH),
             stack:   Vec::with_capacity(512),
             globals: HashMap::with_capacity(512),
         }
@@ -123,7 +131,6 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 }
             }
 
-
             IRCode::JNT(to) =>
             {
                 let cond = vm.stack.pop().unwrap();
@@ -134,18 +141,33 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 }
             }
 
-            IRCode::Call(index) =>
+            IRCode::Call(index, argcount) =>
             {
-                vm.callst.push(vm.inst_idx);
+                if vm.callst.len() > CALLSTACK_DEPTH
+                {
+                    report("Callstack Overflow", "関数の再帰呼び出しが制限に達しました。");
+                    return;
+                }
+                vm.callst.push((vm.inst_idx, vm.stack_idx - (*argcount) as usize));
                 vm.inst_idx = *index as usize;
                 continue;
             }
 
             IRCode::Return =>
             {
+                if vm.stack.is_empty() { break; }
+
                 match vm.callst.pop()
                 {
-                    Some(x) =>vm.inst_idx = x,
+                    Some((eip, esp)) =>
+                    {
+                        let value = vm.stack.pop().unwrap();
+                        vm.stack.truncate(vm.stack_idx);
+                        vm.inst_idx = eip;
+                        vm.stack_idx = esp;
+
+                        vm.stack.push(value);
+                    },
                     None => break,
                 }
             }
@@ -158,14 +180,14 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::Load(idx) =>
             {
-                let value = vm.stack.get((*idx) as usize).unwrap().clone();
+                let value = vm.stack.get(vm.stack_idx + (*idx as usize)).unwrap().clone();
                 vm.stack.push(value);
             }
 
             IRCode::Store(idx) =>
             {
                 let top_stack = vm.stack.last().unwrap().clone();
-                vm.stack[*idx as usize] = top_stack;
+                vm.stack[vm.stack_idx + (*idx as usize)] = top_stack;
             }
             IRCode::True =>
             {

@@ -41,7 +41,7 @@ pub enum IRCode
     Jump(u32),
     JT(u32),
     JNT(u32),
-    Call(u32),
+    Call(u32, u32), // I HATE THIS
 
     GILoad(u32),
     GFLoad(u32),

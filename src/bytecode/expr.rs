@@ -83,12 +83,6 @@ pub fn traverse_expression(compiler: &mut Compiler, ast: &ASTree, expr: &Express
 
 fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'_>)
 {
-    // at this point, we know that:
-    // Function exists, and properly declared as a function.
-    // Function will return an intended type.
-    // Receiver variable(if exists) and function holds the same type.
-    // argument has the same type.
-    
     assert!(expr.lhs.is_some(), "Function Call: lhs is empty, we don't know what it called.");
     
     let variable = expect_opt!(expr.lhs.as_ref(), "関数の呼び出し対象が解決できていません。");
@@ -99,8 +93,8 @@ fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'
         traverse_expression(compiler, ast, arg_expr);
     }
 
-    let index = *expect_opt!(compiler.function_idx.get(name), "関数 {} の定義に失敗しました。", name);
-    compiler.emit_op(IRCode::Call(index));
+    let (func_index, arg_length) = *expect_opt!(compiler.function_idx.get(name), "関数 {} の定義に失敗しました。", name);
+    compiler.emit_op(IRCode::Call(index, arg_length));
 }
 
 fn emit_store(compiler: &mut Compiler, target: &Expression<'_>) 

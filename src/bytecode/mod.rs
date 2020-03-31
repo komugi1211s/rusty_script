@@ -27,7 +27,7 @@ pub struct Compiler<'s>
     patch: Vec<Patch>,
     consts: Vec<Value>,
     depth: u16,
-    function_idx: HashMap<String, u32>,
+    function_idx: HashMap<String, (u32, u32)>,
 }
 
 impl<'s> Compiler<'s>
@@ -128,8 +128,9 @@ fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionD
     }
 
     let index = compiler.codes.len();
+    let argcount = func_node.args.len();
+    compiler.function_idx.insert(func_node.it.name.clone(), (index as u32, argcount as u32));
     traverse_statement(compiler, ast, func_node.block_id)?;
-    compiler.function_idx.insert(func_node.it.name.clone(), index as u32);
     Ok(())
 }
 
