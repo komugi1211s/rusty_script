@@ -3,6 +3,7 @@
  * */
 
 use super::Parser;
+use std::cell::Cell;
 
 use crate::{
     ast,
@@ -146,16 +147,27 @@ impl<'m> Parser<'m>
     {
         let start_span = self.get_current().span;
         let args = self.parse_arguments()?;
-        let func = self.block_statement()?;
+
+        let mut body = Vec::new();
+        self.parse_function_body(&mut body)?;
+
         let end_span = self.get_current().span;
 
+        let parent = ast::StmtId(self.ast.stmt.len() as u32);
+        for body_id in body.iter()
+        {
+            self.ast.set_parent_to_statement(parent, *body_id);
+        }
+
         let data = ast::FunctionData {
+            own_stmt: parent,
             it: baseinfo,
             args,
-            block_id: func,
+            body,
+            implicit_return_required: Cell::new(true),
         };
-
         let idx = self.ast.add_fn(data);
+
         let stmt = ast::Statement {
             module: self.module,
             span: CodeSpan::combine(&start_span, &end_span),
@@ -164,6 +176,21 @@ impl<'m> Parser<'m>
         };
 
         Ok(self.ast.add_stmt(stmt))
+    }
+
+    fn parse_function_body(&mut self, vec: &mut Vec<ast::StmtId>) -> Result<(), ()>
+    {
+        self.consume(TokenType::OpenBrace)?;
+        self.block_count += 1;
+
+        while !self.is_at_end() && !self.is(TokenType::CloseBrace)
+        {
+            vec.push(self.declaration()?);
+        }
+
+        self.block_count -= 1;
+        self.consume(TokenType::CloseBrace)?;
+        Ok(())
     }
 
     pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, ()>

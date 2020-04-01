@@ -130,7 +130,17 @@ fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionD
     let index = compiler.codes.len();
     let argcount = func_node.args.len();
     compiler.function_idx.insert(func_node.it.name.clone(), (index as u32, argcount as u32));
-    traverse_statement(compiler, ast, func_node.block_id)?;
+
+    for stmt_id in func_node.body.iter()
+    {
+        traverse_statement(compiler, ast, *stmt_id)?;
+    }
+
+    if func_node.implicit_return_required.get() 
+    {
+        compiler.emit_op(IRCode::Null);
+        compiler.emit_op(IRCode::Return);
+    }
     Ok(())
 }
 
@@ -152,7 +162,7 @@ pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, 
         traverse_statement(&mut compiler, ast, *node)?;
     }
 
-    compiler.emit_op(IRCode::Return);
+    // compiler.emit_op(IRCode::Return);
     Ok(CompiledCode {
         ep,
         code: compiler.codes,

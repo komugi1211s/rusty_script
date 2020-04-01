@@ -172,9 +172,9 @@ fn main()
         use std::fs::File;
         use std::io::Write;
         let mut file = File::create("dump").expect("failed to create a dump file.");
-        for i in bc.code.iter()
+        for (idx, i) in bc.code.iter().enumerate()
         {
-            writeln!(file, "{:?}", i).expect("Hey?");
+            writeln!(file, "{} {:?}", idx, i).expect("Hey?");
         }
         file.flush().expect("File Flushing Failed.");
     }

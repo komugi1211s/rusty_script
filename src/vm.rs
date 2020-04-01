@@ -43,7 +43,6 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
     while code_length > vm.inst_idx
     {
         let instruction = &bin.code[vm.inst_idx];
-
         match instruction
         {
             // TODO: redundant const difference
@@ -148,7 +147,8 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                     report("Callstack Overflow", "関数の再帰呼び出しが制限に達しました。");
                     return;
                 }
-                vm.callst.push((vm.inst_idx, vm.stack_idx - (*argcount) as usize));
+                vm.callst.push((vm.inst_idx, vm.stack_idx));
+                vm.stack_idx = vm.stack.len() - (*argcount) as usize;
                 vm.inst_idx = *index as usize;
                 continue;
             }
@@ -206,13 +206,11 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 let value = vm.globals.get(idx).unwrap().clone();
                 vm.stack.push(value);
             }
-
             IRCode::GStore(idx) =>
             {
                 let top_stack = vm.stack.pop().unwrap();
                 vm.globals.insert(*idx, top_stack);
             }
-
             IRCode::Interrupt =>
             {
                 println!("Interrupt hit.");

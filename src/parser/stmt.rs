@@ -114,6 +114,7 @@ impl<'m> Parser<'m>
             let expr = self.expression()?;
             self.ast.add_expr(expr)
         };
+
         let true_route = self.statement()?;
         let false_route = if self.is(TokenType::Else)
         {
@@ -133,7 +134,14 @@ impl<'m> Parser<'m>
             parent: None,
         };
 
-        Ok(self.ast.add_stmt(stmt))
+        let parent = self.ast.add_stmt(stmt);
+        self.ast.set_parent_to_statement(parent, true_route);
+        if let Some(else_path) = false_route
+        {
+            self.ast.set_parent_to_statement(parent, else_path);
+        }
+
+        Ok(parent)
     }
 
     fn while_statement(&mut self) -> Result<StmtId, ()>
@@ -155,7 +163,10 @@ impl<'m> Parser<'m>
             parent: None,
         };
 
-        Ok(self.ast.add_stmt(stmt))
+        let parent = self.ast.add_stmt(stmt);
+        self.ast.set_parent_to_statement(parent, whileloop);
+
+        Ok(parent)
     }
 
     pub(super) fn block_statement(&mut self) -> Result<StmtId, ()>
@@ -177,11 +188,11 @@ impl<'m> Parser<'m>
         self.block_count -= 1;
 
         let end_span = self.consume(TokenType::CloseBrace)?.span;
-        let next_stmt_index = self.ast.stmt.len();
+        let parent = StmtId(self.ast.stmt.len() as u32);
 
         for i in vector.iter()
         {
-            self.ast.stmt[i.0 as usize].parent = Some(StmtId(next_stmt_index as u32));
+            self.ast.set_parent_to_statement(parent, *i);
         }
 
         let block = Stmt::Block(BlockData {

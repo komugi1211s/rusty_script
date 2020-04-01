@@ -373,6 +373,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
             solve_type(table, Some(&sema), expr)?;
         }
+
         Stmt::Print(expr_id) =>
         {
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
@@ -507,9 +508,9 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
         Stmt::Function(func_id) => 
         {
-            let span = stmt.span; // Because Rustc complains about this.
-            resolve_function_and_body(table, sema, ast, func_id, span)?;
+            resolve_function_and_body(table, sema, ast, func_id)?;
         }
+
         Stmt::Block(ref block_data) =>
         {
             sema.deepen();
@@ -523,11 +524,17 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
         Stmt::Return(Some(expr_id)) => 
         {
+            if let Some(parent) = stmt.parent 
+            {
+                if let Stmt::Function(idx) = ast.stmt.get(parent.0 as usize).unwrap().data
+                {
+                    ast.functions.get(idx).unwrap().implicit_return_required.set(false);
+                }
+            }
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
             solve_type(table, Some(&sema), expr)?;
-
             match sema.last_return
             {
                 None => sema.last_return = expr.end_type.clone(),
@@ -549,6 +556,13 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
         
         Stmt::Return(None) => 
         {
+            if let Some(parent) = stmt.parent 
+            {
+                if let Stmt::Function(idx) = ast.stmt.get(parent.0 as usize).unwrap().data
+                {
+                    ast.functions.get(idx).unwrap().implicit_return_required.set(false);
+                }
+            }
             match sema.last_return
             {
                 None => sema.last_return = Some(Type::null()),
@@ -581,18 +595,21 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
 // TODO - @Improvement: DeclarationData should get it's own CodeSpan really.
 // this Span argument exists because I didn't give DeclarationData it's own codespan.
-fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, func_id: usize, span: CodeSpan) -> Result<(), ()>
+fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, func_id: usize) -> Result<(), ()>
 {
     sema.deepen();
-    let func_block_idx: StmtId;
     let func_name: String;
+    let func_stmt_id: StmtId;
+    let func_body_vector: Vec<StmtId>;
 
     // Entry Locals.
     {
         let func = expect_opt!(ast.functions.get(func_id), "関数 {} が見つかりません。", func_id);
         func_name = func.it.name.clone();
-        func_block_idx = func.block_id;
+        func_stmt_id = func.own_stmt;
+        func_body_vector = func.body.clone();
 
+        let declaration_span = ast.get_stmt(func_stmt_id).span;
         let table_entry = expect_opt!(table.symbol.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
         {
             if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
@@ -606,7 +623,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
                         idx: local_idx,
                         name: decl.name.clone(),
                         types: Some(dtype.clone()),
-                        span,
+                        span: declaration_span,
                         depth: local_depth
                     });
                 }
@@ -621,52 +638,69 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
         }
     }
 
-    // Traverse Function:
-    let func_block_data = {
-        let stmt = ast.get_stmt(func_block_idx);
-        if let Stmt::Block(ref block_data) = stmt.data
-        {
-            block_data.statements.clone()
-        }
-        else
-        {
-            unreachable!()
-        }
-    };
-
     sema.last_return = None;
-    for inner_id in func_block_data.iter()
+    for inner_id in func_body_vector.iter()
     {
         resolve_statement(table, sema, ast, *inner_id)?;
     }
 
+    let implicit_return_required = ast.functions.get(func_id).unwrap().implicit_return_required.get();
+
+
     // Determine final type. infer if needed.
-    
     {
         if let Some(ref mut symbol) = table.symbol.get_mut(&func_name)
         {
-            let block_return_type = sema.last_return.take();
+            let mut block_return_type = sema.last_return.take();
             let declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
+
+            if implicit_return_required && block_return_type.is_some()
+            {
+                block_return_type = block_return_type.map(Type::optional);
+            }
             match (&declared_return_type, &block_return_type)
             {
                 (Some(x), Some(y)) =>
                 {
                     if !type_match(&x, &y)
                     {
-                        let message = format!("関数 {} の戻り値が一致していません。\n(定義された型: {}, 型推論器の結論: {})",
-                            &func_name, &x, &y);
+                        let message = format!(
+                            "関数 {} の戻り値が一致していません。\n\
+                            (定義された型: {}, 型推論器の結論: {})",
+                            &func_name, &x, &y
+                        );
 
-                        ast.get_stmt(func_block_idx).report("Type mismatch", &message);
+                        ast.get_stmt(func_stmt_id).report("Type mismatch", &message);
+                        if implicit_return_required
+                        {
+                            info("関数のトップレベルブロック内にreturnが見つかりませんでした。\n\
+                                 関数の最後にreturn文を付け忘れていませんか？");
+                        }
                         return Err(());
                     }
                 }
 
                 (None, Some(_)) => *declared_return_type = block_return_type.map(Box::new),
 
-                (x, None) => 
+                (Some(x), None) => 
                 {
-                    println!("x: {:?}", x);
-                    unreachable!(); // block_return_type WILL get set to Some(Type::null()) eventually.
+                    if !type_match(&x, &*NULL_TYPE)
+                    {
+                        let message = format!("関数 {} の戻り値が一致していません。\n(定義された型: {}, 型推論器の結論: null)",
+                            &func_name, &x);
+
+                        ast.get_stmt(func_stmt_id).report("Type mismatch", &message);
+                        if implicit_return_required
+                        {
+                            info("関数のトップレベルブロック内にreturnが見つかりませんでした。\n\
+                                 関数の最後にreturn文を付け忘れていませんか？");
+                        }
+                        return Err(());
+                    }
+                }
+                (None, None) =>
+                {
+                    *declared_return_type = Some(Box::new(Type::null()));
                 }
             }
         }

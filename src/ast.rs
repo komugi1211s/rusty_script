@@ -5,6 +5,8 @@ use super::{
     trace::prelude::*,
 };
 
+use std::cell::Cell;
+
 #[derive(Debug)]
 pub struct ASTree<'m>
 {
@@ -61,6 +63,11 @@ impl<'m> ASTree<'m>
     {
         self.stmt.get(id.0 as usize).unwrap()
     }
+
+    pub fn set_parent_to_statement(&mut self, parent: StmtId, child: StmtId)
+    {
+        self.stmt[child.0 as usize].parent = Some(parent);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -89,23 +96,28 @@ pub struct Expression<'m>
     pub rhs: Option<Box<Expression<'m>>>,
 
     pub oper: Option<Operator>,
-
     pub variable_name: Option<String>,
-    pub local_idx: Option<u32>,
 
     pub array_expr: Vec<Expression<'m>>,
+
     pub arg_expr: Vec<Expression<'m>>,
     pub literal: Option<Literal<'m>>,
 
-    pub end_type: Option<Type>,
+    // gets set by Semantic Analysis.
+    pub local_idx: Option<u32>,
+    pub end_type:  Option<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionData
 {
+    pub own_stmt: StmtId,
     pub it: DeclarationData,
     pub args: Vec<DeclarationData>,
-    pub block_id: StmtId,
+    pub body: Vec<StmtId>,
+
+    // gets set by semantic analysis.
+    pub implicit_return_required: Cell<bool>
 }
 
 #[derive(Debug, Clone, PartialEq)]

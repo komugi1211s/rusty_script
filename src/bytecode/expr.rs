@@ -94,7 +94,7 @@ fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'
     }
 
     let (func_index, arg_length) = *expect_opt!(compiler.function_idx.get(name), "関数 {} の定義に失敗しました。", name);
-    compiler.emit_op(IRCode::Call(index, arg_length));
+    compiler.emit_op(IRCode::Call(func_index, arg_length));
 }
 
 fn emit_store(compiler: &mut Compiler, target: &Expression<'_>) 

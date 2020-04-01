@@ -6,7 +6,7 @@ pub mod prelude
     pub use super::position::CodeSpan;
     pub use super::source::SourceFile;
     pub use crate::{ err_fatal, expect, expect_opt };
-    pub use super::{ error_reported, report, spit_line, report_compiler_bug };
+    pub use super::{ error_reported, report, info, spit_line, report_compiler_bug };
     pub use super::Reportable;
 }
 
@@ -94,6 +94,11 @@ pub fn report(title: &str, message: &str)
     println!("{:-<50}", format!("\x1b[31m[Isekai]\x1b[0m :: {} ", title));
     println!("{}\n", message);
     ERROR_REPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn info(message: &str)
+{
+    println!("\x1b[31m INFO \x1b[0m :: {}\n", message);
 }
 
 fn mark_by_red(string: &str, col_start: usize, col_len: usize) -> String
