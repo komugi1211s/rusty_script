@@ -224,15 +224,21 @@ impl<'m> StmtInit<'m>
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExprKind
 {
-    Binary,
-    Logical,
-    FunctionCall,
     Assign,
 
+    Binary,
+    Logical,
+
+    Unary,
+
+    FunctionCall,
+    ArrayRef,
+
+    Variable,
     Literal,
     Grouping,
-    Unary,
-    Variable,
+    ArrayInst,
+
     Empty,
 }
 

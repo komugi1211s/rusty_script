@@ -365,7 +365,7 @@ impl<'m> Parser<'m>
 
         'parse: loop
         {
-            expr = match self.get_current().tokentype.clone()
+            expr = match self.get_current().tokentype
             {
                 TokenType::OpenParen => self.parse_func_call(expr)?,
                 TokenType::Bang => self.parse_unwrap(expr)?,
@@ -391,13 +391,21 @@ impl<'m> Parser<'m>
         Err(())
     }
 
-    fn parse_array_ref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_array_ref(&mut self, var: Expression<'m>) -> Result<Expression<'m>, ()>
     {
-        self.get_current().report(
-            "Unimplemented Feature",
-            "ArrayRef機能は実装されていません。",
-        );
-        Err(())
+        let mut expr = ExprInit {
+            kind: ExprKind::ArrayRef,
+            module: Some(self.module),
+            lhs: Some(Box::new(var)),
+            ..Default::default()
+        };
+
+        let start_span = self.consume(TokenType::OpenSquareBracket)?.span;
+        expr.rhs = Some(Box::new(self.expression()?));
+        let end_span = self.consume(TokenType::CloseSquareBracket)?.span;
+        expr.span = Some(CodeSpan::combine(&start_span, &end_span));
+
+        Ok(expr.init())
     }
 
     fn parse_func_call(&mut self, var: Expression<'m>) -> Result<Expression<'m>, ()>
@@ -585,6 +593,24 @@ impl<'m> Parser<'m>
 
                 expr.kind = ExprKind::Grouping;
                 expr.lhs = Some(Box::new(inside_paren));
+                expr.span = Some(CodeSpan::combine(&expr.span.unwrap(), &end_span));
+                Ok(expr.init())
+            }
+            OpenSquareBracket =>
+            {
+                let mut vector = Vec::new();
+                while !self.is_at_end()
+                {
+                    let expr = self.expression()?;
+                    vector.push(expr);
+                    
+                    if self.is(Comma) { self.consume(Comma)?; }
+                    if self.is(CloseSquareBracket) { break; }
+                }
+
+                let end_span = self.consume(CloseSquareBracket)?.span;
+                expr.kind = ExprKind::ArrayInst;
+                expr.array_expr = vector;
                 expr.span = Some(CodeSpan::combine(&expr.span.unwrap(), &end_span));
                 Ok(expr.init())
             }

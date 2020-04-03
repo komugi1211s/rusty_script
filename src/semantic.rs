@@ -722,12 +722,12 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
         Str => Ok(Some(Type::string())),
         Float => Ok(Some(Type::float())),
         Boolean => Ok(Some(Type::boolean())),
-        Array(of, size) =>
+        Array(of, _) =>
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
                 let type_of = Box::new(type_of);
-                Ok(Some(Type::array(type_of, *size)))
+                Ok(Some(Type::array(type_of)))
             }
             else
             {
@@ -812,11 +812,8 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
         }
         (Array, Array) => 
         {
-            if lhs.is_array_dynamic != rhs.is_array_dynamic { return false; }
-            if lhs.array_size != rhs.array_size { return false; }
             let lhs_inner_type = expect_opt!(lhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
             let rhs_inner_type = expect_opt!(rhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
-
             type_match(&*lhs_inner_type, &*rhs_inner_type)
         }
         (x, y) => x == y
@@ -907,6 +904,72 @@ fn solve_type(table: &mut SymTable, sema: Option<&Sema>, expr: &mut Expression<'
                 solve_type(table, sema, var.as_mut())?;
             }
             expr.end_type = var.end_type.clone();
+            Ok(())
+        }
+
+        ArrayRef =>
+        {
+            let variable = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+            let indexing = expect_opt!(expr.rhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+
+            if variable.end_type.is_none() { solve_type(table, sema, variable.as_mut())?; }
+            if indexing.end_type.is_none() { solve_type(table, sema, indexing.as_mut())?; }
+
+            let variable_type = expect_opt!(variable.end_type.as_mut(), "SolveTypeが正常に配列？の型を解決していません。");
+            let indexing_type = expect_opt!(indexing.end_type.as_mut(), "SolveTypeが正常にアクセスインデックスの型を解決していません。");
+
+            if variable_type.kind != TypeKind::Array
+            {
+                let message = format!("配列型を期待しましたが、配列以外の型({})にアクセスしようとしました。", variable_type);
+                variable.report("Type Mismatch", &message);
+                return Err(());
+            }
+            if indexing_type.kind != TypeKind::Int // TODO - This should not be hard coded.
+            {
+                let message = format!("整数型を期待しましたが、代わりに {} が支給されました。", indexing_type);
+                indexing.report("Type Mismatch", &message);
+                return Err(());
+            }
+
+            let return_type = expect_opt!(variable_type.array_type.clone(), "配列の戻り値が解決していません。");
+            expr.end_type = Some(*return_type);
+            Ok(())
+        }
+
+        ArrayInst =>
+        {
+            let array_length = expr.array_expr.len() as u32;
+            if array_length == 0
+            {
+                expr.end_type = Some(Type::array(Box::new(Type::null())));
+            }
+
+            let mut consistent_type = None;
+            for entry_expr in expr.array_expr.iter_mut()
+            {
+                if entry_expr.end_type.is_none() { solve_type(table, sema, entry_expr)?; }
+
+                match consistent_type
+                {
+                    None => consistent_type = entry_expr.end_type.clone(),
+                    Some(ref root_type) =>
+                    {
+                        let expr_type = entry_expr.end_type.as_ref().unwrap();
+                        if !type_match(root_type, expr_type)
+                        {
+                            let message = format!(
+                                "配列の要素に一貫性がありません。\n\n最初: {} が返されました \n二度目: {}が返されました",
+                                root_type, expr_type
+                            );
+                            
+                            entry_expr.report("Array Type Inconsistent", &message);
+                            return Err(())
+                        }
+                    }
+                }
+            }
+
+            expr.end_type = Some(Type::array(consistent_type.map(Box::new).unwrap()));
             Ok(())
         }
         FunctionCall =>

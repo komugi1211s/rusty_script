@@ -38,6 +38,8 @@ impl Default for TypeKind
     }
 }
 
+// TODO - @Improvement: can this be an enum?
+// Allocating 3 types in heap while only using one of three seems like a huge waste of memory.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Type
 {
@@ -48,12 +50,6 @@ pub struct Type
 
     /// For Array :: Type of array's content.
     pub array_type: Option<Box<Type>>,
-
-    /// For Array :: Array's variable count.
-    pub array_size: Option<u32>,
-
-    /// For Array :: Is array defined as a dynamic array??
-    pub is_array_dynamic: bool,
 
     /// For Function :: Function's Return Type.
     pub return_type: Option<Box<Type>>,
@@ -127,13 +123,11 @@ impl Type
         }
     }
 
-    pub fn array(of: Box<Self>, size: Option<u32>) -> Self
+    pub fn array(of: Box<Self>) -> Self
     {
         Self {
             kind: TypeKind::Array,
             array_type: Some(of),
-            array_size: size,
-            is_array_dynamic: size.is_none(),
             ..Default::default()
         }
     }
@@ -191,11 +185,7 @@ impl std::fmt::Display for Type
                 {
                     if let Some(ref base) = self.array_type
                     {
-                        match self.array_size
-                        {
-                            Some(size) => format!("[{}; {}]", &**base, size),
-                            None => format!("[{}]", &**base),
-                        }
+                        format!("[{}]", &**base)
                     }
                     else
                     {
