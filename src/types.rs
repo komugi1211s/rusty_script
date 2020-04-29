@@ -28,6 +28,9 @@ pub enum TypeKind
     
     // Meta
     Type
+
+    // Existential
+    Existential
 }
 
 impl Default for TypeKind
@@ -62,6 +65,9 @@ pub struct Type
 
     /// For Struct :: type of struct member in top to bottom order.
     pub struct_members: Vec<Type>,
+
+    /// For Existential :: Existential ID.
+    pub existetial_id: u32
 }
 
 impl Type
@@ -139,6 +145,15 @@ impl Type
             return_type: returns,
             arg_type: arg_require,
             ..Default::default()
+        }
+    }
+
+    pub fn existential(ext_id: u32) -> Self
+    {
+        Self { 
+            kind: TypeKind::Existential,
+            existential_id: ext_id,
+            .. Default::default()
         }
     }
 

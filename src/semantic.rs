@@ -924,6 +924,7 @@ fn solve_type(table: &mut SymTable, sema: Option<&Sema>, expr: &mut Expression<'
                 variable.report("Type Mismatch", &message);
                 return Err(());
             }
+
             if indexing_type.kind != TypeKind::Int // TODO - This should not be hard coded.
             {
                 let message = format!("整数型を期待しましたが、代わりに {} が支給されました。", indexing_type);
@@ -942,6 +943,7 @@ fn solve_type(table: &mut SymTable, sema: Option<&Sema>, expr: &mut Expression<'
             if array_length == 0
             {
                 expr.end_type = Some(Type::array(Box::new(Type::null())));
+                return Ok(());
             }
 
             let mut consistent_type = None;

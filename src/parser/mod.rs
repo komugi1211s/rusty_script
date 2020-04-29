@@ -601,11 +601,12 @@ impl<'m> Parser<'m>
                 let mut vector = Vec::new();
                 while !self.is_at_end()
                 {
+                    if self.is(CloseSquareBracket) { break; }
+
                     let expr = self.expression()?;
                     vector.push(expr);
                     
                     if self.is(Comma) { self.consume(Comma)?; }
-                    if self.is(CloseSquareBracket) { break; }
                 }
 
                 let end_span = self.consume(CloseSquareBracket)?.span;
