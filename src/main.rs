@@ -53,7 +53,7 @@ mod global {
             {
                 module_paths: vector,
                 modules: Vec::with_capacity(32),
-                symtable: SymTable::new(),
+                symtable: HashMap::with_capacity(255),
             }
         }
 

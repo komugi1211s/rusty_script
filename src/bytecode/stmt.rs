@@ -151,7 +151,7 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
         {
             compiler.emit_op(IRCode::Store(local_idx as u32));
         }
-        else if let Some(symbol) = compiler.table.symbol.get(&decl.name)
+        else if let Some(symbol) = compiler.table.get(&decl.name)
         {
             compiler.emit_op(IRCode::GStore(symbol.idx as u32));
         }

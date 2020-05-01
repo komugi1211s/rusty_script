@@ -20,17 +20,15 @@ pub enum TypeKind
     Ptr,
     Array,
     Function,
-    Union,
 
     // User_Defined.
     Struct,
     Enum,
+    Union, // TODO: Obsolete
     
     // Meta
-    Type
-
-    // Existential
-    Existential
+    Type,
+    TypeVar // Type that we don't know yet.
 }
 
 impl Default for TypeKind
@@ -41,8 +39,11 @@ impl Default for TypeKind
     }
 }
 
-// TODO - @Improvement: can this be an enum?
-// Allocating 3 types in heap while only using one of three seems like a huge waste of memory.
+// TODO - @Improvement: make it smaller.
+// while Option<Box<Something>> can be optimized to simple nullptr that doesn't allocate,
+// it's still passing 8bytes of 0-filled nothing through the stack.
+// and then there's also 2 vectors that is completely unnecessary,
+// but still takes 24bytes for each ((nullptr, cap), length) pack.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Type
 {
@@ -66,8 +67,8 @@ pub struct Type
     /// For Struct :: type of struct member in top to bottom order.
     pub struct_members: Vec<Type>,
 
-    /// For Existential :: Existential ID.
-    pub existetial_id: u32
+    /// For Existential :: Existential ID which will be used to identify certain unresolved types.
+    pub ext_id: Option<u32>,
 }
 
 impl Type
@@ -148,15 +149,6 @@ impl Type
         }
     }
 
-    pub fn existential(ext_id: u32) -> Self
-    {
-        Self { 
-            kind: TypeKind::Existential,
-            existential_id: ext_id,
-            .. Default::default()
-        }
-    }
-
     pub fn null() -> Self
     {
         Self {
@@ -179,6 +171,15 @@ impl Type
     pub fn is_null(&self) -> bool
     {
         self.kind == TypeKind::Null
+    }
+
+    pub fn existential(eid: u32) -> Self
+    {
+        Self {
+            kind: TypeKind::TypeVar,
+            ext_id: Some(eid),
+            ..Default::default()
+        }
     }
 }
 
@@ -258,6 +259,7 @@ impl std::fmt::Display for Type
                 }
                 Null => "null".into(),
                 Type => "Type".into(),
+                Existential => format!("<T{}>", self.ext_id.unwrap()) // Should be safe, don't quote me
             }
         )
     }

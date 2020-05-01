@@ -7,24 +7,10 @@ use super::{
 };
 
 #[allow(dead_code)]
-pub type SymbolTable = Arc<Mutex<SymTable>>;
+pub type SymbolTable = Arc<Mutex<HashMap<String, Symbol>>>;
 
-#[derive(Debug, Clone)]
-pub struct SymTable
-{
-    pub symbol: HashMap<String, Symbol>,
-    // pub scopes: HashMap<StmtId, Scopes>,
-}
-
-impl SymTable
-{
-    pub fn new() -> Self
-    {
-        SymTable {
-            symbol: HashMap::with_capacity(255),
-        }
-    }
-}
+#[allow(dead_code)]
+pub type SymTable = HashMap<String, Symbol>;
 
 #[derive(Debug, Clone)]
 pub struct Symbol
@@ -42,6 +28,7 @@ struct Sema
     current_block: u32,
     locals: Vec<Symbol>,
 
+    // type_constraints: Vec<Type>,
     last_return: Option<Type>,
 }
 
@@ -113,22 +100,20 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     // resolve_directive(ast)?;
     let root_stmt = ast.root.clone();
-    resolve_toplevel(table, &root_stmt, ast)?;
-
-    let mut locals = Sema {
+    let mut sema = Sema {
         locals: Vec::with_capacity(64),
         current_block: 0,
         last_return: None,
     };
 
-    resolve_fully(table, &mut locals, &root_stmt, ast)?;
+    resolve_toplevel(table, &mut sema, &root_stmt, ast)?;
+    resolve_fully(table, &mut sema, &root_stmt, ast)?;
     Ok(())
 }
 
-fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     let mut global_idx: usize = 0;
-
     for stmt in root
     {
         let root = expect_opt!(ast.stmt.get(stmt.0 as usize), "ルートに指定された文が見つかりませんでした。");
@@ -137,7 +122,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
             Stmt::Declaration(ref decl) =>
             {
                 // Check Global declaration, and spit an error if it exists.
-                if table.symbol.contains_key(&decl.name)
+                if table.contains_key(&decl.name)
                 {
                     let message = format!("変数 `{}` が複数回定義されています。", &decl.name);
                     root.report("Duplicated Declaration", &message);
@@ -163,13 +148,23 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                     None
                 };
 
-                let expr_type = if let Some(expr_id) = decl.expr
+                global_idx += 1;
+                let symbol = Symbol {
+                    idx: global_idx,
+                    name: decl.name.clone(),
+                    span: root.span,
+                    types: declared_type,
+                    depth: 0,
+                };
+
+                table.insert(decl.name.clone(), symbol);
+                /* 
+                if let Some(expr_id) = decl.expr
                 {
                     if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                     {
                         // try_folding_literal(expr, 0)?;
                         solve_type(table, None, expr)?;
-                        expr.end_type.clone()
                     }
                     else
                     {
@@ -181,66 +176,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                         panic!();
                     }
                 }
-                else
-                {
-                    Some(Type::null())
-                };
-
-                global_idx += 1;
-                match (declared_type, expr_type)
-                {
-                    (None, None) => 
-                    {
-                        root.report(
-                            "Empty Annotation/Initialization",
-                            "変数の初期化も型指定もされていないため、型の推論が出来ません。",
-                        );
-                        return Err(());
-                    }
-
-                    (Some(x), None) =>
-                    {
-                        let symbol = Symbol {
-                            idx: global_idx,
-                            name: decl.name.clone(),
-                            span: root.span,
-                            types: Some(x),
-                            depth: 0,
-                        };
-                        table.symbol.insert(decl.name.clone(), symbol);
-                    }
-                    (None, Some(x)) =>
-                    {
-                        let symbol = Symbol {
-                            idx: global_idx,
-                            name: decl.name.clone(),
-                            span: root.span,
-                            types: Some(x),
-                            depth: 0,
-                        };
-                        table.symbol.insert(decl.name.clone(), symbol);
-                    }
-                    (Some(x), Some(y)) => 
-                    {
-                        if type_match(&x, &y)
-                        {
-                            let symbol = Symbol {
-                                idx: global_idx,
-                                name: decl.name.clone(),
-                                span: root.span,
-                                types: Some(x),
-                                depth: 0,
-                            };
-                            table.symbol.insert(decl.name.clone(), symbol);
-                        }
-                        else
-                        {
-                            let message = &format!("変数の型 ({}) と式の結果型 ({}) が一致しませんでした。", x, y);
-                            root.report("Type Mismatch", message);
-                            return Err(());
-                        }
-                    }
-                }
+                */
             }
 
             Stmt::Function(targ) => 
@@ -250,7 +186,7 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                 // Check global declaration, and spit an error if it exists.
                 // TODO - @Incomplete: Do something with _exists, because it has Span too,
                 // maybe you can report in "info" style?
-                if let Some(_exists) = table.symbol.get(&func.it.name)
+                if let Some(_exists) = table.get(&func.it.name)
                 {
                     let message = format!("変数 {} が複数回定義されています。", &func.it.name);
                     root.report("Duplicated Declaration", &message);
@@ -316,44 +252,20 @@ fn resolve_toplevel(table: &mut SymTable, root: &[StmtId], ast: &mut ASTree<'_>)
                     span: root.span,
                     depth: 0,
                 };
-                table.symbol.insert(func.it.name.clone(), symbol);
+                table.insert(func.it.name.clone(), symbol);
             }
-
-            // Stmt::Expression(ref expr) => 
-            // {
-            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
-            //     solve_type(table, None, expr)?;
-            // }
-
-            // Stmt::Print(ref expr) =>
-            // {
-            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
-            //     solve_type(table, None, expr)?;
-            // }
-
-            // Stmt::If(expr, _, _) =>
-            // {
-            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
-            //     solve_type(table, None, expr)?;
-            // }
-
-            // Stmt::While(expr, _) =>
-            // {
-            //     let expr = expect_opt!(ast.expr.get_mut(expr.0 as usize), "式のインデックスが不正です。");
-            //     solve_type(table, None, expr)?; 
-            // }
             _ => (),
         }
     }
     Ok(())
 }
 
-fn resolve_fully(table: &mut SymTable, local: &mut Sema, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
+fn resolve_fully(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast: &mut ASTree) -> Result<(), ()>
 {
     for stmt_id in root
     {
-        resolve_statement(table, local, ast, *stmt_id)?;
-        local.clear();
+        resolve_statement(table, sema, ast, *stmt_id)?;
+        sema.clear();
     }
     Ok(())
 }
@@ -382,6 +294,43 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             solve_type(table, Some(&sema), expr)?;
         }
         
+        Stmt::Declaration(ref decl) =>
+        {
+            if table.contains_key(&decl.name) 
+            {
+                let expr_type = if let Some(expr_id) = decl.expr
+                {
+                    let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize), 
+                                           "初期化時に式を期待しましたが、取得できませんでした。");
+                    solve_type(table, Some(&sema), expr)?;
+                    expr.end_type.clone()
+                }
+                else
+                {
+                    Some(Type::null())
+                };
+
+                let entry = table.get_mut(&decl.name).unwrap();
+                match (&entry.types, &expr_type)
+                {
+                    (Some(x), Some(y)) =>
+                    {
+                        if !type_match(x, y)
+                        {
+                            stmt.report("Type Mismatch", "type mismatch");
+                            return Err(());
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+            else
+            {
+                let message = format!("グローバル変数 `{}` が定義されていません。", &decl.name);
+                report_compiler_bug(&message, ::std::file!(), ::std::line!(), "table.get_mut(&decl.name)");
+                return Err(());
+            }
+        }
 
         Stmt::Declaration(ref decl) if sema.current_block > 0 =>
         {
@@ -392,7 +341,6 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 return Err(());
             }
             // Infer or Check the type.
-            // TODO - @Imcomplete: It can be separated into different code.
             let declared_type = if decl.is_annotated()
             {
                 match maybe_parse_annotated_type(&decl.dectype)
@@ -412,6 +360,15 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
             let local_idx = sema.locals.len();
             let local_depth = sema.current_block;
+
+            sema.locals.push(Symbol {
+                idx: local_idx,
+                name: decl.name.clone(),
+                span: stmt.span,
+                types: None,
+                depth: local_depth,
+            });
+
             let expr_type = if let Some(expr_id) = decl.expr
             {
                 if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
@@ -436,13 +393,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 Some(Type::null())
             };
 
-            let mut symbol = Symbol {
-                idx: local_idx,
-                name: decl.name.clone(),
-                span: stmt.span,
-                types: None,
-                depth: local_depth,
-            };
+            let symbol = sema.locals.get_mut(local_idx).unwrap();
 
             match (declared_type, expr_type)
             {
@@ -458,19 +409,16 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 (Some(x), None) =>
                 {
                     symbol.types = Some(x);
-                    sema.locals.push(symbol);
                 }
                 (None, Some(x)) =>
                 {
                     symbol.types = Some(x);
-                    sema.locals.push(symbol);
                 }
                 (Some(x), Some(y)) => 
                 {
                     if type_match(&x, &y)
                     {
                         symbol.types = Some(x);
-                        sema.locals.push(symbol);
                     }
                     else
                     {
@@ -610,7 +558,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
         func_body_vector = func.body.clone();
 
         let declaration_span = ast.get_stmt(func_stmt_id).span;
-        let table_entry = expect_opt!(table.symbol.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
+        let table_entry = expect_opt!(table.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
         {
             if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
             {
@@ -649,7 +597,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
 
     // Determine final type. infer if needed.
     {
-        if let Some(ref mut symbol) = table.symbol.get_mut(&func_name)
+        if let Some(ref mut symbol) = table.get_mut(&func_name)
         {
             let mut block_return_type = sema.last_return.take();
             let declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
@@ -1025,25 +973,23 @@ fn solve_type(table: &mut SymTable, sema: Option<&Sema>, expr: &mut Expression<'
             {
                 if let Some(symbol_idx) = sema.search(var_name)
                 {
+                    let symbol = sema.locals.get(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
+                    if symbol.types.is_some()
                     {
-                        let symbol = sema.locals.get(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
-                        if symbol.types.is_some()
-                        {
-                            expr.end_type = symbol.types.clone();
-                            expr.local_idx = Some(symbol_idx as u32);
-                            return Ok(());
-                        }
-                        else
-                        {
-                            let message = format!("変数 {} の型の推論に失敗しました。 ", var_name);
-                            expr.report("Type Inference Failed", &message);
-                            return Err(());
-                        }
+                        expr.end_type = symbol.types.clone();
+                        expr.local_idx = Some(symbol_idx as u32);
+                        return Ok(());
+                    }
+                    else
+                    {
+                        let message = format!("変数 {} の型の推論に失敗しました。 ", var_name);
+                        expr.report("Type Inference Failed", &message);
+                        return Err(());
                     }
                 }
             }
 
-            if let Some(symbol) = table.symbol.get(var_name)
+            if let Some(symbol) = table.get(var_name)
             {
                 if symbol.types.is_some()
                 {

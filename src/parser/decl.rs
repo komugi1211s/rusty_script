@@ -277,9 +277,27 @@ impl<'m> Parser<'m>
 
         if self.is(TokenType::Equal)
         {
-            self.advance();
-            let item = self.expression()?;
-            decl_info.expr = Some(self.ast.add_expr(item));
+            let assign_span = self.advance().span;
+            let rvalue_expr = self.expression()?;
+            let variable_expr = ast::ExprInit {
+                kind: ast::ExprKind::Variable,
+                module: Some(self.module),
+                span: Some(start_span),
+                variable_name: Some(decl_info.name.clone()),
+                ..Default::default()
+            }.init();
+
+            let assign_expr = ast::ExprInit {
+                kind: ast::ExprKind::Assign,
+                module: Some(self.module),
+                span: Some(assign_span),
+                lhs: Some(Box::new(variable_expr)),
+                rhs: Some(Box::new(rvalue_expr)),
+                end_type: None,
+                ..Default::default()
+            }.init();
+
+            decl_info.expr = Some(self.ast.add_expr(assign_expr));
             let end_span = self.consume(TokenType::SemiColon)?.span;
 
             statement.span = Some(CodeSpan::combine(&start_span, &end_span));

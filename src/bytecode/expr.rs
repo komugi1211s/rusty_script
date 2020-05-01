@@ -63,7 +63,7 @@ pub fn traverse_expression(compiler: &mut Compiler, ast: &ASTree, expr: &Express
             }
             else
             {
-                if let Some(global_symbol) = compiler.table.symbol.get(var_name)
+                if let Some(global_symbol) = compiler.table.get(var_name)
                 {
                     compiler.emit_op(IRCode::GLoad(global_symbol.idx as u32));
                 }
@@ -104,7 +104,7 @@ fn emit_store(compiler: &mut Compiler, target: &Expression<'_>)
     {
         compiler.emit_op(IRCode::Store(local_idx));
     }
-    else if let Some(symbol) = compiler.table.symbol.get(var_name)
+    else if let Some(symbol) = compiler.table.get(var_name)
     {
         compiler.emit_op(IRCode::GStore(symbol.idx as u32));
     }
