@@ -67,8 +67,8 @@ pub struct Type
     /// For Struct :: type of struct member in top to bottom order.
     pub struct_members: Vec<Type>,
 
-    /// For Existential :: Existential ID which will be used to identify certain unresolved types.
-    pub ext_id: Option<u32>,
+    /// For Typevar :: Substitution for Typevar.
+    pub typevar_subst: Vec<Type>,
 }
 
 impl Type
@@ -173,11 +173,10 @@ impl Type
         self.kind == TypeKind::Null
     }
 
-    pub fn existential(eid: u32) -> Self
+    pub fn typevar() -> Self
     {
         Self {
             kind: TypeKind::TypeVar,
-            ext_id: Some(eid),
             ..Default::default()
         }
     }
@@ -259,7 +258,7 @@ impl std::fmt::Display for Type
                 }
                 Null => "null".into(),
                 Type => "Type".into(),
-                Existential => format!("<T{}>", self.ext_id.unwrap()) // Should be safe, don't quote me
+                Typevar => "<T>".into() // Should be safe, don't quote me
             }
         )
     }

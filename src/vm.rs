@@ -66,8 +66,8 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::Add | IRCode::Sub | IRCode::Mul | IRCode::Div =>
             {
-                let rhs = vm.stack.pop().unwrap();
-                let lhs = vm.stack.pop().unwrap();
+                let rhs = expect_opt!(vm.stack.pop(), "ADD/SUB/MUL/DIV RHS");
+                let lhs = expect_opt!(vm.stack.pop(), "ADD/SUB/MUL/DIV LHS"); 
 
                 let result = match instruction
                 {
@@ -84,8 +84,8 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
             | IRCode::LessEq | IRCode::MoreEq 
             | IRCode::More | IRCode::Less =>
             {
-                let rhs = vm.stack.pop().unwrap();
-                let lhs = vm.stack.pop().unwrap();
+                let rhs = expect_opt!(vm.stack.pop(), "EQEQ, NOTEQ, LESSEQ... RHS");
+                let lhs = expect_opt!(vm.stack.pop(), "EQEQ, NOTEQ, LESSEQ... LHS"); 
 
                 let result = match instruction
                 {
@@ -102,14 +102,14 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::Not =>
             {
-                let lhs = vm.stack.pop().unwrap();
+                let lhs = expect_opt!(vm.stack.pop(), "NOT LHS");
                 let result = !lhs.is_truthy();
                 vm.stack.push(result.into());
             }
 
             IRCode::Neg =>
             {
-                let lhs = vm.stack.pop().unwrap();
+                let lhs = expect_opt!(vm.stack.pop(), "NEG LHS");
                 let result = -lhs;
                 vm.stack.push(result);
             }
@@ -122,7 +122,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::JT(to) =>
             {
-                let cond = vm.stack.pop().unwrap();
+                let cond = expect_opt!(vm.stack.pop(), "JT COND");
                 if cond.is_truthy()
                 {
                     vm.inst_idx = *to as usize;
@@ -132,7 +132,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::JNT(to) =>
             {
-                let cond = vm.stack.pop().unwrap();
+                let cond = expect_opt!(vm.stack.pop(), "JNT COND");
                 if !cond.is_truthy()
                 {
                     vm.inst_idx = *to as usize;
@@ -161,7 +161,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 {
                     Some((eip, esp)) =>
                     {
-                        let value = vm.stack.pop().unwrap();
+                        let value = expect_opt!(vm.stack.pop(), "RETURN VALUE");
                         vm.stack.truncate(vm.stack_idx);
                         vm.inst_idx = eip;
                         vm.stack_idx = esp;
@@ -174,19 +174,19 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::DebugPrint =>
             {
-                let value = vm.stack.pop().unwrap();
+                let value = expect_opt!(vm.stack.pop(), "DEBUGPRINT VALUE");
                 println!("{}", value);
             }
 
             IRCode::Load(idx) =>
             {
-                let value = vm.stack.get(vm.stack_idx + (*idx as usize)).unwrap().clone();
+                let value = expect_opt!(vm.stack.get(vm.stack_idx + (*idx as usize)), "LOAD VALUE").clone();
                 vm.stack.push(value);
             }
 
             IRCode::Store(idx) =>
             {
-                let top_stack = vm.stack.last().unwrap().clone();
+                let top_stack = expect_opt!(vm.stack.last(), "STORE TOP_STACK").clone();
                 vm.stack[vm.stack_idx + (*idx as usize)] = top_stack;
             }
             IRCode::True =>
@@ -203,12 +203,12 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
             }
             IRCode::GLoad(idx) =>
             {
-                let value = vm.globals.get(idx).unwrap().clone();
+                let value = expect_opt!(vm.globals.get(idx), "GLOAD").clone();
                 vm.stack.push(value);
             }
             IRCode::GStore(idx) =>
             {
-                let top_stack = vm.stack.pop().unwrap();
+                let top_stack = expect_opt!(vm.stack.pop(), "GSTORE");
                 vm.globals.insert(*idx, top_stack);
             }
             IRCode::Interrupt =>

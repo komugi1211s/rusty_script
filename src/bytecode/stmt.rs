@@ -147,6 +147,7 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
     {
         let expr = ast.get_expr(expr);
         traverse_expression(compiler, ast, expr);
+        /*
         if let Some(local_idx) = expr.local_idx
         {
             compiler.emit_op(IRCode::Store(local_idx as u32));
@@ -160,6 +161,7 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
             expr.report("internal", "データを割り当てる変数が見つかりませんでした。Bytecode上のエラーです。");
             panic!();
         }
+        */
     }
 }
 
