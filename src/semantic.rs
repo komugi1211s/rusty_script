@@ -30,9 +30,9 @@ struct Sema
     current_block: u32,
     locals: Vec<Symbol>,
 
-    // type_constraints: Vec<Type>,
     last_return: Option<Type>,
 }
+
 
 impl Sema
 {
@@ -98,9 +98,24 @@ pub fn new_symboltable() -> SymbolTable
 }
 */
 
+pub fn default_symbol_table(table: &mut SymTable)
+{
+    let mut g_idx = table.len();
+    g_idx += 1;
+    let int = Symbol {
+        idx: g_idx,
+        name: "int".into(),
+        types: Some(Type::int()),
+        span: NATIVE_SPAN,
+        depth: 0,
+    };
+
+    table.insert("int".into(), int);
+}
+
 pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
-    // resolve_directive(ast)?;
+    default_symbol_table(table);
     let root_stmt = ast.root.clone();
     let mut sema = Sema {
         locals: Vec::with_capacity(64),
@@ -115,7 +130,7 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 
 fn resolve_toplevel(table: &mut SymTable, _sema: &mut Sema, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
-    let mut global_idx: usize = 0;
+    let mut global_idx: usize = table.len();
     for stmt in root
     {
         let root = expect_opt!(ast.stmt.get(stmt.0 as usize), "ルートに指定された文が見つかりませんでした。");
@@ -191,10 +206,6 @@ fn resolve_toplevel(table: &mut SymTable, _sema: &mut Sema, root: &[StmtId], ast
                     }
                 }
 
-                // Determine each argument's type.
-                // TODO - @Incomplete: we forget the name of argument here: it has same problem
-                // as the local variables. how should we handle this?
-                // TODO - @Incomplete: Default argument support...?
                 let arg_types: Vec<Type> = if func.args.is_empty() 
                 {
                     vec![]
@@ -281,7 +292,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
         {
             if table.contains_key(&decl.name) 
             {
-                let expr_type = if let Some(expr_id) = decl.expr
+                let mut expr_type = if let Some(expr_id) = decl.expr
                 {
                     let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize), 
                                            "初期化時に式を期待しましたが、取得できませんでした。");
@@ -294,10 +305,11 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 };
 
                 let entry = table.get_mut(&decl.name).unwrap();
-                match (&entry.types, &expr_type)
+                match (&mut entry.types, &mut expr_type)
                 {
-                    (Some(x), Some(y)) =>
+                    (Some(ref mut x), Some(ref mut y)) =>
                     {
+                        unify_type(x, y);
                         if !type_match(x, y)
                         {
                             stmt.report("Type Mismatch", "type mismatch");
@@ -397,8 +409,9 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 {
                     symbol.types = Some(x);
                 }
-                (Some(x), Some(y)) => 
+                (Some(mut x), Some(mut y)) => 
                 {
+                    unify_type(&mut x, &mut y);
                     if type_match(&x, &y)
                     {
                         symbol.types = Some(x);
@@ -704,7 +717,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
     match (lhs.kind, rhs.kind)
     {
         (TypeVar, _) | (_, TypeVar) => true, // TODO: Fix
-        (Struct, Struct) | (Union, Union) =>
+        (Struct, Struct) | (Union, Union) | (Enum, Enum) =>
         {
             if lhs.struct_members.len() != rhs.struct_members.len() { return false; }
 
@@ -712,10 +725,6 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
                               .zip(rhs.struct_members.iter())
                               .all(|(lht, rht)| type_match(lht, rht))
 
-        }
-        (Enum, Enum) =>
-        {
-            lhs.struct_name == rhs.struct_name
         }
         (Function, Function) =>
         {
@@ -773,8 +782,15 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
             if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; }
 
-            let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
-            let rhs_type = expect_opt!(rhs.end_type.as_mut(), "SolveTypeが正常にRHSの型を解決していません。");
+            {
+                let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
+                let rhs_type = expect_opt!(rhs.end_type.as_mut(), "SolveTypeが正常にRHSの型を解決していません。");
+                unify_type(lhs_type, rhs_type);
+            }
+
+            let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
+            let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
+
             if type_match(lhs_type, rhs_type)
             {
                 expr.end_type = lhs.end_type.clone();
@@ -999,5 +1015,50 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             expr.report("internal", "コンパイラーが式の形式を認識できませんでした。");
             Err(())
         }
+    }
+}
+
+fn unify_type(lht: &mut Type, rht: &mut Type)
+{
+    use TypeKind::*;
+    match(lht.kind, rht.kind)
+    {
+        (TypeVar, TypeVar) => panic!(),
+
+        (Array, Array) =>
+        {
+            let lht_inner_type = expect_opt!(lht.array_type.as_mut(), "Array型の中身が解決していません.");
+            let rht_inner_type = expect_opt!(rht.array_type.as_mut(), "Array型の中身が解決していません.");
+            unify_type(lht_inner_type, rht_inner_type);
+        }
+
+        (TypeVar, _) => { *lht = rht.clone(); }
+        (_, TypeVar) => { *rht = lht.clone(); }
+
+        (_, _) => { return; }
+    }
+}
+
+fn prune_type(target: &mut Type) -> bool
+{
+    if target.kind == TypeKind::TypeVar 
+    {
+        let mut is_inst_typevar = false;
+        if let Some(ref mut inst) = target.typevar_instance
+        {
+            prune_type(&mut **inst);
+            is_inst_typevar = inst.kind == TypeKind::TypeVar;
+        }
+        if is_inst_typevar 
+        {
+            target.typevar_instance = target.typevar_instance.take().unwrap().typevar_instance.take();
+            return true;
+        }
+
+        false
+    }
+    else
+    {
+        false
     }
 }

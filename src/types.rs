@@ -39,7 +39,6 @@ impl Default for TypeKind
     }
 }
 
-// TODO - @Improvement: make it smaller.
 // while Option<Box<Something>> can be optimized to simple nullptr that doesn't allocate,
 // it's still passing 8bytes of 0-filled nothing through the stack.
 // and then there's also 2 vectors that is completely unnecessary,
@@ -61,14 +60,11 @@ pub struct Type
     /// For Function :: Function's argument type in left to right order.
     pub arg_type: Vec<Type>,
 
-    /// For Struct :: name of struct.
-    pub struct_name: Option<String>,
-
     /// For Struct :: type of struct member in top to bottom order.
     pub struct_members: Vec<Type>,
 
     /// For Typevar :: Substitution for Typevar.
-    pub typevar_subst: Vec<Type>,
+    pub typevar_instance: Option<Box<Type>>,
 }
 
 impl Type
@@ -162,7 +158,6 @@ impl Type
         Self {
             // TODO - @Broken: Move optional into TypeKind::Union
             kind: TypeKind::Union,
-            struct_name: Some(format!("{}?", &of)),
             struct_members: vec![of, Self::null()],
             ..Default::default()
         }
@@ -238,15 +233,6 @@ impl std::fmt::Display for Type
                 }
                 Struct | Enum | Union =>
                 {
-                    let struct_name = if let Some(ref name) = self.struct_name
-                    {
-                        name.clone()
-                    }
-                    else
-                    {
-                        format!("<NoNameAbt> :: {:?}", self.kind)
-                    };
-
                     let members = self
                         .struct_members
                         .iter()
@@ -254,11 +240,11 @@ impl std::fmt::Display for Type
                         .collect::<Vec<String>>()
                         .join("; ");
 
-                    format!("{}: {:?} {{ {} }}", struct_name, self.kind, members)
+                    format!("{:?} {{ {} }}", self.kind, members)
                 }
                 Null => "null".into(),
                 Type => "Type".into(),
-                Typevar => "<T>".into() // Should be safe, don't quote me
+                TypeVar => "<T>".into() // Should be safe, don't quote me
             }
         )
     }
@@ -394,7 +380,7 @@ impl fmt::Display for Value
             Value::Str(ref s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Null => write!(f, "<null>"),
-            Value::Pointer(x) => write!(f, "Pointer{}", x),
+            Value::Pointer(x) => write!(f, "ptr -> {}", x),
         }
     }
 }
