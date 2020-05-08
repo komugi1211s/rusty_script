@@ -596,18 +596,19 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
         if let Some(ref mut symbol) = table.get_mut(&func_name)
         {
             let mut block_return_type = sema.last_return.take();
-            let declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
+            let mut declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
 
             if implicit_return_required && block_return_type.is_some()
             {
                 block_return_type = block_return_type.map(Type::optional);
             }
 
-            match (&declared_return_type, &block_return_type)
+            match (&mut declared_return_type, &mut block_return_type)
             {
-                (Some(x), Some(y)) =>
+                (Some(ref mut x), Some(ref mut y)) =>
                 {
-                    if !type_match(&x, &y)
+                    unify_type(&mut *x, &mut *y);
+                    if !type_match(&*x, &*y)
                     {
                         let message = format!(
                             "関数 {} の戻り値が一致していません。\n\

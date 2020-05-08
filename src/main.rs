@@ -115,10 +115,12 @@ fn main()
 
     if arguments.len() <= 1 
     { 
-        // TODO: Interpreter Support
         println!("usage: isekai [filename].kai");
         return;
     }
+
+    let typecheck_only = arguments.get(2) == Some(&("check".into())); // TODO - @Cleanup
+
     let root = globals.open_and_add_module(&arguments[1]).unwrap();
     let root_file = &globals.modules[root];
 
@@ -158,37 +160,43 @@ fn main()
         }
     }
 
-    if true 
+    if !typecheck_only
     {
-        println!("LLVM starting.");
-        llvm::llvm_dump(&globals, &ast);
+        if true {
+            println!("LLVM starting.");
+            llvm::llvm_dump(&globals, &ast);
+        }
+        else
+        {
+            let bc       = {
+                match bytecode::generate_bytecode(&globals, &ast) 
+                {
+                    Ok(x) => x,
+                    Err(()) => 
+                    {
+                        println!("コンパイルに失敗しました: Bytecode Generator エラー");
+                        return;
+                    }
+                }
+            };
+
+            if ::std::cfg!(debug_assertions) 
+            {
+                use std::fs::File;
+                use std::io::Write;
+                let mut file = File::create("dump").expect("failed to create a dump file.");
+                for (idx, i) in bc.code.iter().enumerate()
+                {
+                    writeln!(file, "{} {:?}", idx, i).expect("Hey?");
+                }
+                file.flush().expect("File Flushing Failed.");
+            }
+
+            vm::start_vm(&mut vm, &root_file, &bc);
+        }
     }
     else
     {
-        let bc       = {
-            match bytecode::generate_bytecode(&globals, &ast) 
-            {
-                Ok(x) => x,
-                Err(()) => 
-                {
-                    println!("コンパイルに失敗しました: Bytecode Generator エラー");
-                    return;
-                }
-            }
-        };
-
-        if ::std::cfg!(debug_assertions) 
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut file = File::create("dump").expect("failed to create a dump file.");
-            for (idx, i) in bc.code.iter().enumerate()
-            {
-                writeln!(file, "{} {:?}", idx, i).expect("Hey?");
-            }
-            file.flush().expect("File Flushing Failed.");
-        }
-
-        vm::start_vm(&mut vm, &root_file, &bc);
+        println!("Typecheck Done.");
     }
 }
