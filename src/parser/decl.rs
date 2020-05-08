@@ -294,6 +294,7 @@ impl<'m> Parser<'m>
                 lhs: Some(Box::new(variable_expr)),
                 rhs: Some(Box::new(rvalue_expr)),
                 end_type: None,
+                oper: Some(ast::Operator::Asgn),
                 ..Default::default()
             }.init();
 

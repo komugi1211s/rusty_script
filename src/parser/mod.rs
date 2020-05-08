@@ -121,6 +121,7 @@ impl<'m> Parser<'m>
                     rhs: Some(Box::new(value)),
                     span: Some(CodeSpan::combine(&start_span, &end_span)),
                     end_type: None,
+                    oper: Some(Operator::Asgn),
                     ..Default::default()
                 }
                 .init();

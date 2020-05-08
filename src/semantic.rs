@@ -17,10 +17,10 @@ pub type SymTable = HashMap<String, Symbol>;
 #[derive(Debug, Clone)]
 pub struct Symbol
 {
-    pub idx: usize,
     pub name: String,
     pub types: Option<Type>,
     pub span: CodeSpan,
+    pub idx: usize,
     pub depth: u32,
 }
 
@@ -29,10 +29,9 @@ struct Sema
 {
     current_block: u32,
     locals: Vec<Symbol>,
-
+    typevar_count: usize,
     last_return: Option<Type>,
 }
-
 
 impl Sema
 {
@@ -119,6 +118,7 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
     let root_stmt = ast.root.clone();
     let mut sema = Sema {
         locals: Vec::with_capacity(64),
+        typevar_count: 0,
         current_block: 0,
         last_return: None,
     };
@@ -128,7 +128,7 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
     Ok(())
 }
 
-fn resolve_toplevel(table: &mut SymTable, _sema: &mut Sema, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
+fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     let mut global_idx: usize = table.len();
     for stmt in root
@@ -162,7 +162,8 @@ fn resolve_toplevel(table: &mut SymTable, _sema: &mut Sema, root: &[StmtId], ast
                 }
                 else
                 {
-                    Some(Type::typevar())
+                    sema.typevar_count += 1;
+                    Some(Type::typevar(sema.typevar_count))
                 };
 
                 global_idx += 1;
@@ -350,7 +351,8 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             }
             else
             {
-                Some(Type::typevar())
+                sema.typevar_count += 1;
+                Some(Type::typevar(sema.typevar_count))
             };
 
             let local_idx = sema.locals.len();
@@ -765,7 +767,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
 
 fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) -> Result<(), ()>
 {
-    if expr.end_type.is_some() { return Ok(()); }
+    // if expr.end_type.is_some() { return Ok(()); }
     use ExprKind::*;
 
     match expr.kind
@@ -792,7 +794,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
 
-            if type_match(lhs_type, rhs_type)
+            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
             {
                 expr.end_type = lhs.end_type.clone();
                 Ok(())
@@ -828,7 +830,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
-            if type_match(lhs_type, rhs_type)
+            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
             {
                 expr.end_type = Some(Type::boolean());
                 Ok(())
@@ -853,8 +855,20 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             {
                 solve_type(table, sema, var.as_mut())?;
             }
-            expr.end_type = var.end_type.clone();
-            Ok(())
+
+            let var_type = expect_opt!(var.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
+            let oper = expr.oper.as_ref().unwrap();
+            if !check_operator_compatibility(oper, var_type)
+            {
+                let message = format!("オペレータ {} は {} と互換性がありません。", oper, var_type);
+                expr.report("Type Mismatch", &message);
+                Err(())
+            }
+            else
+            {
+                expr.end_type = var.end_type.clone();
+                Ok(())
+            }
         }
 
         ArrayRef =>
@@ -892,7 +906,8 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let array_length = expr.array_expr.len() as u32;
             if array_length == 0
             {
-                expr.end_type = Some(Type::array(Box::new(Type::typevar())));
+                sema.typevar_count += 1;
+                expr.end_type = Some(Type::array(Box::new(Type::typevar(sema.typevar_count))));
                 return Ok(());
             }
 
@@ -924,6 +939,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             expr.end_type = Some(Type::array(consistent_type.map(Box::new).unwrap()));
             Ok(())
         }
+
         FunctionCall =>
         {
             let callee = expect_opt!(expr.lhs.as_mut(), "関数呼び出しに必要なデータが足りません。");
@@ -968,14 +984,13 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
-        
         Variable =>
         {
             let var_name = expect_opt!(expr.variable_name.as_ref(), "式データは変数として登録されていますが、変数名が存在しません。");
 
             if let Some(symbol_idx) = sema.search(var_name)
             {
-                let symbol = sema.locals.get(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
+                let symbol = sema.locals.get_mut(symbol_idx).unwrap(); // locals.search provides index that exists, Safe.
                 if symbol.types.is_some()
                 {
                     expr.end_type = symbol.types.clone();
@@ -1011,11 +1026,48 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             expr.report("Undefined Variable", &message);
             Err(())
         }
+
         Empty =>
         {
             expr.report("internal", "コンパイラーが式の形式を認識できませんでした。");
             Err(())
         }
+    }
+}
+
+fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
+{
+    use Operator::*;
+    match oper
+    {
+        Add => 
+        {
+            ty.kind == TypeKind::Int
+            || ty.kind == TypeKind::Float
+            || ty.kind == TypeKind::Str
+            || ty.kind == TypeKind::Ptr
+            // || ty.kind == TypeKind::Array
+        }
+
+        Sub | Div | Mul | Mod | Neg |
+        LessEq | MoreEq | Less | More => 
+        {
+            ty.kind == TypeKind::Int
+            || ty.kind == TypeKind::Float
+        }
+
+        EqEq | NotEq => true,
+
+        // Unary
+        Not | And | Or => ty.kind == TypeKind::Boolean,
+
+        Ref => true,
+        Deref => ty.kind == TypeKind::Ptr,
+
+        Wrap => true,
+        Unwrap => ty.kind == TypeKind::Union,
+
+        Asgn => true,
     }
 }
 
@@ -1035,6 +1087,17 @@ fn unify_type(lht: &mut Type, rht: &mut Type)
 
         (TypeVar, _) => { *lht = rht.clone(); }
         (_, TypeVar) => { *rht = lht.clone(); }
+        (Function, Function) =>
+        {
+            let lh_ret_ty = expect_opt!(lht.return_type.as_mut(), "Array型の中身が解決していません.");
+            let rh_ret_ty = expect_opt!(rht.return_type.as_mut(), "Array型の中身が解決していません.");
+            unify_type(lh_ret_ty, rh_ret_ty);
+
+            for (lh_arg, rh_arg) in lht.arg_type.iter_mut().zip(rht.arg_type.iter_mut())
+            {
+                unify_type(lh_arg, rh_arg);
+            }
+        }
 
         (_, _) => { return; }
     }

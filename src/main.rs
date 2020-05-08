@@ -31,7 +31,6 @@ mod global {
 
     #[allow(unused_imports)]
     use super::{
-        ast::ASTree,
         semantic::{ SymbolTable, SymTable },
         trace::prelude::*,
     };

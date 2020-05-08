@@ -64,6 +64,9 @@ pub struct Type
     pub struct_members: Vec<Type>,
 
     /// For Typevar :: Substitution for Typevar.
+    pub typevar_id: Option<usize>,
+
+    /// For Typevar :: Substitution for Typevar.
     pub typevar_instance: Option<Box<Type>>,
 }
 
@@ -168,10 +171,11 @@ impl Type
         self.kind == TypeKind::Null
     }
 
-    pub fn typevar() -> Self
+    pub fn typevar(id: usize) -> Self
     {
         Self {
             kind: TypeKind::TypeVar,
+            typevar_id: Some(id),
             ..Default::default()
         }
     }

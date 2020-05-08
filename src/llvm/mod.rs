@@ -8,6 +8,7 @@ use super::{
 use llvm_sys::core;
 use llvm_sys::execution_engine;
 use llvm_sys::target;
+// use llvm_sys::value;
 
 
 macro_rules! llvmstr {
@@ -40,5 +41,6 @@ pub fn llvm_dump(global: &Global, ast: &ASTree)
     let print_type = unsafe { core::LLVMFunctionType(void, std::ptr::null_mut(), 0, 0) };
 
     let function = unsafe { core::LLVMAddFunction(root_mod, llvmstr!(print), print_type) };
-
 }
+
+
