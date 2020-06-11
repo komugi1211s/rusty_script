@@ -117,6 +117,7 @@ impl<'m> Parser<'m>
         Err(())
     }
 
+    // TODO: what EVEN is prefix?
     fn parse_type_prefix(&mut self) -> ast::DeclPrefix
     {
         let mut prefix = ast::DeclPrefix::empty();
@@ -142,18 +143,21 @@ impl<'m> Parser<'m>
 
     pub(super) fn parse_function_decl(
         &mut self,
-        baseinfo: ast::DeclarationData,
+        name: String,
+        decl_span: CodeSpan
     ) -> Result<ast::StmtId, ()>
     {
-        let start_span = self.get_current().span;
         let args = self.parse_arguments()?;
+
+        let prefix = self.parse_type_prefix();
+        let dectype = self.parse_type(&prefix)?;
 
         let mut body = Vec::new();
         self.parse_function_body(&mut body)?;
 
         let end_span = self.get_current().span;
 
-        let parent = ast::StmtId(self.ast.stmt.len() as u32);
+        let parent = ast::StmtId(self.ast.stmt.len() as u32); // Finding like this feels itchy.
         for body_id in body.iter()
         {
             self.ast.set_parent_to_statement(parent, *body_id);
@@ -161,7 +165,14 @@ impl<'m> Parser<'m>
 
         let data = ast::FunctionData {
             own_stmt: parent,
-            it: baseinfo,
+            it: ast::DeclarationData {
+                kind: ast::DeclKind::Variable,
+                name,
+                dectype,
+                prefix,
+                expr: None,
+                span: decl_span,
+            },
             args,
             body,
             implicit_return_required: Cell::new(true),
@@ -170,7 +181,7 @@ impl<'m> Parser<'m>
 
         let stmt = ast::Statement {
             module: self.module,
-            span: CodeSpan::combine(&start_span, &end_span),
+            span: CodeSpan::combine(&decl_span, &end_span),
             data: ast::Stmt::Function(idx),
             parent: None,
         };
@@ -207,7 +218,11 @@ impl<'m> Parser<'m>
         while self.is(TokenType::Iden)
         {
             self.assign_count += 1;
-            let name = self.consume(TokenType::Iden)?.lexeme.to_owned().unwrap();
+            let (name, span) = {
+                let tok = self.consume(TokenType::Iden)?;
+                (tok.lexeme.to_owned().unwrap(), tok.span)
+            };
+            
             self.consume(TokenType::Colon)?;
 
             let prefix = self.parse_type_prefix();
@@ -219,6 +234,7 @@ impl<'m> Parser<'m>
                 dectype,
                 prefix,
                 expr: None,
+                span
             };
 
             if self.is(TokenType::Equal)
@@ -262,66 +278,70 @@ impl<'m> Parser<'m>
 
         self.consume(TokenType::Colon)?;
 
-        let prefix = self.parse_type_prefix();
-        let dectype = self.parse_type(&prefix)?;
-
-        let mut decl_info = ast::DeclarationData {
-            kind: ast::DeclKind::Variable,
-            name,
-            dectype,
-            prefix,
-            expr: None,
-        };
-        let mut statement: ast::StmtInit = Default::default();
-        statement.module = Some(self.module);
-
-        if self.is(TokenType::Equal)
+        if self.is(TokenType::OpenParen)
         {
-            let assign_span = self.advance().span;
-            let rvalue_expr = self.expression()?;
-            let variable_expr = ast::ExprInit {
-                kind: ast::ExprKind::Variable,
-                module: Some(self.module),
-                span: Some(start_span),
-                variable_name: Some(decl_info.name.clone()),
-                ..Default::default()
-            }.init();
-
-            let assign_expr = ast::ExprInit {
-                kind: ast::ExprKind::Assign,
-                module: Some(self.module),
-                span: Some(assign_span),
-                lhs: Some(Box::new(variable_expr)),
-                rhs: Some(Box::new(rvalue_expr)),
-                end_type: None,
-                oper: Some(ast::Operator::Asgn),
-                ..Default::default()
-            }.init();
-
-            decl_info.expr = Some(self.ast.add_expr(assign_expr));
-            let end_span = self.consume(TokenType::SemiColon)?.span;
-
-            statement.span = Some(CodeSpan::combine(&start_span, &end_span));
-            statement.data = Some(ast::Stmt::Declaration(decl_info));
-            Ok(self.ast.add_stmt(statement.init()))
+            self.parse_function_decl(name, start_span)
         }
-        else if self.is(TokenType::SemiColon)
+        else 
         {
-            let end_span = self.advance().span;
-            let span = CodeSpan::combine(&start_span, &end_span);
-            statement.span = Some(span);
-            statement.data = Some(ast::Stmt::Declaration(decl_info));
-            Ok(self.ast.add_stmt(statement.init()))
-        }
-        else if self.is(TokenType::OpenParen)
-        {
-            self.parse_function_decl(decl_info)
-        }
-        else
-        {
-            self.get_current()
-                .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
-            Err(())
+            let prefix = self.parse_type_prefix();
+            let dectype = self.parse_type(&prefix)?;
+
+            let mut decl_info = ast::DeclarationData {
+                kind: ast::DeclKind::Variable,
+                name,
+                dectype,
+                prefix,
+                expr: None,
+                span: start_span.clone(),
+            };
+            let mut statement: ast::StmtInit = Default::default();
+            statement.module = Some(self.module);
+
+            if self.is(TokenType::Equal)
+            {
+                let assign_span = self.advance().span;
+                let rvalue_expr = self.expression()?;
+                let variable_expr = ast::ExprInit {
+                    kind: ast::ExprKind::Variable,
+                    module: Some(self.module),
+                    span: Some(start_span),
+                    variable_name: Some(decl_info.name.clone()),
+                    ..Default::default()
+                }.init();
+
+                let assign_expr = ast::ExprInit {
+                    kind: ast::ExprKind::Assign,
+                    module: Some(self.module),
+                    span: Some(assign_span),
+                    lhs: Some(Box::new(variable_expr)),
+                    rhs: Some(Box::new(rvalue_expr)),
+                    end_type: None,
+                    oper: Some(ast::Operator::Asgn),
+                    ..Default::default()
+                }.init();
+
+                decl_info.expr = Some(self.ast.add_expr(assign_expr));
+                let end_span = self.consume(TokenType::SemiColon)?.span;
+
+                statement.span = Some(CodeSpan::combine(&start_span, &end_span));
+                statement.data = Some(ast::Stmt::Declaration(decl_info));
+                Ok(self.ast.add_stmt(statement.init()))
+            }
+            else if self.is(TokenType::SemiColon)
+            {
+                let end_span = self.advance().span;
+                let span = CodeSpan::combine(&start_span, &end_span);
+                statement.span = Some(span);
+                statement.data = Some(ast::Stmt::Declaration(decl_info));
+                Ok(self.ast.add_stmt(statement.init()))
+            }
+            else
+            {
+                self.get_current()
+                    .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
+                Err(())
+            }
         }
     }
 }

@@ -108,6 +108,43 @@ pub struct Expression<'m>
     pub end_type:  Option<Type>,
 }
 
+
+impl Expression<'_> 
+{
+    pub fn is_lvalue(&self) -> bool 
+    {
+        match self.kind 
+        {
+            ExprKind::Assign
+            | ExprKind::Binary
+            | ExprKind::FunctionCall
+            | ExprKind::Grouping => 
+            {
+                if let Some(inner) = self.end_type.as_ref() 
+                {
+                    use crate::types::TypeKind;
+                    inner.kind == TypeKind::Ptr
+                }
+                else
+                {
+                    report_compiler_bug("型が未解決の式に左辺値判定は出来ません。", ::std::file!(), ::std::line!(), "self.end_type.is_none()" );
+                    unreachable!()
+                }
+            }
+
+            ExprKind::ArrayRef
+            | ExprKind::Variable => true,
+
+            ExprKind::Unary => false, // TODO: FIXME: Can be true depends on an operator.
+
+            ExprKind::Empty
+            | ExprKind::Logical
+            | ExprKind::Literal
+            | ExprKind::ArrayInst => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionData
 {
@@ -403,6 +440,7 @@ pub struct DeclarationData
     pub prefix: DeclPrefix,
 
     pub expr: Option<ExprId>,
+    pub span: CodeSpan,
 }
 
 impl DeclarationData

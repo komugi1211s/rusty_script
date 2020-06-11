@@ -11,9 +11,9 @@ use llvm_sys::target;
 // use llvm_sys::value;
 
 
-macro_rules! llvmstr {
+macro_rules! llvmident {
     ($x:ident) => {
-        b"$x\0".as_ptr() as *const _
+        concat!(stringify!($x), "\0").as_ptr() as *const _
     }
 }
 
@@ -35,12 +35,23 @@ pub fn llvm_dump(global: &Global, ast: &ASTree)
     let context = unsafe { core::LLVMContextCreate() };
     let builder = unsafe { core::LLVMCreateBuilderInContext(context) };
 
-    let root_mod = unsafe { core::LLVMModuleCreateWithName(b"root\0".as_ptr() as *const _) };
+    let root_mod = unsafe { core::LLVMModuleCreateWithName(llvmident!(root)) };
 
     let void = unsafe { core::LLVMVoidTypeInContext(context) };
     let print_type = unsafe { core::LLVMFunctionType(void, std::ptr::null_mut(), 0, 0) };
 
-    let function = unsafe { core::LLVMAddFunction(root_mod, llvmstr!(print), print_type) };
+    let function = unsafe { core::LLVMAddFunction(root_mod, llvmident!(print), print_type) };
+
+    unsafe {
+        let block = core::LLVMAppendBasicBlockInContext(context, function, llvmident!(entry));
+        core::LLVMPositionBuilderAtEnd(builder, block);
+
+        core::LLVMBuildRetVoid(builder);
+        core::LLVMDumpModule(root_mod);
+        core::LLVMDisposeBuilder(builder);
+        core::LLVMDisposeModule(root_mod);
+        core::LLVMContextDispose(context);
+    }
 }
 
 

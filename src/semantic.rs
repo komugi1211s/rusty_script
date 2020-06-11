@@ -1,5 +1,5 @@
 use std::sync::{ Arc, Mutex };
-use std::collections::{ HashMap };
+use std::collections::{ HashMap, HashSet };
 use super::{
     ast::*,
     types::{ Type, TypeKind, NULL_TYPE },
@@ -30,6 +30,7 @@ struct Sema
     current_block: u32,
     locals: Vec<Symbol>,
     typevar_count: usize,
+
     last_return: Option<Type>,
 }
 
@@ -362,7 +363,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 idx: local_idx,
                 name: decl.name.clone(),
                 span: stmt.span,
-                types: None,
+                types: declared_type.clone(),
                 depth: local_depth,
             });
 
@@ -774,16 +775,55 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
     {
         Literal =>  // if it hits here, it should be a problem on it's own
         {
-            expr.report("internal", "リテラル値に型が設定されていません。パーサー上の実装に問題があります。");
-            panic!()
+            if expr.end_type.is_none() 
+            {
+                expr.report("internal", "リテラル値に型が設定されていません。パーサー上の実装に問題があります。");
+                panic!()
+            } 
+            Ok(())
         }
-        Binary | Assign =>
+        Binary => 
         {
-            let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
-            let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ/アサイン演算時に必要なデータが足りません。");
+            let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
+            let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
 
             if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
             if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; }
+
+            {
+                let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
+                let rhs_type = expect_opt!(rhs.end_type.as_mut(), "SolveTypeが正常にRHSの型を解決していません。");
+                unify_type(lhs_type, rhs_type);
+            }
+
+            let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
+            let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
+
+            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
+            {
+                expr.end_type = lhs.end_type.clone();
+                Ok(())
+            }
+            else
+            {
+                let message = format!(
+                        "左辺値の型 ({}) と右辺値の型 ({}) が一致しませんでした。",
+                        lhs_type, rhs_type
+                    );
+                expr.report(
+                    "Type Mismatch",
+                    &message,
+                );
+                Err(())
+            }
+        }
+        Assign =>
+        {
+            let lhs = expect_opt!(expr.lhs.as_mut(), "アサイン演算時に必要なデータが足りません。");
+            let rhs = expect_opt!(expr.rhs.as_mut(), "アサイン演算時に必要なデータが足りません。");
+
+            if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; } // Do RHS First.
+            if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
 
             {
                 let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
@@ -939,7 +979,6 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             expr.end_type = Some(Type::array(consistent_type.map(Box::new).unwrap()));
             Ok(())
         }
-
         FunctionCall =>
         {
             let callee = expect_opt!(expr.lhs.as_mut(), "関数呼び出しに必要なデータが足りません。");
@@ -1103,26 +1142,3 @@ fn unify_type(lht: &mut Type, rht: &mut Type)
     }
 }
 
-fn prune_type(target: &mut Type) -> bool
-{
-    if target.kind == TypeKind::TypeVar 
-    {
-        let mut is_inst_typevar = false;
-        if let Some(ref mut inst) = target.typevar_instance
-        {
-            prune_type(&mut **inst);
-            is_inst_typevar = inst.kind == TypeKind::TypeVar;
-        }
-        if is_inst_typevar 
-        {
-            target.typevar_instance = target.typevar_instance.take().unwrap().typevar_instance.take();
-            return true;
-        }
-
-        false
-    }
-    else
-    {
-        false
-    }
-}

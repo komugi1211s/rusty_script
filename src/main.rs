@@ -161,7 +161,7 @@ fn main()
 
     if !typecheck_only
     {
-        if true {
+        if false {
             println!("LLVM starting.");
             llvm::llvm_dump(&globals, &ast);
         }
