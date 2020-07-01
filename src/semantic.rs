@@ -471,12 +471,10 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
         Stmt::Return(Some(expr_id)) => 
         {
-            if let Some(parent) = stmt.parent 
+
+            if let Some(func_idx) = stmt.function_contains_this_statement(ast)
             {
-                if let Stmt::Function(idx) = ast.stmt.get(parent.0 as usize).unwrap().data
-                {
-                    ast.functions.get(idx).unwrap().implicit_return_required.set(false);
-                }
+                ast.functions.get(func_idx).unwrap().implicit_return_required.set(false);
             }
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
@@ -558,6 +556,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
 
         let declaration_span = ast.get_stmt(func_stmt_id).span;
         let table_entry = expect_opt!(table.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
+        
         {
             if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
             {

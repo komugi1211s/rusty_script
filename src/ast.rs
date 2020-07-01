@@ -85,6 +85,57 @@ pub struct Statement<'m>
     pub parent: Option<StmtId>,
 }
 
+impl Reportable for Statement<'_> 
+{
+    fn sourcefile(&self) -> usize { 0 }
+    fn span(&self) -> CodeSpan { self.span }
+}
+
+impl<'m> Statement<'m>
+{
+    pub fn report(&self, title: &str, message: &str)
+    {
+        report(title, message);
+        spit_line(self.module, &self.span);
+    }
+
+    pub fn is_parent_conditional(&self, ast: &ASTree<'m>) -> bool
+    {
+        if let Some(parent_id) = self.parent
+        {
+            let statement = ast.get_stmt(parent_id);
+            match statement.data
+            {
+                Stmt::While(_, _) => true,
+                Stmt::If(_, _, _) => true,
+                Stmt::For(_, _, _, _) => true,
+                _ => false,
+            }
+        }
+        else
+        {
+            false
+        }
+    }
+
+    pub fn function_contains_this_statement(&self, ast: &ASTree<'m>) -> Option<usize> 
+    {
+        if let Some(parent_id) = self.parent
+        {
+            let statement = ast.get_stmt(parent_id);
+            if let Stmt::Function(idx) = statement.data {
+                Some(idx)
+            } else {
+                statement.function_contains_this_statement(ast)
+            }
+        }
+        else
+        {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression<'m>
 {
@@ -222,20 +273,6 @@ impl<'m> ExprInit<'m>
     }
 }
 
-impl Reportable for Statement<'_> 
-{
-    fn sourcefile(&self) -> usize { 0 }
-    fn span(&self) -> CodeSpan { self.span }
-}
-
-impl<'m> Statement<'m>
-{
-    pub fn report(&self, title: &str, message: &str)
-    {
-        report(title, message);
-        spit_line(self.module, &self.span);
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StmtInit<'m>
