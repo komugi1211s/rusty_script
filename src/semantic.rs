@@ -1,5 +1,5 @@
 use std::sync::{ Arc, Mutex };
-use std::collections::{ HashMap, HashSet };
+use std::collections::{ HashMap };
 use super::{
     ast::*,
     types::{ Type, TypeKind, NULL_TYPE },

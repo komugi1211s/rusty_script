@@ -3,7 +3,7 @@
 
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate lazy_static;
-extern crate llvm_sys;
+// extern crate llvm_sys;
 
 mod trace;
 mod ast;
@@ -18,7 +18,7 @@ mod bytecode;
 mod ir;
 mod vm;
 
-mod llvm;
+// mod llvm;
 
 mod global {
     #[allow(unused_imports)]
@@ -163,7 +163,7 @@ fn main()
     {
         if false {
             println!("LLVM starting.");
-            llvm::llvm_dump(&globals, &ast);
+            // llvm::llvm_dump(&globals, &ast);
         }
         else
         {

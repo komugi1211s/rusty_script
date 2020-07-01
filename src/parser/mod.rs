@@ -446,18 +446,18 @@ impl<'m> Parser<'m>
 
     fn is(&mut self, _type: TokenType) -> bool
     {
-        (!self.is_at_end() && self.get_current().tokentype == _type)
+        !self.is_at_end() && self.get_current().tokentype == _type
     }
 
     fn is_next(&mut self, _type: TokenType) -> bool
     {
-        (!self.is_at_end() && self.get_next().tokentype == _type)
+        !self.is_at_end() && self.get_next().tokentype == _type
     }
 
     #[allow(dead_code)]
     fn is_previous(&mut self, _type: TokenType) -> bool
     {
-        (!self.is_at_end() && self.get_previous().tokentype == _type)
+        !self.is_at_end() && self.get_previous().tokentype == _type
     }
 
     fn get_current(&self) -> &Token<'m>

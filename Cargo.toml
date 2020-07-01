@@ -12,4 +12,4 @@ debug = true
 [dependencies]
 bitflags = "*"
 lazy_static = "1.4.0"
-llvm-sys = "90"
+# llvm-sys = "90"

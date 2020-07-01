@@ -111,6 +111,7 @@ pub struct Expression<'m>
 
 impl Expression<'_> 
 {
+    #[allow(dead_code)]
     pub fn is_lvalue(&self) -> bool 
     {
         match self.kind 
