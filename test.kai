@@ -1,0 +1,188 @@
+// Macro
+@assert true;
+@crash;
+
+
+// Declaration
+
+print "Declaration Testing.";
+a: int = 10;
+b: float = 1.5;
+c: string = "hello";
+d: bool = true;
+
+print a == 10;
+print b == 1.5; print c == "hello";
+print d;
+
+// Nullables
+print "Nullable Empty Declaration Testing.";
+an: int?;
+bn: float?;
+cn: string?;
+dn: bool?;
+
+an = 10;
+print an == 10;
+bn = 2.5;
+print bn == 2.5;
+cn = "Sam porter bridges";
+print cn == "Sam porter bridges";
+dn = true;
+print dn;
+
+// // Inferred
+print "Inferred Declaration Testing.";
+ai := 10;
+bi := 1.5;
+ci := "hall";
+di := false;
+print ai == 10;
+print bi == 1.5;
+print ci == "hall";
+print !di;
+
+// Ordering / Eq
+print "Comparison Testing.";
+print true;
+print !false;
+print 10 == 10;
+print 1.5 == 1.5;
+print "hello" == "hello";
+print true == true;
+
+print "Ordering Comparison Testing.";
+print 1 < 2;
+print -5 < 0;
+print -5.0 < -2.5;
+
+print 2 > 1;
+print 0 > -5;
+print 2.0 > 1.9;
+print 0 > -5;
+
+print 1 >= 1;
+print 1 <= 1;
+
+test_func_noreturn_inferred_to_null: fn() {
+}
+
+test_func_emptyreturn_inferred_to_null: fn() {
+    return;
+}
+
+test_func_explicit_return_null: fn() {
+    return null;
+}
+
+returns_integer: fn() int {
+    return 10;
+}
+
+infer_return_integer: fn() {
+    return 5;
+}
+
+returns_float: fn() float {
+    return 10.5;
+}
+
+infer_return_float: fn() {
+    return 5.5;
+}
+
+returns_string: fn() string {
+    return "hello";
+}
+
+infer_return_string: fn() {
+    return "world";
+}
+
+returns_bool: fn() bool {
+    return true;
+}
+
+infer_return_bool: fn() {
+    return true;
+}
+
+print "empty return testing.";
+print test_func_noreturn_inferred_to_null() == null;
+print test_func_emptyreturn_inferred_to_null() == null;
+print test_func_explicit_return_null() == null;
+
+print "Inferring testing";
+print returns_bool() == true;
+print infer_return_bool() != false;
+
+print "value return testing.";
+print returns_integer() == 10;
+print infer_return_integer() == 5;
+
+print returns_float() == 10.5;
+print infer_return_float() == 5.5;
+
+print returns_string() == "hello";
+print infer_return_string() == "world";
+
+// Local Variables.
+print "Local Variable testing.";
+{
+    one := 10;
+    two := 10.5;
+    three := "haha";
+    four := false;
+    {
+        one := 20;
+        two := 2.5;
+        three := "hoho";
+        four := true;
+        print one == 20;
+        print two == 2.5;
+        print three == "hoho";
+        print four;
+    }
+    print one == 10;
+    print two == 10.5;
+    print three == "haha";
+    print !four;
+}
+/*
+print "struct testing.";
+new_struct: struct {
+    a: int;
+    b: int;
+    c: int;
+}
+
+struct_variable: new_struct;
+struct_variable.a = 10;
+struct_variable.b = 21;
+struct_variable.c = 25;
+
+print struct_variable.a == 10;
+print struct_variable.b == 21;
+print struct_variable.c == 25;
+*/
+
+/*
+print "Array Testing.";
+new_int_arr: [int] = [1, 2, 3];
+new_string_arr: [string] = ["hello", "world!", "Hmmm!?"];
+
+print new_int_arr[0] == 1;
+print new_int_arr[1] == 2;
+print new_int_arr[2] == 3;
+print new_string_arr[0] == "hello";
+print new_string_arr[1] == "world";
+print new_string_arr[2] == "Hmmm!?";
+
+// Import line.
+$import modulename;
+
+print modulename.variable == 10;
+*/
+
+
+
