@@ -186,6 +186,7 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
 
             IRCode::Store(idx) =>
             {
+                // vm.stack.swap_remove(vm.stack_idx + (*idx as usize));
                 let top_stack = expect_opt!(vm.stack.last(), "STORE TOP_STACK").clone();
                 vm.stack[vm.stack_idx + (*idx as usize)] = top_stack;
             }

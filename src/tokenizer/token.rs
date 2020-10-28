@@ -18,6 +18,9 @@ pub enum TokenType
     Constant, // const int;
     Public,   // public int;
 
+    Struct,   // new_type: struct {
+    Fn,   // new_type: fn(...
+
     // 括弧とか文字とか
     DoubleQuote,        // ""
     Slash,              // / <- 計算でも使う
@@ -76,6 +79,8 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
         "return" => Some(Return),
         "const" => Some(Constant),
         "pub" => Some(Public),
+        "fn"  => Some(Fn),
+        "struct" => Some(Struct),
 
         "and" => Some(And),
         "or" => Some(Or),

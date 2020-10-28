@@ -11,15 +11,6 @@ use crate::{
     trace::prelude::*,
 };
 
-fn is_prefix_banned(cand: &str) -> bool
-{
-    match cand
-    {
-        "struct" => true,
-        _ => false,
-    }
-}
-
 
 impl<'m> Parser<'m>
 {
@@ -63,23 +54,7 @@ impl<'m> Parser<'m>
         let mut core_type = if self.is(TokenType::Iden)
         {
             let token = self.consume(TokenType::Iden)?;
-
             let candidate = token.lexeme.as_ref().unwrap();
-            if is_prefix_banned(candidate) && !prefix.is_empty()
-            {
-                token.report(
-                    "Invalid Prefix placement",
-                    &format!("Prefix {:?} はこの定義では使用できません。", prefix),
-                );
-                return Err(());
-            }
-
-            if candidate == "struct"
-            {
-                token.report("Unimplemented", "Structはまだ未実装です。");
-                return Err(());
-                // return self.parse_struct(prefix);
-            }
 
             match ast::ParsedType::match_primitive(candidate)
             {
@@ -111,8 +86,7 @@ impl<'m> Parser<'m>
         Ok(core_type)
     }
 
-    #[allow(dead_code)]
-    fn parse_struct(&mut self, _prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()>
+    fn parse_struct(&mut self, name: String, decl_span: CodeSpan) -> Result<ast::StmtId, ()>
     {
         Err(())
     }
@@ -147,8 +121,8 @@ impl<'m> Parser<'m>
         decl_span: CodeSpan
     ) -> Result<ast::StmtId, ()>
     {
+        self.consume(TokenType::Fn)?;
         let args = self.parse_arguments()?;
-
         let prefix = self.parse_type_prefix();
         let dectype = self.parse_type(&prefix)?;
 
@@ -222,7 +196,7 @@ impl<'m> Parser<'m>
                 let tok = self.consume(TokenType::Iden)?;
                 (tok.lexeme.to_owned().unwrap(), tok.span)
             };
-            
+
             self.consume(TokenType::Colon)?;
 
             let prefix = self.parse_type_prefix();
@@ -278,70 +252,66 @@ impl<'m> Parser<'m>
 
         self.consume(TokenType::Colon)?;
 
-        if self.is(TokenType::OpenParen)
+        if self.is(TokenType::Fn)     { return self.parse_function_decl(name, start_span); }
+        if self.is(TokenType::Struct) { return self.parse_struct(name, start_span);        }
+
+        let prefix = self.parse_type_prefix();
+        let dectype = self.parse_type(&prefix)?;
+
+        let mut decl_info = ast::DeclarationData {
+            kind: ast::DeclKind::Variable,
+            name,
+            dectype,
+            prefix,
+            expr: None,
+            span: start_span.clone(),
+        };
+        let mut statement: ast::StmtInit = Default::default();
+        statement.module = Some(self.module);
+
+        if self.is(TokenType::Equal)
         {
-            self.parse_function_decl(name, start_span)
+            let assign_span = self.advance().span;
+            let rvalue_expr = self.expression()?;
+            let variable_expr = ast::ExprInit {
+                kind: ast::ExprKind::Variable,
+                module: Some(self.module),
+                span: Some(start_span),
+                variable_name: Some(decl_info.name.clone()),
+                ..Default::default()
+            }.init();
+
+            let assign_expr = ast::ExprInit {
+                kind: ast::ExprKind::Assign,
+                module: Some(self.module),
+                span: Some(assign_span),
+                lhs: Some(Box::new(variable_expr)),
+                rhs: Some(Box::new(rvalue_expr)),
+                end_type: None,
+                oper: Some(ast::Operator::Asgn),
+                ..Default::default()
+            }.init();
+
+            decl_info.expr = Some(self.ast.add_expr(assign_expr));
+            let end_span = self.consume(TokenType::SemiColon)?.span;
+
+            statement.span = Some(CodeSpan::combine(&start_span, &end_span));
+            statement.data = Some(ast::Stmt::Declaration(decl_info));
+            Ok(self.ast.add_stmt(statement.init()))
         }
-        else 
+        else if self.is(TokenType::SemiColon)
         {
-            let prefix = self.parse_type_prefix();
-            let dectype = self.parse_type(&prefix)?;
-
-            let mut decl_info = ast::DeclarationData {
-                kind: ast::DeclKind::Variable,
-                name,
-                dectype,
-                prefix,
-                expr: None,
-                span: start_span.clone(),
-            };
-            let mut statement: ast::StmtInit = Default::default();
-            statement.module = Some(self.module);
-
-            if self.is(TokenType::Equal)
-            {
-                let assign_span = self.advance().span;
-                let rvalue_expr = self.expression()?;
-                let variable_expr = ast::ExprInit {
-                    kind: ast::ExprKind::Variable,
-                    module: Some(self.module),
-                    span: Some(start_span),
-                    variable_name: Some(decl_info.name.clone()),
-                    ..Default::default()
-                }.init();
-
-                let assign_expr = ast::ExprInit {
-                    kind: ast::ExprKind::Assign,
-                    module: Some(self.module),
-                    span: Some(assign_span),
-                    lhs: Some(Box::new(variable_expr)),
-                    rhs: Some(Box::new(rvalue_expr)),
-                    end_type: None,
-                    oper: Some(ast::Operator::Asgn),
-                    ..Default::default()
-                }.init();
-
-                decl_info.expr = Some(self.ast.add_expr(assign_expr));
-                let end_span = self.consume(TokenType::SemiColon)?.span;
-
-                statement.span = Some(CodeSpan::combine(&start_span, &end_span));
-                statement.data = Some(ast::Stmt::Declaration(decl_info));
-                Ok(self.ast.add_stmt(statement.init()))
-            }
-            else if self.is(TokenType::SemiColon)
-            {
-                let end_span = self.advance().span;
-                let span = CodeSpan::combine(&start_span, &end_span);
-                statement.span = Some(span);
-                statement.data = Some(ast::Stmt::Declaration(decl_info));
-                Ok(self.ast.add_stmt(statement.init()))
-            }
-            else
-            {
-                self.get_current()
-                    .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
-                Err(())
-            }
+            let end_span = self.advance().span;
+            let span = CodeSpan::combine(&start_span, &end_span);
+            statement.span = Some(span);
+            statement.data = Some(ast::Stmt::Declaration(decl_info));
+            Ok(self.ast.add_stmt(statement.init()))
+        }
+        else
+        {
+            self.get_current()
+                .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
+            Err(())
         }
     }
 }

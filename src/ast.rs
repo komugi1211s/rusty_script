@@ -85,7 +85,7 @@ pub struct Statement<'m>
     pub parent: Option<StmtId>,
 }
 
-impl Reportable for Statement<'_> 
+impl Reportable for Statement<'_>
 {
     fn sourcefile(&self) -> usize { 0 }
     fn span(&self) -> CodeSpan { self.span }
@@ -99,6 +99,7 @@ impl<'m> Statement<'m>
         spit_line(self.module, &self.span);
     }
 
+    #[allow(dead_code)]
     pub fn is_parent_conditional(&self, ast: &ASTree<'m>) -> bool
     {
         if let Some(parent_id) = self.parent
@@ -118,7 +119,7 @@ impl<'m> Statement<'m>
         }
     }
 
-    pub fn function_contains_this_statement(&self, ast: &ASTree<'m>) -> Option<usize> 
+    pub fn function_contains_this_statement(&self, ast: &ASTree<'m>) -> Option<usize>
     {
         if let Some(parent_id) = self.parent
         {
@@ -160,19 +161,19 @@ pub struct Expression<'m>
 }
 
 
-impl Expression<'_> 
+impl Expression<'_>
 {
     #[allow(dead_code)]
-    pub fn is_lvalue(&self) -> bool 
+    pub fn is_lvalue(&self) -> bool
     {
-        match self.kind 
+        match self.kind
         {
             ExprKind::Assign
             | ExprKind::Binary
             | ExprKind::FunctionCall
-            | ExprKind::Grouping => 
+            | ExprKind::Grouping =>
             {
-                if let Some(inner) = self.end_type.as_ref() 
+                if let Some(inner) = self.end_type.as_ref()
                 {
                     use crate::types::TypeKind;
                     inner.kind == TypeKind::Ptr
@@ -216,7 +217,7 @@ pub struct BlockData
     pub statements: Vec<StmtId>,
 }
 
-impl Reportable for Expression<'_> 
+impl Reportable for Expression<'_>
 {
     fn sourcefile(&self) -> usize { 0 }
     fn span(&self) -> CodeSpan { self.span }

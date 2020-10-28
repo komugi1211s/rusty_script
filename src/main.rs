@@ -35,7 +35,7 @@ mod global {
         trace::prelude::*,
     };
 
-    pub struct Global 
+    pub struct Global
     {
         pub module_paths: Vec<PathBuf>,
         pub modules: Vec<SourceFile>,
@@ -51,7 +51,7 @@ mod global {
                                "現在のディレクトリが取得できませんでした。");
             vector.push(root);
 
-            Self 
+            Self
             {
                 module_paths: vector,
                 modules: Vec::with_capacity(32),
@@ -59,14 +59,14 @@ mod global {
             }
         }
 
-        pub fn open_and_add_module(&mut self, file_name: &str) -> Result<usize, ()> 
+        pub fn open_and_add_module(&mut self, file_name: &str) -> Result<usize, ()>
         {
             let filename_path = Path::new(file_name).with_extension("kai");
 
-            for module_dir in self.module_paths.iter() 
+            for module_dir in self.module_paths.iter()
             {
                 let target_file_path = module_dir.join(&filename_path);
-                if target_file_path.exists() 
+                if target_file_path.exists()
                 {
                     let filepath_str = expect!(target_file_path.to_str().ok_or(()), "ファイルパスに許されない文字列が含まれています。");
                     let file = expect!(SourceFile::open(filepath_str), "ファイルを開けませんでした。");
@@ -78,7 +78,7 @@ mod global {
             }
 
             Err(())
-        } 
+        }
 
         /*
         pub fn lookup_by_name(&self, name: &str) -> Option<usize>
@@ -112,90 +112,91 @@ fn main()
     let mut globals = Global::new();
     let mut vm = vm::VirtualMachine::new();
 
-    if arguments.len() <= 1 
-    { 
+    if arguments.len() <= 1
+    {
         println!("usage: isekai [filename].kai");
         return;
     }
 
     let typecheck_only = arguments.get(2) == Some(&("check".into())); // TODO - @Cleanup
 
-    let root = globals.open_and_add_module(&arguments[1]).unwrap();
-    let root_file = &globals.modules[root];
-
-    let tokens   = {
-        match Tokenizer::new(root_file.code.len()).scan(root_file)
-        {
-            Ok(x) => x,
-            Err(()) => 
+    if let Ok(file_index) = globals.open_and_add_module(&arguments[1]) {
+        let root_file = &globals.modules[file_index];
+        let tokens   = {
+            match Tokenizer::new(root_file.code.len()).scan(root_file)
             {
-                println!("コンパイルに失敗しました: Tokenizer エラー");
-                return;
+                Ok(x) => x,
+                Err(()) =>
+                {
+                    println!("コンパイルに失敗しました: Tokenizer エラー");
+                    return;
+                }
+            }
+        };
+
+        let mut ast  = {
+            match Parser::new(root_file, &tokens).parse()
+            {
+                Ok(x) => x,
+                Err(()) =>
+                {
+                    println!("コンパイルに失敗しました: Parser エラー");
+                    return;
+                }
+            }
+        };
+
+        {
+            match semantic::analysis(&mut globals.symtable, &mut ast)
+            {
+                Ok(x) => x,
+                Err(()) =>
+                {
+                    println!("コンパイルに失敗しました: Semantic Analysis エラー");
+                    return;
+                }
             }
         }
-    };
 
-    let mut ast  = {
-        match Parser::new(root_file, &tokens).parse()
+        if !typecheck_only
         {
-            Ok(x) => x,
-            Err(()) => 
-            {
-                println!("コンパイルに失敗しました: Parser エラー");
-                return;
+            if false {
+                println!("LLVM starting.");
+                // llvm::llvm_dump(&globals, &ast);
             }
-        }
-    };
-
-    {
-        match semantic::analysis(&mut globals.symtable, &mut ast)
-        {
-            Ok(x) => x,
-            Err(()) => 
+            else
             {
-                println!("コンパイルに失敗しました: Semantic Analysis エラー");
-                return;
-            }
-        }
-    }
+                let bc       = {
+                    match bytecode::generate_bytecode(&globals, &ast)
+                    {
+                        Ok(x) => x,
+                        Err(()) =>
+                        {
+                            println!("コンパイルに失敗しました: Bytecode Generator エラー");
+                            return;
+                        }
+                    }
+                };
 
-    if !typecheck_only
-    {
-        if false {
-            println!("LLVM starting.");
-            // llvm::llvm_dump(&globals, &ast);
+                // if ::std::cfg!(debug_assertions)
+                {
+                    use std::fs::File;
+                    use std::io::Write;
+                    let mut file = File::create("dump").expect("failed to create a dump file.");
+                    for (idx, i) in bc.code.iter().enumerate()
+                    {
+                        writeln!(file, "{} {:?}", idx, i).expect("Hey?");
+                    }
+                    file.flush().expect("File Flushing Failed.");
+                }
+
+                vm::start_vm(&mut vm, &root_file, &bc);
+            }
         }
         else
         {
-            let bc       = {
-                match bytecode::generate_bytecode(&globals, &ast) 
-                {
-                    Ok(x) => x,
-                    Err(()) => 
-                    {
-                        println!("コンパイルに失敗しました: Bytecode Generator エラー");
-                        return;
-                    }
-                }
-            };
-
-            if ::std::cfg!(debug_assertions) 
-            {
-                use std::fs::File;
-                use std::io::Write;
-                let mut file = File::create("dump").expect("failed to create a dump file.");
-                for (idx, i) in bc.code.iter().enumerate()
-                {
-                    writeln!(file, "{} {:?}", idx, i).expect("Hey?");
-                }
-                file.flush().expect("File Flushing Failed.");
-            }
-
-            vm::start_vm(&mut vm, &root_file, &bc);
+            println!("Typecheck Done.");
         }
     }
-    else
-    {
-        println!("Typecheck Done.");
-    }
+
 }

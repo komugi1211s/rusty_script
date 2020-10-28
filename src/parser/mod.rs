@@ -46,13 +46,13 @@ impl<'m> Parser<'m>
         while !self.is_at_end()
         {
             /*
-            if self.is(TokenType::AtMark) 
+            if self.is(TokenType::AtMark)
             {
                 let directive = self.directive()?;
                 self.ast.add_directive(directive);
             }
             else
-            */    
+            */
             {
                 let declaration = self.declaration()?;
                 self.ast.add_root(declaration);
@@ -372,10 +372,18 @@ impl<'m> Parser<'m>
                 TokenType::Bang => self.parse_unwrap(expr)?,
                 TokenType::OpenSquareBracket => self.parse_array_ref(expr)?,
                 TokenType::Caret => self.parse_deref(expr)?,
+                TokenType::Dot => self.parse_method_chain(expr)?,
                 _ => break 'parse,
             }
         }
         Ok(expr)
+    }
+
+    fn parse_method_chain(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
+    {
+        self.get_current()
+            .report("Unimplemented Feature", "Method機能は実装されていません。");
+        Err(())
     }
 
     fn parse_unwrap(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
@@ -606,7 +614,7 @@ impl<'m> Parser<'m>
 
                     let expr = self.expression()?;
                     vector.push(expr);
-                    
+
                     if self.is(Comma) { self.consume(Comma)?; }
                 }
 
