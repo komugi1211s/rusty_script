@@ -910,6 +910,12 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             }
         }
 
+        FieldAccess =>
+        {
+            expr.report("Field Access Unimplemented", "現在この式の型を解決できません。");
+            return Err(());
+        }
+
         ArrayRef =>
         {
             let variable = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");

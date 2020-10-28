@@ -187,7 +187,17 @@ impl Expression<'_>
 
             ExprKind::ArrayRef
             | ExprKind::Variable => true,
-
+            
+            ExprKind::FieldAccess => {
+                if let Some(lhs) = self.lhs.as_ref() 
+                {
+                    lhs.is_lvalue()
+                }
+                else 
+                {
+                    unreachable!()
+                }
+            }
             ExprKind::Unary => false, // TODO: FIXME: Can be true depends on an operator.
 
             ExprKind::Empty
@@ -309,7 +319,7 @@ pub enum ExprKind
 
     FunctionCall,
     ArrayRef,
-
+    FieldAccess,
     Variable,
     Literal,
     Grouping,

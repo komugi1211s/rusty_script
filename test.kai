@@ -1,8 +1,3 @@
-// Macro
-@assert true;
-@crash;
-
-
 // Declaration
 
 print "Declaration Testing.";
@@ -148,6 +143,9 @@ print "Local Variable testing.";
     print three == "haha";
     print !four;
 }
+
+a.b = 10;
+
 /*
 print "struct testing.";
 new_struct: struct {

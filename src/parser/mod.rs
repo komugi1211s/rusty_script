@@ -112,7 +112,7 @@ impl<'m> Parser<'m>
             // FIXME - @DumbCode: 借用不可の筈 ParserじゃなくCodegenでチェックしたほうが良いかも
             // 普通に借用できてしまったけどまあ当たり前ながら意図した動作ではなかった
 
-            if ExprKind::Variable == left_hand.kind
+            if left_hand.is_lvalue()
             {
                 let assign = ExprInit {
                     kind: ExprKind::Assign,
@@ -372,18 +372,29 @@ impl<'m> Parser<'m>
                 TokenType::Bang => self.parse_unwrap(expr)?,
                 TokenType::OpenSquareBracket => self.parse_array_ref(expr)?,
                 TokenType::Caret => self.parse_deref(expr)?,
-                TokenType::Dot => self.parse_method_chain(expr)?,
+                TokenType::Dot => self.parse_field(expr)?,
                 _ => break 'parse,
             }
         }
         Ok(expr)
     }
 
-    fn parse_method_chain(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_field(&mut self, variable: Expression<'m>) -> Result<Expression<'m>, ()>
     {
-        self.get_current()
-            .report("Unimplemented Feature", "Method機能は実装されていません。");
-        Err(())
+        self.consume(TokenType::Dot)?;
+        let right_hand_expr = self.postfix()?;
+        let combined_span   = CodeSpan::combine(&variable.span, &right_hand_expr.span);
+
+        let mut expr = ExprInit {
+            kind:   ExprKind::FieldAccess,
+            module: Some(self.module),
+            lhs:    Some(Box::new(variable)),
+            rhs:    Some(Box::new(right_hand_expr)),
+            span:   Some(combined_span),
+            ..Default::default()
+        };
+
+        Ok(expr.init())
     }
 
     fn parse_unwrap(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
