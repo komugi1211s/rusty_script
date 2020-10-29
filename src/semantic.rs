@@ -25,7 +25,7 @@ pub struct Symbol
 }
 
 #[derive(Debug, Clone)]
-struct Sema 
+struct Sema
 {
     current_block: u32,
     locals: Vec<Symbol>,
@@ -44,7 +44,7 @@ impl Sema
     fn shallowen(&mut self)
     {
         self.current_block -= 1;
-        
+
         let depth = self.current_block;
         self.locals.retain(|x| x.depth <= depth);
     }
@@ -58,7 +58,7 @@ impl Sema
     fn search(&self, name: &str) -> Option<usize>
     {
         if self.locals.is_empty() { return None; }
-        
+
         let last_idx = self.locals.len() - 1;
         for (idx, local) in self.locals.iter().rev().enumerate()
         {
@@ -153,7 +153,14 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                 {
                     match maybe_parse_annotated_type(&decl.dectype)
                     {
-                        Ok(x) => x,
+                        Ok(Some(x)) => Some(x),
+                        Ok(None) => match parse_complicated_type(table, sema, &decl.dectype) {
+                            Ok(n) => Some(n),
+                            Err((title, message)) => {
+                                root.report(title, message);
+                                return Err(());
+                            }
+                        }
                         Err((title, message)) =>
                         {
                             root.report(title, message);
@@ -179,7 +186,7 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                 table.insert(decl.name.clone(), symbol);
             }
 
-            Stmt::Function(targ) => 
+            Stmt::Function(targ) =>
             {
                 let func = expect_opt!(ast.functions.get(targ), "関数のインデックスが不正です。");
 
@@ -193,12 +200,12 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     return Err(());
                 }
 
-                // Check annotated return type, or just say None, which means that 
+                // Check annotated return type, or just say None, which means that
                 // it'll get inferred by function's body.
                 let mut annotated_return_type = None;
-                if func.it.is_annotated() 
+                if func.it.is_annotated()
                 {
-                    annotated_return_type = match maybe_parse_annotated_type(&func.it.dectype) 
+                    annotated_return_type = match maybe_parse_annotated_type(&func.it.dectype)
                     {
                         Ok(uncertain_type) => uncertain_type,
                         Err((title, message)) => {
@@ -208,7 +215,7 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     }
                 }
 
-                let arg_types: Vec<Type> = if func.args.is_empty() 
+                let arg_types: Vec<Type> = if func.args.is_empty()
                 {
                     vec![]
                 }
@@ -216,21 +223,21 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                 {
                     let mut arg_type_holder = Vec::with_capacity(func.args.len());
 
-                    for arg_decl in func.args.iter() 
+                    for arg_decl in func.args.iter()
                     {
-                        match maybe_parse_annotated_type(&arg_decl.dectype) 
+                        match maybe_parse_annotated_type(&arg_decl.dectype)
                         {
-                             Ok(Some(trivial_type)) => arg_type_holder.push(trivial_type),
-                             Ok(None) => {   
-                                 let message = format!("関数の引数 {} に型指定がありません。\n
-                                                       関数の引数には必ず型指定をして下さい。",
-                                                       arg_decl.name);
-                                 root.report("Untyped Argument Declaration", &message);
-                                 return Err(());
-                             }
-                             Err((title, message)) => {
-                                 root.report(title, message);
-                                 return Err(());
+                            Ok(Some(trivial_type)) => arg_type_holder.push(trivial_type),
+                            Ok(None) => match parse_complicated_type(table, sema, &arg_decl.dectype) {
+                                Ok(complicated_type) => arg_type_holder.push(complicated_type),
+                                Err((title, message)) => {
+                                    root.report(title, message);
+                                    return Err(());
+                                }
+                            }
+                            Err((title, message)) => {
+                                root.report(title, message);
+                                return Err(());
                             }
                         }
                     }
@@ -268,13 +275,13 @@ fn resolve_fully(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast: &m
 
 fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, stmt_id: StmtId) -> Result<(), ()>
 {
-    let stmt = expect_opt!(ast.stmt.get(stmt_id.0 as usize), 
+    let stmt = expect_opt!(ast.stmt.get(stmt_id.0 as usize),
         "指定された文({:?})が見つかりませんでした。", stmt_id);
 
     match stmt.data
     {
         // Expr Type:
-        Stmt::Expression(expr_id) => 
+        Stmt::Expression(expr_id) =>
         {
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
@@ -289,14 +296,14 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
             solve_type(table, sema, expr)?;
         }
-        
+
         Stmt::Declaration(ref decl) if sema.current_block == 0 =>
         {
-            if table.contains_key(&decl.name) 
+            if table.contains_key(&decl.name)
             {
                 let mut expr_type = if let Some(expr_id) = decl.expr
                 {
-                    let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize), 
+                    let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                                            "初期化時に式を期待しましたが、取得できませんでした。");
                     solve_type(table, sema, expr)?;
                     expr.end_type.clone()
@@ -314,7 +321,8 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                         unify_type(x, y);
                         if !type_match(x, y)
                         {
-                            stmt.report("Type Mismatch", "type mismatch");
+                            let message = format!("型が不正です。（左 {}, 右 {}）", x, y);
+                            stmt.report("Type Mismatch", &message);
                             return Err(());
                         }
                     }
@@ -342,7 +350,14 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             {
                 match maybe_parse_annotated_type(&decl.dectype)
                 {
-                    Ok(x) => x,
+                    Ok(Some(x)) => Some(x),
+                    Ok(None) => match parse_complicated_type(table, sema, &decl.dectype) {
+                        Ok(n) => Some(n),
+                        Err((title, message)) => {
+                            stmt.report(title, message);
+                            return Err(());
+                        }
+                    }
                     Err((title, message)) =>
                     {
                         stmt.report(title, message);
@@ -395,7 +410,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
 
             match (declared_type, expr_type)
             {
-                (None, None) => 
+                (None, None) =>
                 {
                     stmt.report(
                         "Empty Annotation/Initialization",
@@ -412,7 +427,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 {
                     symbol.types = Some(x);
                 }
-                (Some(mut x), Some(mut y)) => 
+                (Some(mut x), Some(mut y)) =>
                 {
                     unify_type(&mut x, &mut y);
                     if type_match(&x, &y)
@@ -453,7 +468,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             resolve_statement(table, sema, ast, while_block_id)?;
         }
 
-        Stmt::Function(func_id) => 
+        Stmt::Function(func_id) =>
         {
             resolve_function_and_body(table, sema, ast, func_id)?;
         }
@@ -462,14 +477,14 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
         {
             sema.deepen();
             let block_inner = block_data.statements.clone();
-            for inner_stmt in block_inner.iter() 
+            for inner_stmt in block_inner.iter()
             {
                 resolve_statement(table, sema, ast, *inner_stmt)?;
             }
             sema.shallowen();
         }
 
-        Stmt::Return(Some(expr_id)) => 
+        Stmt::Return(Some(expr_id)) =>
         {
 
             if let Some(func_idx) = stmt.function_contains_this_statement(ast)
@@ -498,10 +513,10 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 }
             }
         }
-        
-        Stmt::Return(None) => 
+
+        Stmt::Return(None) =>
         {
-            if let Some(parent) = stmt.parent 
+            if let Some(parent) = stmt.parent
             {
                 if let Stmt::Function(idx) = ast.stmt.get(parent.0 as usize).unwrap().data
                 {
@@ -526,7 +541,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             }
         }
 
-        Stmt::Empty => 
+        Stmt::Empty =>
         {
             stmt.report("Empty Statement", "空の文が支給されました。");
             return Err(());
@@ -556,7 +571,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
 
         let declaration_span = ast.get_stmt(func_stmt_id).span;
         let table_entry = expect_opt!(table.get(&func.it.name), "関数 {} が未解決です。", func.it.name);
-        
+
         {
             if let Some(Type { kind: TypeKind::Function, ref arg_type, .. }) = table_entry.types
             {
@@ -576,9 +591,9 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
             }
             else
             {
-                let message = format!("関数 {} は関数ではなく {} として解決されています。", 
+                let message = format!("関数 {} は関数ではなく {} として解決されています。",
                     &func.it.name, table_entry.types.as_ref().unwrap_or(&*NULL_TYPE));
-                report_compiler_bug(&message, file!(), line!(), 
+                report_compiler_bug(&message, file!(), line!(),
                     "Some(Type { kind: TypeKind::Function, arg_type, ... }) = table_entry.types");
             }
         }
@@ -630,7 +645,7 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
 
                 (None, Some(_)) => *declared_return_type = block_return_type.map(Box::new),
 
-                (Some(x), None) => 
+                (Some(x), None) =>
                 {
                     if !type_match(&x, &*NULL_TYPE)
                     {
@@ -661,16 +676,53 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
     Ok(())
 }
 
-fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str, &str)>
+fn parse_complicated_type<'a>(table: &'a mut SymTable, sema: &'a mut Sema, decl: &'a ParsedType) -> Result<Type, (&'static str, &'static str)>
+{
+    use ParsedType::*;
+    match decl {
+        Struct(ref fields) => {
+            sema.deepen();
+            let mut struct_field_types = Vec::with_capacity(fields.len());
+            for field in fields.iter() {
+                let result = match maybe_parse_annotated_type(&field.1)? {
+                    Some(trivial) => Ok(trivial),
+                    None => parse_complicated_type(table, sema, &field.1)
+                };
+
+                struct_field_types.push(result?);
+            }
+            sema.shallowen();
+
+            let type_result = Type::_struct(struct_field_types);
+            Ok(type_result)
+        }
+        Userdef(ref defined_name) => {
+            if let Some(symbol) = table.get(defined_name) {
+                if let Some(ref result_type) = symbol.types {
+                    return Ok(result_type.clone());
+                } else {
+                    unimplemented!();
+                }
+            } else {
+                unimplemented!();
+            }
+        }
+        _ => {
+            Err(("internal", "先にmaybe_parse_annotated_typeを呼んで下さい。"))
+        }
+    }
+}
+
+fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&'static str, &'static str)>
 {
     use ParsedType::*;
     match ptype
     {
-        Int => Ok(Some(Type::int())),
-        Str => Ok(Some(Type::string())),
-        Float => Ok(Some(Type::float())),
+        Int =>     Ok(Some(Type::int())),
+        Str =>     Ok(Some(Type::string())),
+        Float =>   Ok(Some(Type::float())),
         Boolean => Ok(Some(Type::boolean())),
-        Array(of, _) =>
+        Array(ref of, _) =>
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
@@ -682,7 +734,7 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
                 todo!("Error Logging");
             }
         }
-        Pointer(of) =>
+        Pointer(ref of) =>
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
@@ -694,7 +746,7 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
                 todo!("Error Logging");
             }
         }
-        Optional(of) =>
+        Optional(ref of) =>
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
@@ -705,8 +757,8 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&str,
                 todo!("Error Logging");
             }
         }
-        Struct(_) => Err(("internal", "structは未実装です。")),
-        Userdef(_) => Err(("internal", "userdefは未実装です。")),
+        Struct(_)  => Ok(None),
+        Userdef(_) => Ok(None),
         Unknown => Err((
             "internal",
             "アノテーションがあるべき関数内で推論を必要とする定義に接触しました。",
@@ -744,7 +796,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
             let rhs_ptr = expect_opt!(rhs.pointer_to.as_ref(), "RHS ポインタ型が正常に解決されませんでした。");
             type_match(&*lhs_ptr, &*rhs_ptr)
         }
-        (Union, _) => 
+        (Union, _) =>
         {
             for lhs_type in lhs.struct_members.iter()
             {
@@ -755,7 +807,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
             }
             return false;
         }
-        (Array, Array) => 
+        (Array, Array) =>
         {
             let lhs_inner_type = expect_opt!(lhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
             let rhs_inner_type = expect_opt!(rhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
@@ -774,14 +826,14 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
     {
         Literal =>  // if it hits here, it should be a problem on it's own
         {
-            if expr.end_type.is_none() 
+            if expr.end_type.is_none()
             {
                 expr.report("internal", "リテラル値に型が設定されていません。パーサー上の実装に問題があります。");
                 panic!()
-            } 
+            }
             Ok(())
         }
-        Binary => 
+        Binary =>
         {
             let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
             let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
@@ -973,7 +1025,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
                                 "配列の要素に一貫性がありません。\n\n最初: {} が返されました \n二度目: {}が返されました",
                                 root_type, expr_type
                             );
-                            
+
                             entry_expr.report("Array Type Inconsistent", &message);
                             return Err(())
                         }
@@ -997,7 +1049,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
                 return Err(());
             }
 
-            if expr.arg_expr.len() != callee_type.arg_type.len() 
+            if expr.arg_expr.len() != callee_type.arg_type.len()
             {
                 expr.report("Insufficient Argument", "引数の数が一致していません。");
                 return Err(());
@@ -1065,7 +1117,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
                     }
                 }
             }
-            
+
             let message = format!("変数 {} は定義されていません。", var_name);
             expr.report("Undefined Variable", &message);
             Err(())
@@ -1084,7 +1136,7 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
     use Operator::*;
     match oper
     {
-        Add => 
+        Add =>
         {
             ty.kind == TypeKind::Int
             || ty.kind == TypeKind::Float
@@ -1094,7 +1146,7 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
         }
 
         Sub | Div | Mul | Mod | Neg |
-        LessEq | MoreEq | Less | More => 
+        LessEq | MoreEq | Less | More =>
         {
             ty.kind == TypeKind::Int
             || ty.kind == TypeKind::Float

@@ -88,7 +88,43 @@ impl<'m> Parser<'m>
 
     fn parse_struct(&mut self, name: String, decl_span: CodeSpan) -> Result<ast::StmtId, ()>
     {
-        Err(())
+        self.consume(TokenType::Struct)?;
+        self.consume(TokenType::OpenBrace)?;
+        self.block_count += 1;
+
+        let mut vector = Vec::new();
+        while !self.is_at_end() && !self.is(TokenType::CloseBrace)
+        {
+            let field_name = self.consume(TokenType::Iden)?.lexeme.clone().unwrap();
+            self.consume(TokenType::Colon)?;
+            let parsed_type = self.parse_type(&ast::DeclPrefix::empty())?;
+            self.consume(TokenType::SemiColon)?;
+
+            let field = ast::Field(field_name, parsed_type);
+            vector.push(field);
+        }
+
+        self.block_count -= 1;
+        let end_span = self.consume(TokenType::CloseBrace)?.span;
+
+        let combined_span = CodeSpan::combine(&decl_span, &end_span);
+        let decl_data = ast::DeclarationData {
+            kind: ast::DeclKind::Struct,
+            name,
+            dectype: ast::ParsedType::Struct(vector),
+            prefix:  ast::DeclPrefix::empty(),
+            expr: None,
+            span: combined_span,
+        };
+
+        let stmt = ast::Statement {
+            module: self.module,
+            span: combined_span,
+            data: ast::Stmt::Declaration(decl_data),
+            parent: None,
+        };
+
+        Ok(self.ast.add_stmt(stmt))
     }
 
     // TODO: what EVEN is prefix?
@@ -217,7 +253,7 @@ impl<'m> Parser<'m>
                     .report("Unimplemented", "デフォルト引数は未実装です。");
                 return Err(());
             }
-            else if self.is(TokenType::Comma)
+            if self.is(TokenType::Comma)
             {
                 args.push(decl_info);
                 self.consume(TokenType::Comma)?;

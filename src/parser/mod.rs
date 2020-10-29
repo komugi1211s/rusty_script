@@ -385,7 +385,7 @@ impl<'m> Parser<'m>
         let right_hand_expr = self.postfix()?;
         let combined_span   = CodeSpan::combine(&variable.span, &right_hand_expr.span);
 
-        let mut expr = ExprInit {
+        let expr = ExprInit {
             kind:   ExprKind::FieldAccess,
             module: Some(self.module),
             lhs:    Some(Box::new(variable)),

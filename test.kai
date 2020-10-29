@@ -144,9 +144,7 @@ print "Local Variable testing.";
     print !four;
 }
 
-a.b = 10;
 
-/*
 print "struct testing.";
 new_struct: struct {
     a: int;
@@ -159,6 +157,7 @@ struct_variable.a = 10;
 struct_variable.b = 21;
 struct_variable.c = 25;
 
+/*
 print struct_variable.a == 10;
 print struct_variable.b == 21;
 print struct_variable.c == 25;

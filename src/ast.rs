@@ -187,13 +187,13 @@ impl Expression<'_>
 
             ExprKind::ArrayRef
             | ExprKind::Variable => true,
-            
+
             ExprKind::FieldAccess => {
-                if let Some(lhs) = self.lhs.as_ref() 
+                if let Some(lhs) = self.lhs.as_ref()
                 {
                     lhs.is_lvalue()
                 }
-                else 
+                else
                 {
                     unreachable!()
                 }
@@ -212,12 +212,20 @@ impl Expression<'_>
 pub struct FunctionData
 {
     pub own_stmt: StmtId,
-    pub it: DeclarationData,
+    pub it:   DeclarationData,
     pub args: Vec<DeclarationData>,
     pub body: Vec<StmtId>,
 
     // gets set by semantic analysis.
     pub implicit_return_required: Cell<bool>
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructData
+{
+    pub own_stmt: StmtId,
+    pub it:       DeclarationData,
+    pub body:     Vec<DeclarationData>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -505,6 +513,9 @@ impl DeclarationData
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Field(pub String, pub ParsedType);
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedType
@@ -516,7 +527,7 @@ pub enum ParsedType
     Array(Box<ParsedType>, Option<u32>),
     Pointer(Box<ParsedType>),
     Optional(Box<ParsedType>),
-    Struct(BlockData),
+    Struct(Vec<Field>),
     Userdef(String),
     Unknown,
 }
@@ -550,4 +561,5 @@ pub enum DeclKind
     Variable,
     Argument,
     Struct,
+    StructField,
 }

@@ -25,7 +25,7 @@ pub enum TypeKind
     Struct,
     Enum,
     Union, // TODO: Obsolete
-    
+
     // Meta
     Type,
     TypeVar // Type that we don't know yet.
@@ -152,6 +152,15 @@ impl Type
     {
         Self {
             kind: TypeKind::Null,
+            ..Default::default()
+        }
+    }
+
+    pub fn _struct(fields: Vec<Self>) -> Self
+    {
+        Self {
+            kind: TypeKind::Struct,
+            struct_members: fields,
             ..Default::default()
         }
     }
