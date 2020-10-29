@@ -113,6 +113,9 @@ pub fn default_symbol_table(table: &mut SymTable)
     table.insert("int".into(), int);
 }
 
+/*
+ * EntryPoint!
+ */
 pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     default_symbol_table(table);
@@ -124,7 +127,12 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
         last_return: None,
     };
 
+    /* 1ST PASS:
+     * Resolve Top level code, register every global variable first. */
     resolve_toplevel(table, &mut sema, &root_stmt, ast)?;
+
+    /* 2ND PASS:
+     * Resolve every function, expression, and check types.          */
     resolve_fully(table, &mut sema, &root_stmt, ast)?;
     Ok(())
 }
@@ -137,6 +145,15 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
         let root = expect_opt!(ast.stmt.get(stmt.0 as usize), "ルートに指定された文が見つかりませんでした。");
         match root.data
         {
+            /*
+             * TODO(fuzzy): Any kind of Declaration.
+             * currently this treats EVERY kind of declaration as the same thing.
+             * which means that it will treat TYPE declaration and DATA declaration (DEFINITION) as
+             * one.
+             *
+             * This will create several headache-inducing problems that needs to be solved in a
+             * very tricky way.
+             * */
             Stmt::Declaration(ref decl) =>
             {
                 // Check Global declaration, and spit an error if it exists.
@@ -186,6 +203,11 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                 table.insert(decl.name.clone(), symbol);
             }
 
+            /*
+             * TODO(fuzzy): Merge into a "TYPED Declaration".
+             * TECHNICALLY this is also a declaration but for some reason I didn't treat as
+             * declaration, but instead I thought that it's a good idea to create a separate variant???
+             * */
             Stmt::Function(targ) =>
             {
                 let func = expect_opt!(ast.functions.get(targ), "関数のインデックスが不正です。");
@@ -200,8 +222,12 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     return Err(());
                 }
 
-                // Check annotated return type, or just say None, which means that
-                // it'll get inferred by function's body.
+                // if it's not annotated, then it just ignores for now, and
+                // infers from the correct value from body afterwards.
+                // Check annotation:
+                //  returned Some(type) -> trusts annotation, but verifys afterwards in 2nd pass.
+                //  returned None       -> could be a user-defined type.
+
                 let mut annotated_return_type = None;
                 if func.it.is_annotated()
                 {
@@ -310,10 +336,12 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 }
                 else
                 {
-                    Some(Type::null())
+                    sema.typevar_count += 1;
+                    Some(Type::typevar(sema.typevar_count))
                 };
 
                 let entry = table.get_mut(&decl.name).unwrap();
+
                 match (&mut entry.types, &mut expr_type)
                 {
                     (Some(ref mut x), Some(ref mut y)) =>
