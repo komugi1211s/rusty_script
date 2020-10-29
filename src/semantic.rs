@@ -14,23 +14,54 @@ pub type SymbolTable = Arc<Mutex<HashMap<String, Symbol>>>;
 #[allow(dead_code)]
 pub type SymTable = HashMap<String, Symbol>;
 
+/*
+ * Symbol is a collection of information that represents certain "things".
+ * such as:
+ *     Variable
+ *     Function
+ *     Struct
+ *     Namespaces
+ *
+ * and more.
+ * */
+
+#[derive(Debug, Clone, Copy)]
+pub enum SymbolKind 
+{
+    TypeSpec,
+    Variable,
+}
+
 #[derive(Debug, Clone)]
 pub struct Symbol
 {
-    pub name: String,
+    pub name:  String,
+    pub span:  CodeSpan,
+
+    /// For Everything :: describes what kind of symbol this is.
+    pub kind:  SymbolKind,
+
+    /// For Everything :: the type of this certain Symbol.
     pub types: Option<Type>,
-    pub span: CodeSpan,
-    pub idx: usize,
+
+    /// For Struct :: name of the certain fields.
+    pub fields: Vec<Symbol>,
+    
+    /// these are used to give bytecode generator an insight of stack operation,
+    /// position of variables and such.
+    pub idx:   usize,
     pub depth: u32,
 }
 
 impl Symbol 
 {
-    fn new(name: String, span: CodeSpan) -> Self
+    fn new(kind: SymbolKind, name: String, span: CodeSpan) -> Self
     {
         Self {
             name,
+            kind,
             span,
+            fields: Vec::new(),
             types: None,
             idx: 0,
             depth: 0,
@@ -41,6 +72,25 @@ impl Symbol
     {
         self.types = Some(resolved_type);
     }
+}
+
+
+/* I had to settle for this... */
+fn reverse_lookup_from_types_to_symbol<'a>(table: &'a SymTable, sema: &Sema, required_type: &Type) -> Option<&'a Symbol>
+{
+    for (ref key, ref symbol) in table.iter()
+    {
+        if let Some(ref resolved_type) = symbol.types {
+            // NOTE(fuzzy):
+            // right here I could've used type_match() function but
+            // that could also bring some TypeVar stuff.
+            if resolved_type == required_type {
+                return Some(symbol);
+            }
+        }
+    }
+
+    return None;
 }
 
 #[derive(Debug, Clone)]
@@ -105,39 +155,10 @@ impl Sema
 }
 
 /*
-pub fn new_symboltable() -> SymbolTable
-{
-    let table = SymTable {
-        symbol: HashMap::with_capacity(255),
-        sema: Vec::with_capacity(64),
-        global_idx: 0,
-    };
-
-    return Arc::new(Mutex::new(table));
-}
-*/
-
-pub fn default_symbol_table(table: &mut SymTable)
-{
-    let mut g_idx = table.len();
-    g_idx += 1;
-    let int = Symbol {
-        idx: g_idx,
-        name: "int".into(),
-        types: Some(Type::int()),
-        span: NATIVE_SPAN,
-        depth: 0,
-    };
-
-    table.insert("int".into(), int);
-}
-
-/*
  * EntryPoint!
  */
 pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
 {
-    default_symbol_table(table);
     let root_stmt = ast.root.clone();
     let mut sema = Sema {
         locals: Vec::with_capacity(64),
@@ -231,7 +252,7 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     return Err(());
                 }
 
-                let mut symbol = Symbol::new(decl.name.clone(), root.span);
+                let mut symbol = Symbol::new(SymbolKind::TypeSpec, decl.name.clone(), root.span);
 
                 global_idx += 1;
                 symbol.idx = global_idx;
@@ -324,7 +345,7 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                                                 arg_types);
 
                 global_idx += 1;
-                let mut symbol = Symbol::new(func.it.name.clone(), root.span);
+                let mut symbol = Symbol::new(SymbolKind::TypeSpec, func.it.name.clone(), root.span);
                 symbol.idx = global_idx;
                 symbol.set_type(final_type);
 
@@ -359,7 +380,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, sema, expr)?;
+            resolve_expr(table, sema, expr)?;
         }
 
         Stmt::Print(expr_id) =>
@@ -367,7 +388,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, sema, expr)?;
+            resolve_expr(table, sema, expr)?;
         }
 
         Stmt::Declaration(ref decl) if sema.current_block == 0 =>
@@ -378,7 +399,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 {
                     let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                                            "初期化時に式を期待しましたが、取得できませんでした。");
-                    solve_type(table, sema, expr)?;
+                    resolve_expr(table, sema, expr)?;
                     expr.end_type.clone()
                 }
                 else
@@ -449,20 +470,18 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let local_idx = sema.locals.len();
             let local_depth = sema.current_block;
 
-            sema.locals.push(Symbol {
-                idx: local_idx,
-                name: decl.name.clone(),
-                span: stmt.span,
-                types: declared_type.clone(),
-                depth: local_depth,
-            });
+            let mut symbol = Symbol::new(SymbolKind::Variable, decl.name.clone(), stmt.span);
+            symbol.idx = local_idx;
+            symbol.depth = local_depth;
+            symbol.types = declared_type.clone();
+            sema.locals.push(symbol);
 
             let expr_type = if let Some(expr_id) = decl.expr
             {
                 if let Some(ref mut expr) = ast.expr.get_mut(expr_id.0 as usize)
                 {
                     // try_folding_literal(expr, 0)?;
-                    solve_type(table, sema, expr)?;
+                    resolve_expr(table, sema, expr)?;
                     expr.local_idx = Some(local_idx as u32);
                     expr.end_type.clone()
                 }
@@ -526,7 +545,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, sema, expr)?;
+            resolve_expr(table, sema, expr)?;
 
             resolve_statement(table, sema, ast, if_block_id)?;
             if let Some(else_block_id) = opt_else_block_id {
@@ -539,7 +558,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, sema, expr)?;
+            resolve_expr(table, sema, expr)?;
             resolve_statement(table, sema, ast, while_block_id)?;
         }
 
@@ -571,7 +590,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             let expr = expect_opt!(ast.expr.get_mut(expr_id.0 as usize),
                     "指定された式({:?})が見つかりませんでした。", expr_id);
 
-            solve_type(table, sema, expr)?;
+            resolve_expr(table, sema, expr)?;
             match sema.last_return
             {
                 None => sema.last_return = expr.end_type.clone(),
@@ -657,13 +676,11 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
                 for (decl, dtype) in func.args.iter().zip(arg_type.iter())
                 {
                     let local_idx = sema.locals.len();
-                    sema.locals.push(Symbol {
-                        idx: local_idx,
-                        name: decl.name.clone(),
-                        types: Some(dtype.clone()),
-                        span: declaration_span,
-                        depth: local_depth
-                    });
+                    let mut symbol = Symbol::new(SymbolKind::Variable, decl.name.clone(), declaration_span);
+                    symbol.idx = local_idx;
+                    symbol.depth = local_depth;
+                    symbol.set_type(dtype.clone());
+                    sema.locals.push(symbol);
                 }
             }
             else
@@ -756,12 +773,14 @@ fn parse_complicated_type<'a>(table: &'a mut SymTable, sema: &'a mut Sema, decl:
         Struct(ref fields) => {
             sema.deepen();
             let mut struct_field_types = Vec::with_capacity(fields.len());
+            let mut struct_field_names = Vec::with_capacity(fields.len());
             for field in fields.iter() {
                 let result = match maybe_parse_annotated_type(&field.1)? {
                     Some(trivial) => Ok(trivial),
                     None => parse_complicated_type(table, sema, &field.1)
                 };
 
+                struct_field_names.push(field.0.clone());
                 struct_field_types.push(result?);
             }
             sema.shallowen();
@@ -871,7 +890,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
     }
 }
 
-fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) -> Result<(), ()>
+fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) -> Result<(), ()>
 {
     // if expr.end_type.is_some() { return Ok(()); }
     use ExprKind::*;
@@ -892,8 +911,8 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let lhs = expect_opt!(expr.lhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
             let rhs = expect_opt!(expr.rhs.as_mut(), "バイナリ演算時に必要なデータが足りません。");
 
-            if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
-            if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; }
+            if lhs.end_type.is_none() { resolve_expr(table, sema, lhs.as_mut())?; }
+            if rhs.end_type.is_none() { resolve_expr(table, sema, rhs.as_mut())?; }
 
             {
                 let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
@@ -927,8 +946,8 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let lhs = expect_opt!(expr.lhs.as_mut(), "アサイン演算時に必要なデータが足りません。");
             let rhs = expect_opt!(expr.rhs.as_mut(), "アサイン演算時に必要なデータが足りません。");
 
-            if rhs.end_type.is_none() { solve_type(table, sema, rhs.as_mut())?; } // Do RHS First.
-            if lhs.end_type.is_none() { solve_type(table, sema, lhs.as_mut())?; }
+            if rhs.end_type.is_none() { resolve_expr(table, sema, rhs.as_mut())?; } // Do RHS First.
+            if lhs.end_type.is_none() { resolve_expr(table, sema, lhs.as_mut())?; }
 
             {
                 let lhs_type = expect_opt!(lhs.end_type.as_mut(), "SolveTypeが正常にLHSの型を解決していません。");
@@ -965,12 +984,12 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
 
             if lhs.end_type.is_none()
             {
-                solve_type(table, sema, lhs.as_mut())?;
+                resolve_expr(table, sema, lhs.as_mut())?;
             }
 
             if rhs.end_type.is_none()
             {
-                solve_type(table, sema, rhs.as_mut())?;
+                resolve_expr(table, sema, rhs.as_mut())?;
             }
 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
@@ -998,7 +1017,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let var = expect_opt!(expr.rhs.as_mut(), "Unary演算に必要なデータが足りません。");
             if var.end_type.is_none()
             {
-                solve_type(table, sema, var.as_mut())?;
+                resolve_expr(table, sema, var.as_mut())?;
             }
 
             let var_type = expect_opt!(var.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
@@ -1018,7 +1037,25 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
 
         FieldAccess =>
         {
-            expr.report("Field Access Unimplemented", "現在この式の型を解決できません。");
+            let host  = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+            let field = expect_opt!(expr.rhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+
+            if host.end_type.is_none()  { resolve_expr(table, sema, host.as_mut())?; }
+            let host_type = expect_opt!(host.end_type.as_ref(), "SolveTypeが正常に構造体の型を解決していません。");
+
+            /*
+             * NOTE(fuzzy):
+             * Here's the problem:
+             * the "field access" expression consists of several expression.
+             * if you do "some_container_name.contents_name", then AST will form like this
+             * PostfixExpr(Variable(some_container_name), Variable(contents_name))
+             *
+             * Which is cool and all, but if you do something like "arr[1].value()" then
+             * PostfixExpr(ArrayRef(Variable(arr), 1), FunctionCall(Variable(value)))
+             * now that's... something. I can't even measure the possibility of these combination.
+             * I have to find a good way to represent this in AST.
+             * */
+
             return Err(());
         }
 
@@ -1027,8 +1064,8 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let variable = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
             let indexing = expect_opt!(expr.rhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
 
-            if variable.end_type.is_none() { solve_type(table, sema, variable.as_mut())?; }
-            if indexing.end_type.is_none() { solve_type(table, sema, indexing.as_mut())?; }
+            if variable.end_type.is_none() { resolve_expr(table, sema, variable.as_mut())?; }
+            if indexing.end_type.is_none() { resolve_expr(table, sema, indexing.as_mut())?; }
 
             let variable_type = expect_opt!(variable.end_type.as_mut(), "SolveTypeが正常に配列？の型を解決していません。");
             let indexing_type = expect_opt!(indexing.end_type.as_mut(), "SolveTypeが正常にアクセスインデックスの型を解決していません。");
@@ -1065,7 +1102,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
             let mut consistent_type = None;
             for entry_expr in expr.array_expr.iter_mut()
             {
-                if entry_expr.end_type.is_none() { solve_type(table, sema, entry_expr)?; }
+                if entry_expr.end_type.is_none() { resolve_expr(table, sema, entry_expr)?; }
 
                 match consistent_type
                 {
@@ -1093,7 +1130,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
         FunctionCall =>
         {
             let callee = expect_opt!(expr.lhs.as_mut(), "関数呼び出しに必要なデータが足りません。");
-            if callee.end_type.is_none() { solve_type(table, sema, callee.as_mut())?; }
+            if callee.end_type.is_none() { resolve_expr(table, sema, callee.as_mut())?; }
 
             let callee_type = expect_opt!(callee.end_type.as_ref(), "呼び出される関数の型が解決していません。");
             if callee_type.kind != TypeKind::Function
@@ -1111,7 +1148,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
 
             for (ref mut arg_expr, ref intended_type) in expr.arg_expr.iter_mut().zip(callee_type.arg_type.iter())
             {
-                if arg_expr.end_type.is_none() { solve_type(table, sema, arg_expr)?; }
+                if arg_expr.end_type.is_none() { resolve_expr(table, sema, arg_expr)?; }
                 let arg_type = expect_opt!(arg_expr.end_type.as_ref(), "引数の型が解決できませんでした。");
 
                 if !type_match(arg_type, intended_type)
@@ -1130,7 +1167,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
         Grouping =>
         {
             let lhs = expect_opt!(expr.lhs.as_mut(), "Grouping演算に必要なデータが足りません。");
-            solve_type(table, sema, lhs.as_mut())?;
+            resolve_expr(table, sema, lhs.as_mut())?;
             expr.end_type = lhs.end_type.clone();
             Ok(())
         }
