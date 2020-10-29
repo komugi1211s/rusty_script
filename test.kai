@@ -1,10 +1,10 @@
 // Declaration
 
 print "Declaration Testing.";
-a: int = 10;
-b: float = 1.5;
+a: int    = 10;
+b: float  = 1.5;
 c: string = "hello";
-d: bool = true;
+d: bool   = true;
 
 print a == 10;
 print b == 1.5; print c == "hello";
@@ -59,67 +59,38 @@ print 0 > -5;
 print 1 >= 1;
 print 1 <= 1;
 
-test_func_noreturn_inferred_to_null: fn() {
-}
-
-test_func_emptyreturn_inferred_to_null: fn() {
-    return;
-}
-
-test_func_explicit_return_null: fn() {
-    return null;
+test_func_noreturn_implicitly_returns_null: fn() {
 }
 
 returns_integer: fn() int {
     return 10;
 }
 
-infer_return_integer: fn() {
-    return 5;
-}
-
 returns_float: fn() float {
     return 10.5;
-}
-
-infer_return_float: fn() {
-    return 5.5;
 }
 
 returns_string: fn() string {
     return "hello";
 }
 
-infer_return_string: fn() {
-    return "world";
-}
-
 returns_bool: fn() bool {
     return true;
 }
 
-infer_return_bool: fn() {
-    return true;
+returns_bool_optional: fn() bool? {
+    return null;
 }
 
 print "empty return testing.";
-print test_func_noreturn_inferred_to_null() == null;
-print test_func_emptyreturn_inferred_to_null() == null;
-print test_func_explicit_return_null() == null;
-
-print "Inferring testing";
-print returns_bool() == true;
-print infer_return_bool() != false;
+print test_func_noreturn_implicitly_returns_null() == null;
 
 print "value return testing.";
+print returns_bool() == true;
 print returns_integer() == 10;
-print infer_return_integer() == 5;
-
 print returns_float() == 10.5;
-print infer_return_float() == 5.5;
-
 print returns_string() == "hello";
-print infer_return_string() == "world";
+print returns_bool_optional() == null;
 
 // Local Variables.
 print "Local Variable testing.";
@@ -146,18 +117,18 @@ print "Local Variable testing.";
 
 
 print "struct testing.";
-new_struct: struct {
-    a: int;
-    b: int;
-    c: int;
-}
 
-struct_variable: new_struct;
+loop_one: struct {
+    a: int;
+} 
+
+struct_variable: loop_one;
 struct_variable.a = 10;
+
+/*
 struct_variable.b = 21;
 struct_variable.c = 25;
 
-/*
 print struct_variable.a == 10;
 print struct_variable.b == 21;
 print struct_variable.c == 25;

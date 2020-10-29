@@ -7,19 +7,12 @@ pub mod prelude
     pub use super::source::SourceFile;
     pub use crate::{ err_fatal, expect, expect_opt };
     pub use super::{ error_reported, report, info, spit_line, report_compiler_bug };
-    pub use super::Reportable;
 }
 
 use std::sync::atomic::AtomicBool;
 pub use source::SourceFile;
 pub use position::CodeSpan;
 
-
-pub trait Reportable
-{
-    fn sourcefile(&self) -> usize;
-    fn span(&self) -> CodeSpan;
-}
 
 pub static ERROR_REPORTED: AtomicBool = AtomicBool::new(false);
 

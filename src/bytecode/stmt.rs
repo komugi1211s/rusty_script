@@ -132,9 +132,9 @@ pub fn traverse_statement(
     }
 }
 
-fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner: &BlockData) -> Result<(), ()>
+fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner_statement: &[StmtId]) -> Result<(), ()>
 {
-    for stmt_id in &inner.statements
+    for stmt_id in inner_statement
     {
         traverse_statement(compiler, ast, *stmt_id)?;
     }

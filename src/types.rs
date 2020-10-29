@@ -17,17 +17,15 @@ pub enum TypeKind
     Null,
 
     // Non-Primitives.
-    Ptr,
     Array,
     Function,
 
     // User_Defined.
     Struct,
+    Optional,
     Enum,
-    Union, // TODO: Obsolete
 
     // Meta
-    Type,
     TypeVar // Type that we don't know yet.
 }
 
@@ -48,11 +46,8 @@ pub struct Type
 {
     pub kind: TypeKind,
 
-    /// For Array :: Pointer's Inside.
-    pub pointer_to: Option<Box<Type>>,
-
-    /// For Array :: Type of array's content.
-    pub array_type: Option<Box<Type>>,
+    /// For Array, Optional :: Type of array's content.
+    pub contained_type: Option<Box<Type>>,
 
     /// For Function :: Function's Return Type.
     pub return_type: Option<Box<Type>>,
@@ -76,15 +71,6 @@ impl Type
     {
         Self {
             kind,
-            ..Default::default()
-        }
-    }
-
-    pub fn ptr(of: Box<Self>) -> Self
-    {
-        Self {
-            kind: TypeKind::Ptr,
-            pointer_to: Some(of),
             ..Default::default()
         }
     }
@@ -113,14 +99,6 @@ impl Type
         }
     }
 
-    pub fn basetype() -> Self
-    {
-        Self {
-            kind: TypeKind::Type,
-            ..Default::default()
-        }
-    }
-
     pub fn string() -> Self
     {
         Self {
@@ -133,7 +111,7 @@ impl Type
     {
         Self {
             kind: TypeKind::Array,
-            array_type: Some(of),
+            contained_type: Some(of),
             ..Default::default()
         }
     }
@@ -165,12 +143,11 @@ impl Type
         }
     }
 
-    pub fn optional(of: Type) -> Self
+    pub fn optional(of: Box<Self>) -> Self
     {
         Self {
-            // TODO - @Broken: Move optional into TypeKind::Union
-            kind: TypeKind::Union,
-            struct_members: vec![of, Self::null()],
+            kind: TypeKind::Optional,
+            contained_type: Some(of),
             ..Default::default()
         }
     }
@@ -206,9 +183,20 @@ impl std::fmt::Display for Type
                 Boolean => "boolean".into(),
                 Array =>
                 {
-                    if let Some(ref base) = self.array_type
+                    if let Some(ref base) = self.contained_type
                     {
                         format!("[{}]", &**base)
+                    }
+                    else
+                    {
+                        unreachable!();
+                    }
+                }
+                Optional =>
+                {
+                    if let Some(ref base) = self.contained_type
+                    {
+                        format!("{}?", &**base)
                     }
                     else
                     {
@@ -233,30 +221,18 @@ impl std::fmt::Display for Type
                         format!("({}) void", func_args)
                     }
                 }
-                Ptr =>
-                {
-                    if let Some(ref pointer_to) = self.pointer_to
-                    {
-                        format!("*{}", &**pointer_to)
-                    }
-                    else
-                    {
-                        String::from("nullptr")
-                    }
-                }
-                Struct | Enum | Union =>
+                Struct | Enum =>
                 {
                     let members = self
                         .struct_members
                         .iter()
-                        .map(|x| format!("{}", x))
+                        .map(|_type| format!("{}", _type))
                         .collect::<Vec<String>>()
                         .join("; ");
 
                     format!("{:?} {{ {} }}", self.kind, members)
                 }
                 Null => "null".into(),
-                Type => "Type".into(),
                 TypeVar => "<T>".into() // Should be safe, don't quote me
             }
         )

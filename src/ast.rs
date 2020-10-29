@@ -85,11 +85,6 @@ pub struct Statement<'m>
     pub parent: Option<StmtId>,
 }
 
-impl Reportable for Statement<'_>
-{
-    fn sourcefile(&self) -> usize { 0 }
-    fn span(&self) -> CodeSpan { self.span }
-}
 
 impl<'m> Statement<'m>
 {
@@ -171,33 +166,12 @@ impl Expression<'_>
             ExprKind::Assign
             | ExprKind::Binary
             | ExprKind::FunctionCall
-            | ExprKind::Grouping =>
-            {
-                if let Some(inner) = self.end_type.as_ref()
-                {
-                    use crate::types::TypeKind;
-                    inner.kind == TypeKind::Ptr
-                }
-                else
-                {
-                    report_compiler_bug("型が未解決の式に左辺値判定は出来ません。", ::std::file!(), ::std::line!(), "self.end_type.is_none()" );
-                    unreachable!()
-                }
-            }
+            | ExprKind::Grouping => false,
 
             ExprKind::ArrayRef
-            | ExprKind::Variable => true,
-
-            ExprKind::FieldAccess => {
-                if let Some(lhs) = self.lhs.as_ref()
-                {
-                    lhs.is_lvalue()
-                }
-                else
-                {
-                    unreachable!()
-                }
-            }
+            | ExprKind::Variable 
+            | ExprKind::FieldAccess => true,
+            
             ExprKind::Unary => false, // TODO: FIXME: Can be true depends on an operator.
 
             ExprKind::Empty
@@ -226,19 +200,6 @@ pub struct StructData
     pub own_stmt: StmtId,
     pub it:       DeclarationData,
     pub body:     Vec<DeclarationData>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BlockData
-{
-    pub local_count: usize,
-    pub statements: Vec<StmtId>,
-}
-
-impl Reportable for Expression<'_>
-{
-    fn sourcefile(&self) -> usize { 0 }
-    fn span(&self) -> CodeSpan { self.span }
 }
 
 impl<'m> Expression<'m>
@@ -356,7 +317,7 @@ pub enum Stmt
     If(ExprId, StmtId, Option<StmtId>),
     While(ExprId, StmtId),
     For(StmtId, ExprId, ExprId, StmtId),
-    Block(BlockData),
+    Block(Vec<StmtId>),
     Function(usize),
     Break,
     Continue,
@@ -389,9 +350,6 @@ pub enum Operator
     And,
     Or,
 
-    Ref,
-    Deref,
-
     Wrap,
     Unwrap,
 
@@ -423,8 +381,6 @@ impl std::fmt::Display for Operator
                 Neg => "-",
                 And => "and",
                 Or => "or",
-                Ref => "^",
-                Deref => "^",
                 Wrap => "?",
                 Unwrap => "!",
                 Asgn => "=",
@@ -492,9 +448,9 @@ impl<'m> Literal<'m>
 pub struct DeclarationData
 {
     pub kind: DeclKind,
-    pub name: String,
+    pub name:    String,
     pub dectype: ParsedType,
-    pub prefix: DeclPrefix,
+    pub prefix:  DeclPrefix,
 
     pub expr: Option<ExprId>,
     pub span: CodeSpan,
@@ -511,6 +467,11 @@ impl DeclarationData
     {
         !self.is_inferred()
     }
+
+    pub fn is_type_declaration(&self) -> bool
+    {
+        self.kind != DeclKind::Variable
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -525,7 +486,6 @@ pub enum ParsedType
     Float,
     Boolean,
     Array(Box<ParsedType>, Option<u32>),
-    Pointer(Box<ParsedType>),
     Optional(Box<ParsedType>),
     Struct(Vec<Field>),
     Userdef(String),
@@ -559,7 +519,8 @@ bitflags! {
 pub enum DeclKind
 {
     Variable,
-    Argument,
+    Function,
+    FunctionArgument,
     Struct,
     StructField,
 }

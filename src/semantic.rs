@@ -24,6 +24,25 @@ pub struct Symbol
     pub depth: u32,
 }
 
+impl Symbol 
+{
+    fn new(name: String, span: CodeSpan) -> Self
+    {
+        Self {
+            name,
+            span,
+            types: None,
+            idx: 0,
+            depth: 0,
+        }
+    }
+
+    fn set_type(&mut self, resolved_type: Type)
+    {
+        self.types = Some(resolved_type);
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Sema
 {
@@ -137,6 +156,54 @@ pub fn analysis(table: &mut SymTable, ast: &mut ASTree<'_>) -> Result<(), ()>
     Ok(())
 }
 
+fn register_type_into_table(table: &mut SymTable,
+                            sema: &mut Sema,
+                            decl: &DeclarationData,
+                            mut symbol: Symbol) -> Result<(), (&'static str, &'static str)>
+{
+    match decl.kind
+    {
+        DeclKind::Struct =>
+        {
+            let struct_type = parse_complicated_type(table, sema, &decl.dectype)?;
+
+            symbol.set_type(struct_type);
+            table.insert(decl.name.clone(), symbol);
+        }
+
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn register_variable_into_table(table: &mut SymTable,
+                                sema: &mut Sema,
+                                decl: &DeclarationData,
+                                mut symbol: Symbol) -> Result<(), (&'static str, &'static str)>
+{
+
+    if decl.is_annotated()
+    {
+        let annotated_type =
+            match maybe_parse_annotated_type(&decl.dectype)?
+            {
+                Some(x) => x,
+                None =>
+                    parse_complicated_type(table, sema, &decl.dectype)?
+            };
+
+        symbol.set_type(annotated_type);
+    }
+    else
+    {
+        sema.typevar_count += 1;
+        symbol.set_type(Type::typevar(sema.typevar_count));
+    }
+
+    table.insert(decl.name.clone(), symbol);
+    Ok(())
+}
+
 fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast: &mut ASTree<'_>) -> Result<(), ()>
 {
     let mut global_idx: usize = table.len();
@@ -164,43 +231,24 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     return Err(());
                 }
 
-                // Infer or Check the type.
-                // TODO - @Imcomplete: It can be separated into different code.
-                let declared_type = if decl.is_annotated()
-                {
-                    match maybe_parse_annotated_type(&decl.dectype)
-                    {
-                        Ok(Some(x)) => Some(x),
-                        Ok(None) => match parse_complicated_type(table, sema, &decl.dectype) {
-                            Ok(n) => Some(n),
-                            Err((title, message)) => {
-                                root.report(title, message);
-                                return Err(());
-                            }
-                        }
-                        Err((title, message)) =>
-                        {
-                            root.report(title, message);
-                            return Err(());
-                        }
-                    }
-                }
-                else
-                {
-                    sema.typevar_count += 1;
-                    Some(Type::typevar(sema.typevar_count))
-                };
+                let mut symbol = Symbol::new(decl.name.clone(), root.span);
 
                 global_idx += 1;
-                let symbol = Symbol {
-                    idx: global_idx,
-                    name: decl.name.clone(),
-                    span: root.span,
-                    types: declared_type,
-                    depth: 0,
-                };
+                symbol.idx = global_idx;
 
-                table.insert(decl.name.clone(), symbol);
+                if decl.is_type_declaration() {
+                    if let Err((title, message)) = register_type_into_table(table, sema, decl, symbol) 
+                    {
+                        root.report(title, message);
+                        return Err(());
+                    }
+                } else {
+                    if let Err((title, message)) = register_variable_into_table(table, sema, decl, symbol) 
+                    {
+                        root.report(title, message);
+                        return Err(());
+                    }
+                }
             }
 
             /*
@@ -222,16 +270,14 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                     return Err(());
                 }
 
-                // if it's not annotated, then it just ignores for now, and
+                // if it's not annotated, then just determine it's return type to be null.
                 // infers from the correct value from body afterwards.
                 // Check annotation:
                 //  returned Some(type) -> trusts annotation, but verifys afterwards in 2nd pass.
                 //  returned None       -> could be a user-defined type.
 
-                let mut annotated_return_type = None;
-                if func.it.is_annotated()
-                {
-                    annotated_return_type = match maybe_parse_annotated_type(&func.it.dectype)
+                let annotated_return_type = if func.it.is_annotated() {
+                    match maybe_parse_annotated_type(&func.it.dectype)
                     {
                         Ok(uncertain_type) => uncertain_type,
                         Err((title, message)) => {
@@ -240,6 +286,10 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                         }
                     }
                 }
+                else
+                {
+                    Some(Type::null())
+                };
 
                 let arg_types: Vec<Type> = if func.args.is_empty()
                 {
@@ -274,13 +324,10 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                                                 arg_types);
 
                 global_idx += 1;
-                let symbol = Symbol {
-                    idx: global_idx,
-                    name: func.it.name.clone(),
-                    types: Some(final_type),
-                    span: root.span,
-                    depth: 0,
-                };
+                let mut symbol = Symbol::new(func.it.name.clone(), root.span);
+                symbol.idx = global_idx;
+                symbol.set_type(final_type);
+
                 table.insert(func.it.name.clone(), symbol);
             }
             _ => (),
@@ -501,11 +548,13 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
             resolve_function_and_body(table, sema, ast, func_id)?;
         }
 
-        Stmt::Block(ref block_data) =>
+        Stmt::Block(ref block_body) =>
         {
             sema.deepen();
-            let block_inner = block_data.statements.clone();
-            for inner_stmt in block_inner.iter()
+
+            // TODO(fuzzy): find a way to do this without clone.
+            let block_body = block_body.clone();
+            for inner_stmt in block_body.iter()
             {
                 resolve_statement(table, sema, ast, *inner_stmt)?;
             }
@@ -640,13 +689,8 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
     {
         if let Some(ref mut symbol) = table.get_mut(&func_name)
         {
-            let mut block_return_type = sema.last_return.take();
+            let mut block_return_type    = sema.last_return.take();
             let mut declared_return_type = &mut symbol.types.as_mut().unwrap().return_type;
-
-            if implicit_return_required && block_return_type.is_some()
-            {
-                block_return_type = block_return_type.map(Type::optional);
-            }
 
             match (&mut declared_return_type, &mut block_return_type)
             {
@@ -677,7 +721,8 @@ fn resolve_function_and_body(table: &mut SymTable, sema: &mut Sema, ast: &mut AS
                 {
                     if !type_match(&x, &*NULL_TYPE)
                     {
-                        let message = format!("関数 {} の戻り値が一致していません。\n(定義された型: {}, 型推論器の結論: null)",
+                        let message = format!("関数 {} の戻り値が一致していません。\n\
+                                              (定義された型: {}, 型推論器の結論: null)",
                             &func_name, &x);
 
                         ast.get_stmt(func_stmt_id).report("Type mismatch", &message);
@@ -732,7 +777,7 @@ fn parse_complicated_type<'a>(table: &'a mut SymTable, sema: &'a mut Sema, decl:
                     unimplemented!();
                 }
             } else {
-                unimplemented!();
+                Err(("Undefined Type", "この型はまだ定義されていません。"))
             }
         }
         _ => {
@@ -762,22 +807,11 @@ fn maybe_parse_annotated_type(ptype: &ParsedType) -> Result<Option<Type>, (&'sta
                 todo!("Error Logging");
             }
         }
-        Pointer(ref of) =>
-        {
-            if let Some(type_of) = maybe_parse_annotated_type(of)?
-            {
-                let pointer_of = Box::new(type_of);
-                Ok(Some(Type::ptr(pointer_of)))
-            }
-            else
-            {
-                todo!("Error Logging");
-            }
-        }
         Optional(ref of) =>
         {
             if let Some(type_of) = maybe_parse_annotated_type(of)?
             {
+                let type_of = Box::new(type_of);
                 Ok(Some(Type::optional(type_of)))
             }
             else
@@ -800,13 +834,13 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
     match (lhs.kind, rhs.kind)
     {
         (TypeVar, _) | (_, TypeVar) => true, // TODO: Fix
-        (Struct, Struct) | (Union, Union) | (Enum, Enum) =>
+        (Struct, Struct) | (Enum, Enum) =>
         {
             if lhs.struct_members.len() != rhs.struct_members.len() { return false; }
 
             lhs.struct_members.iter()
                               .zip(rhs.struct_members.iter())
-                              .all(|(lht, rht)| type_match(lht, rht))
+                              .all(|(lht, rht)| type_match(&lht, &rht))
 
         }
         (Function, Function) =>
@@ -818,28 +852,20 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
 
             lhs.arg_type.iter().zip(rhs.arg_type.iter()).all(|(lht, rht)| type_match(lht, rht))
         }
-        (Ptr, Ptr) =>
-        {
-            let lhs_ptr = expect_opt!(lhs.pointer_to.as_ref(), "LHS ポインタ型が正常に解決されませんでした。");
-            let rhs_ptr = expect_opt!(rhs.pointer_to.as_ref(), "RHS ポインタ型が正常に解決されませんでした。");
-            type_match(&*lhs_ptr, &*rhs_ptr)
-        }
-        (Union, _) =>
-        {
-            for lhs_type in lhs.struct_members.iter()
-            {
-                if type_match(lhs_type, rhs)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
         (Array, Array) =>
         {
-            let lhs_inner_type = expect_opt!(lhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
-            let rhs_inner_type = expect_opt!(rhs.array_type.as_ref(), "Array型が正常に解決されませんでした。");
+            let lhs_inner_type = expect_opt!(lhs.contained_type.as_ref(), "Array型が正常に解決されませんでした。");
+            let rhs_inner_type = expect_opt!(rhs.contained_type.as_ref(), "Array型が正常に解決されませんでした。");
             type_match(&*lhs_inner_type, &*rhs_inner_type)
+        }
+        (Optional, _) | (_, Optional) =>
+        { 
+            let (optional_type, base_type) = if lhs.kind == Optional { (lhs, rhs) } else { (rhs, lhs) };
+
+            let opt_contained_type = expect_opt!(optional_type.contained_type.as_ref(),
+                                                "Optional型が正常に解決されませんでした。");
+
+            base_type.kind == TypeKind::Null || type_match(&*opt_contained_type, &*base_type)
         }
         (x, y) => x == y
     }
@@ -1021,7 +1047,7 @@ fn solve_type(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>) 
                 return Err(());
             }
 
-            let return_type = expect_opt!(variable_type.array_type.clone(), "配列の戻り値が解決していません。");
+            let return_type = expect_opt!(variable_type.contained_type.clone(), "配列の戻り値が解決していません。");
             expr.end_type = Some(*return_type);
             Ok(())
         }
@@ -1169,7 +1195,6 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
             ty.kind == TypeKind::Int
             || ty.kind == TypeKind::Float
             || ty.kind == TypeKind::Str
-            || ty.kind == TypeKind::Ptr
             // || ty.kind == TypeKind::Array
         }
 
@@ -1180,16 +1205,12 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
             || ty.kind == TypeKind::Float
         }
 
+        Wrap | Unwrap => ty.kind == TypeKind::Optional,
+
         EqEq | NotEq => true,
 
         // Unary
         Not | And | Or => ty.kind == TypeKind::Boolean,
-
-        Ref => true,
-        Deref => ty.kind == TypeKind::Ptr,
-
-        Wrap => true,
-        Unwrap => ty.kind == TypeKind::Union,
 
         Asgn => true,
     }
@@ -1201,11 +1222,10 @@ fn unify_type(lht: &mut Type, rht: &mut Type)
     match(lht.kind, rht.kind)
     {
         (TypeVar, TypeVar) => panic!(),
-
         (Array, Array) =>
         {
-            let lht_inner_type = expect_opt!(lht.array_type.as_mut(), "Array型の中身が解決していません.");
-            let rht_inner_type = expect_opt!(rht.array_type.as_mut(), "Array型の中身が解決していません.");
+            let lht_inner_type = expect_opt!(lht.contained_type.as_mut(), "Array型の中身が解決していません.");
+            let rht_inner_type = expect_opt!(rht.contained_type.as_mut(), "Array型の中身が解決していません.");
             unify_type(lht_inner_type, rht_inner_type);
         }
 

@@ -335,7 +335,6 @@ impl<'m> Parser<'m>
             TokenType::Bang => Some(Operator::Not),
             TokenType::Minus => Some(Operator::Neg),
             TokenType::Question => Some(Operator::Wrap),
-            TokenType::Caret => Some(Operator::Ref),
             _ => None,
         };
         if let Some(oper) = operator
@@ -371,7 +370,6 @@ impl<'m> Parser<'m>
                 TokenType::OpenParen => self.parse_func_call(expr)?,
                 TokenType::Bang => self.parse_unwrap(expr)?,
                 TokenType::OpenSquareBracket => self.parse_array_ref(expr)?,
-                TokenType::Caret => self.parse_deref(expr)?,
                 TokenType::Dot => self.parse_field(expr)?,
                 _ => break 'parse,
             }
@@ -401,13 +399,6 @@ impl<'m> Parser<'m>
     {
         self.get_current()
             .report("Unimplemented Feature", "Unwrap機能は実装されていません。");
-        Err(())
-    }
-
-    fn parse_deref(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
-    {
-        self.get_current()
-            .report("Unimplemented Feature", "Deref機能は実装されていません。");
         Err(())
     }
 

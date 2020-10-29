@@ -1,6 +1,6 @@
 use super::Parser;
 use crate::{
-    ast::{BlockData, Statement, Stmt, StmtId},
+    ast::{Statement, Stmt, StmtId},
     tokenizer::token::{TokenType},
     trace::prelude::*,
 };
@@ -172,7 +172,7 @@ impl<'m> Parser<'m>
     pub(super) fn block_statement(&mut self) -> Result<StmtId, ()>
     {
         let start_span = self.consume(TokenType::OpenBrace)?.span;
-        let mut vector = Vec::new();
+        let mut block_body = Vec::new();
 
         let previous_count = self.assign_count;
         self.assign_count = 0;
@@ -180,25 +180,21 @@ impl<'m> Parser<'m>
 
         while !self.is_at_end() && !self.is(TokenType::CloseBrace)
         {
-            vector.push(self.declaration()?);
+            block_body.push(self.declaration()?);
         }
 
-        let assign_count = self.assign_count;
+        let _assign_count = self.assign_count;
         self.assign_count = previous_count;
         self.block_count -= 1;
 
         let end_span = self.consume(TokenType::CloseBrace)?.span;
         let parent = StmtId(self.ast.stmt.len() as u32);
-
-        for i in vector.iter()
+        for child in block_body.iter()
         {
-            self.ast.set_parent_to_statement(parent, *i);
+            self.ast.set_parent_to_statement(parent, *child);
         }
 
-        let block = Stmt::Block(BlockData {
-            statements: vector,
-            local_count: assign_count,
-        });
+        let block = Stmt::Block(block_body);
 
         let stmt = Statement {
             module: self.module,

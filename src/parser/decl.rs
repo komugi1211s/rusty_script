@@ -70,11 +70,6 @@ impl<'m> Parser<'m>
         {
             match self.get_current().tokentype
             {
-                TokenType::Caret =>
-                {
-                    self.advance();
-                    core_type = ast::ParsedType::Pointer(Box::new(core_type));
-                }
                 TokenType::Question =>
                 {
                     self.advance();
