@@ -1,17 +1,39 @@
-# rusty_scriptに
+# rusty_script
 rusty scripting language
 
 最初は[この本](http://craftinginterpreters.com/)を読みながらやっていたけど、バイトコードあたりからある程度調べながらやるようになっている  
 実際に使えるような言語にはならない　と思う
 
-### モチベーション
-稚拙なライトノベルのアニメ化とかが流行ってるのを見て「プログラミングっぽくキャラクターの設定を定義して文字列フォーマットでタイプミスを無くしたり、
-伏線を変数として指定して、回収されてない伏線があったらコンパイル時にエラーになるような言語があったら、書く人にとって便利なのでは？」と思って始めたプロジェクトだった
+### Usage
+```
+git clone https://github.com/komugi1211s/rusty_script.git
+cd rusty_script
+cargo r
+```
 
-使い古された異世界転生の設定を皮肉ってプロジェクト名もIsekaiにしていて、勉強も兼ねてRustで書いていた
+### Code example
+```
+simple_fibonacci: fn(number: int) int {
+    if number == 0 return 0;
+    if number == 1 return 1;
+    return simple_fibonacci(number - 1) + simple_fibonacci(number - 2);
+}
 
-丁度そのタイミングでたまたま電卓もどきを組む機会があり、「これは今やっているプロジェクトにあったほうが良いのでは？」と思い立ち追加してしまったのだが、それを皮切りに徐々にプログラミング言語っぽくなっていくのが見てて楽しくなってきて、どんどん普通の言語と同じ仕様とかを追加していった
+print simple_fibonacci(15); // print 610
+```
 
-やがて当初の案は完全に消滅し、ほぼラノベが関係ない只の量産型インタプリタ言語になってしまったに
+```
+simple_fizz_buzz: fn(num: int) {
+    i := 1;
+    while (i < num) {
+        if      i % 15 == 0 print "FizzBuzz";
+        else if i %  5 == 0 print "Buzz";
+        else if i %  3 == 0 print "Fizz";
+        else                print i;
 
-今後ゲームエンジンかなにかをRustで組むかもしれない際にすぐに組み込める程度には作り上げる予定でいる
+        i = i + 1;
+    }
+}
+
+simple_fizz_buzz(100);
+```
