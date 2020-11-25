@@ -1,5 +1,5 @@
 # rusty_script
-rusty scripting language
+Toy rusty scripting language
 
 最初は[この本](http://craftinginterpreters.com/)を読みながらやっていたけど、バイトコードあたりからある程度調べながらやるようになっている  
 実際に使えるような言語にはならない　と思う
