@@ -3,7 +3,7 @@ pub mod macros;
 pub mod position;
 pub mod prelude
 {
-    pub use super::position::{ CodeSpan, NATIVE_SPAN };
+    pub use super::position::{ CodeSpan };
     pub use super::source::SourceFile;
     pub use crate::{ err_fatal, expect, expect_opt };
     pub use super::{ error_reported, report, info, spit_line, report_compiler_bug };

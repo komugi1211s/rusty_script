@@ -84,7 +84,7 @@ pub fn traverse_expression(compiler: &mut Compiler, ast: &ASTree, expr: &Express
 fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'_>)
 {
     assert!(expr.lhs.is_some(), "Function Call: lhs is empty, we don't know what it called.");
-    
+
     let variable = expect_opt!(expr.lhs.as_ref(), "関数の呼び出し対象が解決できていません。");
     let name = expect_opt!(variable.variable_name.as_ref(), "呼び出す関数の名前が分かりませんでした。");
 
@@ -97,10 +97,10 @@ fn emit_function_call(compiler: &mut Compiler, ast: &ASTree, expr: &Expression<'
     compiler.emit_op(IRCode::Call(func_index, arg_length));
 }
 
-fn emit_store(compiler: &mut Compiler, target: &Expression<'_>) 
+fn emit_store(compiler: &mut Compiler, target: &Expression<'_>)
 {
     let var_name = target.variable_name.as_ref().unwrap();
-    if let Some(local_idx) = target.local_idx 
+    if let Some(local_idx) = target.local_idx
     {
         compiler.emit_op(IRCode::Store(local_idx));
     }
@@ -143,78 +143,36 @@ fn emit_from_oper(compiler: &mut Compiler, oper: Operator)
     }
 }
 
-fn emit_constants(compiler: &mut Compiler, literal: &Literal)
+fn emit_constants(compiler: &mut Compiler, value: &Value)
 {
-    let lexeme: &str = match literal.tok.lexeme.as_ref()
+
+    match value
     {
-        Some(x) => x,
-        None =>
+        Value::Str(_) =>
         {
-            literal.tok.report("internal", "リテラルなのにトークンが空");
-            panic!();
+            let index = compiler.add_const(value.clone());
+            compiler.emit_op(IRCode::Const(index as u32));
         }
-    };
-
-    match literal.kind
-    {
-        LiteralKind::Bool =>
+        Value::Boolean(given_b) =>
         {
-            match lexeme
-            {
-                "true" => compiler.emit_op(IRCode::True),
-                "false" => compiler.emit_op(IRCode::False),
-                _ => unreachable!(),
-            };
+            if *given_b {
+                compiler.emit_op(IRCode::True);
+            } else {
+                compiler.emit_op(IRCode::False);
+            }
         }
-
-        LiteralKind::Int =>
+        Value::Int(intv) =>
         {
-            let value: i64 = match lexeme.parse()
-            {
-                Ok(n) => n,
-                Err(_) =>
-                {
-                    literal.tok.report(
-                        "Broken Integer Literal",
-                        "整数を期待しましたがパースに失敗しました。",
-                    );
-
-                    return;
-                }
-            };
-
-            let index = compiler.add_const(Value::Int(value));
-            compiler.emit_op(IRCode::Const64(index as u32));
+            let index = compiler.add_const(Value::Int(*intv));
+            compiler.emit_op(IRCode::Const(index as u32));
+        }
+        Value::Float(f) =>
+        {
+            let index = compiler.add_const(Value::Float(*f));
+            compiler.emit_op(IRCode::Const(index as u32));
         }
 
-        LiteralKind::Float =>
-        {
-            let value: f64 = match lexeme.parse()
-            {
-                Ok(n) => n,
-                Err(_) =>
-                {
-                    literal.tok.report(
-                        "Broken Float Literal",
-                        "実数を期待しましたがパースに失敗しました。",
-                    );
-                    return;
-                }
-            };
-
-            let index = compiler.add_const(Value::Float(value));
-            compiler.emit_op(IRCode::Const64(index as u32));
-        }
-
-        LiteralKind::Str =>
-        {
-            let index = compiler.add_const(Value::Str(lexeme.to_string()));
-            compiler.emit_op(IRCode::ConstDyn(index as u32));
-        }
-
-        LiteralKind::Null =>
-        {
-            compiler.emit_op(IRCode::Null);
-        }
+        Value::Null =>
+            compiler.emit_op(IRCode::Null),
     }
 }

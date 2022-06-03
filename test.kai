@@ -16,6 +16,8 @@ an: int?;
 bn: float?;
 cn: string?;
 dn: bool?;
+empty: int?;
+
 
 an = 10;
 print an == 10;
@@ -25,6 +27,8 @@ cn = "Sam porter bridges";
 print cn == "Sam porter bridges";
 dn = true;
 print dn;
+
+print empty == null;
 
 // // Inferred
 print "Inferred Declaration Testing.";
@@ -118,14 +122,14 @@ print "Local Variable testing.";
 
 print "struct testing.";
 
+/*
 loop_one: struct {
     a: int;
-} 
+}
 
-struct_variable: loop_one;
+struct_variable: loop_one?;
 struct_variable.a = 10;
 
-/*
 struct_variable.b = 21;
 struct_variable.c = 25;
 

@@ -24,6 +24,7 @@ impl<'m> Parser<'m>
             TokenType::Return => self.parse_return_stmt(),
             TokenType::Break => self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
+
             // TokenType::Defer => self.parse_defer_stmt(),
             _ =>
             {

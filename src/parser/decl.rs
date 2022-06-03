@@ -8,6 +8,7 @@ use std::cell::Cell;
 use crate::{
     ast,
     tokenizer::token::{TokenType},
+    types::{ Type, Value },
     trace::prelude::*,
 };
 
@@ -300,17 +301,18 @@ impl<'m> Parser<'m>
         let mut statement: ast::StmtInit = Default::default();
         statement.module = Some(self.module);
 
+        let variable_expr = ast::ExprInit {
+            kind: ast::ExprKind::Variable,
+            module: Some(self.module),
+            span: Some(start_span),
+            variable_name: Some(decl_info.name.clone()),
+            ..Default::default()
+        }.init();
+
         if self.is(TokenType::Equal)
         {
             let assign_span = self.advance().span;
             let rvalue_expr = self.expression()?;
-            let variable_expr = ast::ExprInit {
-                kind: ast::ExprKind::Variable,
-                module: Some(self.module),
-                span: Some(start_span),
-                variable_name: Some(decl_info.name.clone()),
-                ..Default::default()
-            }.init();
 
             let assign_expr = ast::ExprInit {
                 kind: ast::ExprKind::Assign,
@@ -332,9 +334,32 @@ impl<'m> Parser<'m>
         }
         else if self.is(TokenType::SemiColon)
         {
+            // If it does not have any assignment, it must store null.
             let end_span = self.advance().span;
             let span = CodeSpan::combine(&start_span, &end_span);
+
+            let null_expr = ast::ExprInit {
+                kind: ast::ExprKind::Literal,
+                module: Some(self.module),
+                span: Some(end_span),
+                literal: Some(Value::Null),
+                end_type: Some(Type::null()),
+                ..Default::default()
+            }.init();
+
+            let assign_expr = ast::ExprInit {
+                kind: ast::ExprKind::Assign,
+                module: Some(self.module),
+                span: Some(span),
+                lhs: Some(Box::new(variable_expr)),
+                rhs: Some(Box::new(null_expr)),
+                end_type: None,
+                oper: Some(ast::Operator::Asgn),
+                ..Default::default()
+            }.init();
+
             statement.span = Some(span);
+            decl_info.expr = Some(self.ast.add_expr(assign_expr));
             statement.data = Some(ast::Stmt::Declaration(decl_info));
             Ok(self.ast.add_stmt(statement.init()))
         }

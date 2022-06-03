@@ -1,6 +1,5 @@
 /*
 TODO:
-    (468) Literal型をstructからenum variantsにし、自分で変換済みのデータを取り扱うように
     (17) ASTをマージできるようにしてディレクティブに対応できるように
  * */
 
@@ -8,7 +7,7 @@ use super::{
     ast::*,
     tokenizer::token::{Token, TokenType},
     trace::prelude::*,
-    types::Type,
+    types::{ Type, Value },
 };
 
 mod decl;
@@ -516,35 +515,38 @@ impl<'m> Parser<'m>
         {
             Digit =>
             {
-                let inside_lexeme = inside.lexeme.clone().unwrap();
-                let contain_dot = inside_lexeme.contains('.');
-                let lit = if contain_dot
-                {
-                    Literal::new_float(&inside)
+                let inside_lexeme = inside.lexeme.as_ref().unwrap();
+                let contain_dot   = inside_lexeme.contains('.');
+                let lit = if contain_dot {
+                    if let Ok(n) = inside_lexeme.parse() {
+                        Value::Float(n)
+                    } else {
+                        inside.report("Broken Float Literal",
+                                      "実数を期待しましたがパースに失敗しました。");
+                        return Err(());
+                    }
                 }
                 else
                 {
-                    Literal::new_int(&inside)
+                    if let Ok(n) = inside_lexeme.parse() {
+                        Value::Int(n)
+                    } else {
+                        inside.report("Broken Integer Literal",
+                                      "整数を期待しましたがパースに失敗しました。");
+                        return Err(());
+                    }
                 };
 
+                expr.end_type = Some(lit.to_type());
                 expr.literal = Some(lit);
-                expr.end_type = Some(
-                    if contain_dot
-                    {
-                        Type::float()
-                    }
-                    else
-                    {
-                        Type::int()
-                    },
-                );
 
                 Ok(expr.init())
                 // Err(Error::new_while_parsing("Digit does not match either int or float", self.current_line))
             }
             Str =>
             {
-                let lit = Literal::new_str(&inside);
+                let inside_lexeme = inside.lexeme.unwrap();
+                let lit = Value::Str(inside_lexeme.clone());
                 expr.literal = Some(lit);
                 expr.end_type = Some(Type::string());
 
@@ -558,15 +560,13 @@ impl<'m> Parser<'m>
                     {
                         "true" | "false" =>
                         {
-                            let lit = Literal::new_bool(&inside);
-                            expr.literal = Some(lit);
+                            expr.literal = Some(Value::Boolean(inside_lexeme.as_str() == "true"));
                             expr.end_type = Some(Type::boolean());
                             Ok(expr.init())
                         }
                         "null" =>
                         {
-                            let lit = Literal::new_null(&inside);
-                            expr.literal = Some(lit);
+                            expr.literal = Some(Value::Null);
                             expr.end_type = Some(Type::null());
                             Ok(expr.init())
                         }

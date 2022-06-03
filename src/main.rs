@@ -185,7 +185,11 @@ fn main()
                     let mut file = File::create("dump").expect("failed to create a dump file.");
                     for (idx, i) in bc.code.iter().enumerate()
                     {
-                        writeln!(file, "{} {:?}", idx, i).expect("Hey?");
+                        match i {
+                            ir::IRCode::Const(const_idx) =>
+                                writeln!(file, "{} Const({} => {})", idx, const_idx, bc.consts.get(*const_idx as usize).unwrap()),
+                            otherwise => writeln!(file, "{} {:?}", idx, otherwise),
+                        }.expect("Hey?");
                     }
                     file.flush().expect("File Flushing Failed.");
                 }

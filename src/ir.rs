@@ -6,11 +6,7 @@
 #[derive(Debug, Clone, Copy, Hash, PartialEq)]
 pub enum IRCode
 {
-    Const8(u32), // Redundant
-    Const16(u32), // Redundant
-    Const32(u32), // Redundant
-    Const64(u32), // Redundant
-    ConstDyn(u32), // Redundant
+    Const(u32),
     Null,
 
     True,

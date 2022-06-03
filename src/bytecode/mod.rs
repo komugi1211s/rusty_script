@@ -14,19 +14,17 @@ use stmt::traverse_statement;
 #[derive(Debug)]
 pub struct CompiledCode
 {
-    pub ep: usize,
-    pub code: Vec<IRCode>,
+    pub ep:     usize,
+    pub code:   Vec<IRCode>,
     pub consts: Vec<Value>,
 }
 
-#[derive(Debug)]
 pub struct Compiler<'s>
 {
     table: &'s SymTable,
     codes: Vec<IRCode>,
     patch: Vec<Patch>,
     consts: Vec<Value>,
-    depth: u16,
     function_idx: HashMap<String, (u32, u32)>,
 }
 
@@ -38,7 +36,6 @@ impl<'s> Compiler<'s>
             table: table,
             codes: Vec::with_capacity(5000),
             patch: Vec::with_capacity(255),
-            depth: 0,
             consts: Vec::with_capacity(255),
             function_idx: HashMap::with_capacity(256),
         }
@@ -147,10 +144,7 @@ fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionD
 
 pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, ()>
 {
-    // TODO: This is not how it supposed to work.
-    // You cannot make "import" or "use" or any kind of module-type system work.
     let mut compiler = Compiler::new(&global.symtable);
-
     for func_node in ast.functions.iter()
     {
         prepare_function(&mut compiler, ast, func_node)?;

@@ -1,7 +1,6 @@
 extern crate bitflags;
 use super::{
-    types::Type,
-    tokenizer::token::Token,
+    types::{ Type, Value },
     trace::prelude::*,
 };
 
@@ -102,9 +101,9 @@ impl<'m> Statement<'m>
             let statement = ast.get_stmt(parent_id);
             match statement.data
             {
-                Stmt::While(_, _) => true,
-                Stmt::If(_, _, _) => true,
-                Stmt::For(_, _, _, _) => true,
+                Stmt::While(_, _)  => true,
+                Stmt::If(_, _, _)  => true,
+                Stmt::For(_, _, _) => true,
                 _ => false,
             }
         }
@@ -148,7 +147,7 @@ pub struct Expression<'m>
     pub array_expr: Vec<Expression<'m>>,
 
     pub arg_expr: Vec<Expression<'m>>,
-    pub literal: Option<Literal<'m>>,
+    pub literal: Option<Value>,
 
     // gets set by Semantic Analysis.
     pub local_idx: Option<u32>,
@@ -171,7 +170,7 @@ impl Expression<'_>
             ExprKind::ArrayRef
             | ExprKind::Variable 
             | ExprKind::FieldAccess => true,
-            
+
             ExprKind::Unary => false, // TODO: FIXME: Can be true depends on an operator.
 
             ExprKind::Empty
@@ -227,7 +226,7 @@ pub struct ExprInit<'m>
 
     pub array_expr: Vec<Expression<'m>>,
     pub arg_expr: Vec<Expression<'m>>,
-    pub literal: Option<Literal<'m>>,
+    pub literal: Option<Value>,
     pub end_type: Option<Type>,
 }
 
@@ -247,7 +246,7 @@ impl<'m> ExprInit<'m>
             local_idx: None,
             array_expr: self.array_expr,
             arg_expr: self.arg_expr,
-            literal: self.literal,
+            literal:  self.literal,
             end_type: self.end_type,
         }
     }
@@ -316,7 +315,7 @@ pub enum Stmt
     Declaration(DeclarationData),
     If(ExprId, StmtId, Option<StmtId>),
     While(ExprId, StmtId),
-    For(StmtId, ExprId, ExprId, StmtId),
+    For(ExprId, ExprId, StmtId),
     Block(Vec<StmtId>),
     Function(usize),
     Break,
@@ -389,61 +388,6 @@ impl std::fmt::Display for Operator
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Literal<'m>
-{
-    pub tok: Token<'m>,
-    pub kind: LiteralKind,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum LiteralKind
-{
-    Bool,
-    Str,
-    Int,
-    Float,
-    Null,
-}
-
-impl<'m> Literal<'m>
-{
-    pub fn new(kind: LiteralKind, tok: &Token<'m>) -> Self
-    {
-        Self {
-            kind,
-            tok: tok.clone(),
-        }
-    }
-
-    pub fn new_null(tok: &Token<'m>) -> Self
-    {
-        Self::new(LiteralKind::Null, tok)
-    }
-
-    pub fn new_bool(tok: &Token<'m>) -> Self
-    {
-        Self::new(LiteralKind::Bool, tok)
-    }
-
-    pub fn new_str(tok: &Token<'m>) -> Self
-    {
-        Self::new(LiteralKind::Str, tok)
-    }
-
-    pub fn new_int(tok: &Token<'m>) -> Self
-    {
-        Self::new(LiteralKind::Int, tok)
-    }
-
-    pub fn new_float(tok: &Token<'m>) -> Self
-    {
-        Self::new(LiteralKind::Float, tok)
-    }
-
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclarationData
 {
@@ -498,10 +442,10 @@ impl ParsedType
     {
         match cand
         {
-            "int" => Some(Self::Int),
+            "int"    => Some(Self::Int),
             "string" => Some(Self::Str),
-            "float" => Some(Self::Float),
-            "bool" => Some(Self::Boolean),
+            "float"  => Some(Self::Float),
+            "bool"   => Some(Self::Boolean),
             _ => None,
         }
     }

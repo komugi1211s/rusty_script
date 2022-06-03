@@ -46,7 +46,6 @@ pub fn traverse_statement(
             if let Some(else_id) = else_block
             {
                 let jump_position = compiler.reserve_one();
-
                 let start_of_else = compiler.codes.len();
                 traverse_statement(compiler, ast, *else_id)?;
                 let end_of_else = compiler.codes.len();

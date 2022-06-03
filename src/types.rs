@@ -246,7 +246,6 @@ pub enum Value
     Float(f64),
     Str(String),
     Boolean(bool),
-    Pointer(usize),
     //  Struct(String, Vec<(Type, usize, Value)>),
     Null,
 }
@@ -314,14 +313,6 @@ impl From<bool> for Value
     }
 }
 
-impl From<usize> for Value
-{
-    fn from(u: usize) -> Self
-    {
-        Value::Pointer(u)
-    }
-}
-
 impl Value
 {
     pub fn to_type(&self) -> Type
@@ -334,7 +325,6 @@ impl Value
             Value::Float(_) => Type::float(),
             Value::Str(_) => Type::string(),
             Value::Boolean(_) => Type::boolean(),
-            _ => Type::default(),
         }
     }
 
@@ -369,7 +359,6 @@ impl fmt::Display for Value
             Value::Str(ref s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Null => write!(f, "<null>"),
-            Value::Pointer(x) => write!(f, "ptr -> {}", x),
         }
     }
 }
@@ -497,20 +486,11 @@ impl ops::Rem<Value> for Value
     type Output = Value;
     fn rem(self, right: Value) -> Value
     {
-        match self
+        use Value::*;
+        match (self, right)
         {
-            Value::Int(il) => match right
-            {
-                Value::Int(ir) => Value::Float(il as f64 % ir as f64),
-                Value::Float(fr) => Value::Float(il as f64 % fr),
-                _ => panic!("Rem operation is not covered for Str / Bool"),
-            },
-            Value::Float(fl) => match right
-            {
-                Value::Int(ir) => Value::Float(fl % ir as f64),
-                Value::Float(fr) => Value::Float(fl % fr),
-                _ => panic!("Rem operation is not covered for Str / Bool"),
-            },
+            (Int(a), Int(b))     => Int(a % b),
+            (Float(a), Float(b)) => Float(a % b),
             _ => panic!("Rem operation is not covered for Str / Bool"),
         }
     }
@@ -529,7 +509,6 @@ impl ops::Not for Value
             Value::Float(f) => Value::Boolean(f == 0.0),
             Value::Str(s) => Value::Boolean(s.is_empty()),
             Value::Null => Value::Boolean(true),
-            _ => panic!("Unimplemented Not operation"),
         }
     }
 }
@@ -549,7 +528,6 @@ impl ops::Not for &Value
             Value::Float(f) => Value::Boolean(*f == 0.0),
             Value::Str(s) => Value::Boolean(s.is_empty()),
             Value::Null => Value::Boolean(true),
-            _ => panic!("Unimplemented Not operation"),
         }
     }
 }
@@ -578,13 +556,13 @@ impl PartialOrd for Value
         {
             Value::Int(i_left) => match other
             {
-                Value::Int(i_right) => i_left.partial_cmp(i_right),
+                Value::Int(i_right)   => i_left.partial_cmp(i_right),
                 Value::Float(f_right) => (*i_left as f64).partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),
             },
             Value::Float(f_left) => match other
             {
-                Value::Int(i_right) => f_left.partial_cmp(&(*i_right as f64)),
+                Value::Int(i_right)   => f_left.partial_cmp(&(*i_right as f64)),
                 Value::Float(f_right) => f_left.partial_cmp(f_right),
                 _ => unreachable!("Comparison with unsupported type"),
             },

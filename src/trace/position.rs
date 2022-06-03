@@ -1,8 +1,6 @@
 use std::cmp;
 use std::fmt;
 
-pub const NATIVE_SPAN: CodeSpan = CodeSpan { row_start: 0, row_len: 0, col_start: 0, col_len: 0 };
-
 // ソースコード内で特定の範囲を指定するStruct
 // 誰も4,294,967,295行以上のコードなんて書くわけがないので
 // どっちもu32で固定

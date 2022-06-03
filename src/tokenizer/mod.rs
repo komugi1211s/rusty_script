@@ -150,7 +150,6 @@ impl<'m> Tokenizer<'m>
 
             // 数字全般を単発で判定
             '0'..='9' => self.add_digit(module),
-
             'A'..='z' => self.add_possible_iden(module),
 
             // Default

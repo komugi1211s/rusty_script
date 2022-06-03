@@ -10,8 +10,8 @@ pub struct VirtualMachine
 {
     // Instruction Pointer :: current instruction.
     inst_idx: usize,
-    
-    // Stack Pointer :: last stack pointer. 
+
+    // Stack Pointer :: last stack pointer.
     stack_idx: usize,
 
     // Call stack :: Call stack.
@@ -20,7 +20,7 @@ pub struct VirtualMachine
     globals: HashMap<u32, Value>,
 }
 
-const CALLSTACK_DEPTH: usize = 1024;
+const CALLSTACK_DEPTH: usize = 100000;
 
 impl VirtualMachine
 {
@@ -29,7 +29,7 @@ impl VirtualMachine
         Self {
             inst_idx:  0,
             stack_idx: 0,
-            callst:  Vec::with_capacity(CALLSTACK_DEPTH),
+            callst:  Vec::with_capacity(512),
             stack:   Vec::with_capacity(512),
             globals: HashMap::with_capacity(512),
         }
@@ -46,28 +46,16 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
         match instruction
         {
             // TODO: redundant const difference
-            IRCode::Const8(idx) =>
+            IRCode::Const(idx) =>
             {
                 let value = bin.consts[*idx as usize].clone();
                 vm.stack.push(value);
             }
 
-            IRCode::Const64(idx) =>
-            {
-                let value = bin.consts[*idx as usize].clone();
-                vm.stack.push(value);
-            }
-
-            IRCode::ConstDyn(idx) =>
-            {
-                let value = bin.consts[*idx as usize].clone();
-                vm.stack.push(value);
-            }
-
-            IRCode::Add | IRCode::Sub | IRCode::Mul | IRCode::Div =>
+            IRCode::Add | IRCode::Sub | IRCode::Mul | IRCode::Div | IRCode::Mod =>
             {
                 let rhs = expect_opt!(vm.stack.pop(), "ADD/SUB/MUL/DIV RHS");
-                let lhs = expect_opt!(vm.stack.pop(), "ADD/SUB/MUL/DIV LHS"); 
+                let lhs = expect_opt!(vm.stack.pop(), "ADD/SUB/MUL/DIV LHS");
 
                 let result = match instruction
                 {
@@ -75,17 +63,18 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                     IRCode::Sub => lhs - rhs,
                     IRCode::Mul => lhs * rhs,
                     IRCode::Div => lhs / rhs,
+                    IRCode::Mod => lhs % rhs,
                     _ => unreachable!(),
                 };
                 vm.stack.push(result);
             }
 
-            IRCode::EqEq | IRCode::NotEq 
-            | IRCode::LessEq | IRCode::MoreEq 
+            IRCode::EqEq | IRCode::NotEq
+            | IRCode::LessEq | IRCode::MoreEq
             | IRCode::More | IRCode::Less =>
             {
                 let rhs = expect_opt!(vm.stack.pop(), "EQEQ, NOTEQ, LESSEQ... RHS");
-                let lhs = expect_opt!(vm.stack.pop(), "EQEQ, NOTEQ, LESSEQ... LHS"); 
+                let lhs = expect_opt!(vm.stack.pop(), "EQEQ, NOTEQ, LESSEQ... LHS");
 
                 let result = match instruction
                 {
@@ -99,21 +88,32 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
                 }.into();
                 vm.stack.push(result);
             }
-
+            IRCode::And =>
+            {
+                let rhs = expect_opt!(vm.stack.pop(), "AND RHS");
+                let lhs = expect_opt!(vm.stack.pop(), "AND LHS");
+                let result = (lhs.is_truthy() && rhs.is_truthy()).into();
+                vm.stack.push(result);
+            }
+            IRCode::Or =>
+            {
+                let lhs = expect_opt!(vm.stack.pop(), "OR LHS");
+                let rhs = expect_opt!(vm.stack.pop(), "OR RHS");
+                let result = (lhs.is_truthy() || rhs.is_truthy()).into();
+                vm.stack.push(result);
+            }
             IRCode::Not =>
             {
                 let lhs = expect_opt!(vm.stack.pop(), "NOT LHS");
                 let result = !lhs.is_truthy();
                 vm.stack.push(result.into());
             }
-
             IRCode::Neg =>
             {
                 let lhs = expect_opt!(vm.stack.pop(), "NEG LHS");
                 let result = -lhs;
                 vm.stack.push(result);
             }
-
             IRCode::Jump(to) =>
             {
                 vm.inst_idx = *to as usize;
@@ -194,10 +194,10 @@ pub fn start_vm(vm: &mut VirtualMachine, _module: &SourceFile, bin: &CompiledCod
             {
                 vm.stack.push(Value::Boolean(true));
             }
-            IRCode::False => 
+            IRCode::False =>
             {
                 vm.stack.push(Value::Boolean(false));
-            }  
+            }
             IRCode::Null =>
             {
                 vm.stack.push(Value::Null);

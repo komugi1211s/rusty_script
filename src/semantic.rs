@@ -26,7 +26,7 @@ pub type SymTable = HashMap<String, Symbol>;
  * */
 
 #[derive(Debug, Clone, Copy)]
-pub enum SymbolKind 
+pub enum SymbolKind
 {
     TypeSpec,
     Variable,
@@ -46,14 +46,14 @@ pub struct Symbol
 
     /// For Struct :: name of the certain fields.
     pub fields: Vec<Symbol>,
-    
+
     /// these are used to give bytecode generator an insight of stack operation,
     /// position of variables and such.
     pub idx:   usize,
     pub depth: u32,
 }
 
-impl Symbol 
+impl Symbol
 {
     fn new(kind: SymbolKind, name: String, span: CodeSpan) -> Self
     {
@@ -74,24 +74,6 @@ impl Symbol
     }
 }
 
-
-/* I had to settle for this... */
-fn reverse_lookup_from_types_to_symbol<'a>(table: &'a SymTable, sema: &Sema, required_type: &Type) -> Option<&'a Symbol>
-{
-    for (ref key, ref symbol) in table.iter()
-    {
-        if let Some(ref resolved_type) = symbol.types {
-            // NOTE(fuzzy):
-            // right here I could've used type_match() function but
-            // that could also bring some TypeVar stuff.
-            if resolved_type == required_type {
-                return Some(symbol);
-            }
-        }
-    }
-
-    return None;
-}
 
 #[derive(Debug, Clone)]
 struct Sema
@@ -258,13 +240,13 @@ fn resolve_toplevel(table: &mut SymTable, sema: &mut Sema, root: &[StmtId], ast:
                 symbol.idx = global_idx;
 
                 if decl.is_type_declaration() {
-                    if let Err((title, message)) = register_type_into_table(table, sema, decl, symbol) 
+                    if let Err((title, message)) = register_type_into_table(table, sema, decl, symbol)
                     {
                         root.report(title, message);
                         return Err(());
                     }
                 } else {
-                    if let Err((title, message)) = register_variable_into_table(table, sema, decl, symbol) 
+                    if let Err((title, message)) = register_variable_into_table(table, sema, decl, symbol)
                     {
                         root.report(title, message);
                         return Err(());
@@ -878,7 +860,7 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
             type_match(&*lhs_inner_type, &*rhs_inner_type)
         }
         (Optional, _) | (_, Optional) =>
-        { 
+        {
             let (optional_type, base_type) = if lhs.kind == Optional { (lhs, rhs) } else { (rhs, lhs) };
 
             let opt_contained_type = expect_opt!(optional_type.contained_type.as_ref(),
@@ -923,9 +905,17 @@ fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
 
-            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
+            let operator = expr.oper.unwrap();
+            if type_match(lhs_type, rhs_type) && check_operator_compatibility(&operator, lhs_type)
             {
-                expr.end_type = lhs.end_type.clone();
+                use Operator::*;
+                let end_type = match operator {
+                    EqEq | NotEq | LessEq | MoreEq | Less | More => Some(Type::boolean()),
+                    Div => Some(Type::float()),
+                    _ => Some(lhs_type.clone()),
+                };
+
+                expr.end_type = end_type;
                 Ok(())
             }
             else
@@ -994,10 +984,20 @@ fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>
 
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
-            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
+            if type_match(lhs_type, rhs_type)
             {
-                expr.end_type = Some(Type::boolean());
-                Ok(())
+                if check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
+                {
+                    expr.end_type = Some(Type::boolean());
+                    Ok(())
+                }
+                else
+                {
+                    let message = format!("左辺値の型 ({}) と右辺値の型 ({}) はオペレータ {} に対応していません。",
+                                          lhs_type, rhs_type, expr.oper.as_ref().unwrap());
+                    expr.report("Operator Incompatible", &message);
+                    Err(())
+                }
             }
             else
             {
@@ -1037,11 +1037,11 @@ fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>
 
         FieldAccess =>
         {
-            let host  = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
-            let field = expect_opt!(expr.rhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+            let _host  = expect_opt!(expr.lhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
+            let _field = expect_opt!(expr.rhs.as_mut(), "ArrayRef演算に必要なデータが足りません。");
 
-            if host.end_type.is_none()  { resolve_expr(table, sema, host.as_mut())?; }
-            let host_type = expect_opt!(host.end_type.as_ref(), "SolveTypeが正常に構造体の型を解決していません。");
+            if _host.end_type.is_none()  { resolve_expr(table, sema, _host.as_mut())?; }
+            let _host_type = expect_opt!(_host.end_type.as_ref(), "SolveTypeが正常に構造体の型を解決していません。");
 
             /*
              * NOTE(fuzzy):

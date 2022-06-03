@@ -1,0 +1,19 @@
+
+some_stuff: string?; // オプショナル型（もどき）は自動でnullが入る
+
+other_stuff := "hello, ";   // 型推論で勝手にstringが入る
+some_stuff   = "how are you?";
+
+print (other_stuff + some_stuff); // hello, how are you?
+
+// this_breaks_interpreter: string = 10; // 型エラーで怒られる
+this_breaks_interpreter: int = 10; // 自動でnullが入れられないので、型エラーで怒られる
+
+
+main: fn(h: string?) {
+    print "hello, " + h;
+}
+
+
+main(null);
+main("aaa");
