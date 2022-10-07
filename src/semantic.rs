@@ -859,14 +859,16 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
             let rhs_inner_type = expect_opt!(rhs.contained_type.as_ref(), "Array型が正常に解決されませんでした。");
             type_match(&*lhs_inner_type, &*rhs_inner_type)
         }
-        (Optional, _) | (_, Optional) =>
+        (Optional, Optional) =>
         {
-            let (optional_type, base_type) = if lhs.kind == Optional { (lhs, rhs) } else { (rhs, lhs) };
+            let lhs_ref = expect_opt!(lhs.contained_type.as_ref(),
+                                      "Optional型が正常に解決されませんでした。");
+            let rhs_ref = expect_opt!(rhs.contained_type.as_ref(),
+                                      "Optional型が正常に解決されませんでした。");
 
-            let opt_contained_type = expect_opt!(optional_type.contained_type.as_ref(),
-                                                "Optional型が正常に解決されませんでした。");
-
-            base_type.kind == TypeKind::Null || type_match(&*opt_contained_type, &*base_type)
+            lhs.kind == TypeKind::Null
+            || rhs.kind == TypeKind::Null
+            || type_match(&*lhs_ref, &*rhs_ref)
         }
         (x, y) => x == y
     }
@@ -912,7 +914,7 @@ fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>
                 let end_type = match operator {
                     EqEq | NotEq | LessEq | MoreEq | Less | More => Some(Type::boolean()),
                     Div => Some(Type::float()),
-                    _ => Some(lhs_type.clone()),
+                    _ => Some(lhs_type.clone())
                 };
 
                 expr.end_type = end_type;
@@ -1229,7 +1231,7 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
     {
         Add =>
         {
-            ty.kind == TypeKind::Int
+               ty.kind == TypeKind::Int
             || ty.kind == TypeKind::Float
             || ty.kind == TypeKind::Str
             // || ty.kind == TypeKind::Array
@@ -1243,7 +1245,6 @@ fn check_operator_compatibility(oper: &Operator, ty: &Type) -> bool
         }
 
         Wrap | Unwrap => ty.kind == TypeKind::Optional,
-
         EqEq | NotEq => true,
 
         // Unary

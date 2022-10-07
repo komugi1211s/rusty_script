@@ -1,0 +1,12 @@
+
+
+main : fn() string {
+    some := "other" + "thing";
+    print "Some function here";
+
+    return some;
+}
+
+a := main();
+
+print a;
