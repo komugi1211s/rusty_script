@@ -20,9 +20,9 @@ impl<'m> Parser<'m>
 
             // Semicolon Expected, I have to handle it here
             // Go through, no early return
-            TokenType::Print => self.parse_print_stmt(),
-            TokenType::Return => self.parse_return_stmt(),
-            TokenType::Break => self.parse_break_stmt(),
+            TokenType::Print =>    self.parse_print_stmt(),
+            TokenType::Return =>   self.parse_return_stmt(),
+            TokenType::Break =>    self.parse_break_stmt(),
             TokenType::Continue => self.parse_continue_stmt(),
 
             // TokenType::Defer => self.parse_defer_stmt(),

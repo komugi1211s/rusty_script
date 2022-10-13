@@ -394,7 +394,6 @@ pub struct DeclarationData
     pub kind: DeclKind,
     pub name:    String,
     pub dectype: ParsedType,
-    pub prefix:  DeclPrefix,
 
     pub expr: Option<ExprId>,
     pub span: CodeSpan,
@@ -404,7 +403,7 @@ impl DeclarationData
 {
     pub fn is_inferred(&self) -> bool
     {
-        self.prefix.is_empty() && self.dectype == ParsedType::Unknown
+        self.dectype == ParsedType::Unknown
     }
 
     pub fn is_annotated(&self) -> bool
@@ -448,13 +447,6 @@ impl ParsedType
             "bool"   => Some(Self::Boolean),
             _ => None,
         }
-    }
-}
-
-bitflags! {
-    pub struct DeclPrefix: u16 {
-        const CONST  = 1 << 1;
-        const PUBLIC = 1 << 2;
     }
 }
 

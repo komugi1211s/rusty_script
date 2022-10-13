@@ -15,13 +15,13 @@ use crate::{
 
 impl<'m> Parser<'m>
 {
-    fn parse_type(&mut self, prefix: &ast::DeclPrefix) -> Result<ast::ParsedType, ()>
+    fn parse_type(&mut self) -> Result<ast::ParsedType, ()>
     {
         // Separate Array Consumption to other function
         if self.is(TokenType::OpenSquareBracket)
         {
             self.advance();
-            let inner_type = self.parse_type(prefix)?;
+            let inner_type = self.parse_type()?;
             if self.is(TokenType::SemiColon)
             {
                 self.advance();
@@ -51,7 +51,6 @@ impl<'m> Parser<'m>
             }
         }
 
-        // TODO - @Broken: are you sure that there's no more prefix??
         let mut core_type = if self.is(TokenType::Iden)
         {
             let token = self.consume(TokenType::Iden)?;
@@ -93,7 +92,7 @@ impl<'m> Parser<'m>
         {
             let field_name = self.consume(TokenType::Iden)?.lexeme.clone().unwrap();
             self.consume(TokenType::Colon)?;
-            let parsed_type = self.parse_type(&ast::DeclPrefix::empty())?;
+            let parsed_type = self.parse_type()?;
             self.consume(TokenType::SemiColon)?;
 
             let field = ast::Field(field_name, parsed_type);
@@ -108,7 +107,6 @@ impl<'m> Parser<'m>
             kind: ast::DeclKind::Struct,
             name,
             dectype: ast::ParsedType::Struct(vector),
-            prefix:  ast::DeclPrefix::empty(),
             expr: None,
             span: combined_span,
         };
@@ -123,30 +121,6 @@ impl<'m> Parser<'m>
         Ok(self.ast.add_stmt(stmt))
     }
 
-    // TODO: what EVEN is prefix?
-    fn parse_type_prefix(&mut self) -> ast::DeclPrefix
-    {
-        let mut prefix = ast::DeclPrefix::empty();
-        loop
-        {
-            match self.get_current().tokentype
-            {
-                TokenType::Constant =>
-                {
-                    self.advance();
-                    prefix.insert(ast::DeclPrefix::CONST);
-                }
-                TokenType::Public =>
-                {
-                    self.advance();
-                    prefix.insert(ast::DeclPrefix::PUBLIC);
-                }
-                _ => break,
-            }
-        }
-        prefix
-    }
-
     pub(super) fn parse_function_decl(
         &mut self,
         name: String,
@@ -155,8 +129,7 @@ impl<'m> Parser<'m>
     {
         self.consume(TokenType::Fn)?;
         let args = self.parse_arguments()?;
-        let prefix = self.parse_type_prefix();
-        let dectype = self.parse_type(&prefix)?;
+        let dectype = self.parse_type()?;
 
         let mut body = Vec::new();
         self.parse_function_body(&mut body)?;
@@ -175,7 +148,6 @@ impl<'m> Parser<'m>
                 kind: ast::DeclKind::Variable,
                 name,
                 dectype,
-                prefix,
                 expr: None,
                 span: decl_span,
             },
@@ -230,15 +202,12 @@ impl<'m> Parser<'m>
             };
 
             self.consume(TokenType::Colon)?;
-
-            let prefix = self.parse_type_prefix();
-            let dectype = self.parse_type(&prefix)?;
+            let dectype = self.parse_type()?;
 
             let decl_info = ast::DeclarationData {
                 kind: ast::DeclKind::Variable,
                 name,
                 dectype,
-                prefix,
                 expr: None,
                 span
             };
@@ -287,14 +256,12 @@ impl<'m> Parser<'m>
         if self.is(TokenType::Fn)     { return self.parse_function_decl(name, start_span); }
         if self.is(TokenType::Struct) { return self.parse_struct(name, start_span);        }
 
-        let prefix = self.parse_type_prefix();
-        let dectype = self.parse_type(&prefix)?;
+        let dectype = self.parse_type()?;
 
         let mut decl_info = ast::DeclarationData {
             kind: ast::DeclKind::Variable,
             name,
             dectype,
-            prefix,
             expr: None,
             span: start_span.clone(),
         };

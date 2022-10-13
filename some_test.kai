@@ -17,7 +17,7 @@ main: fn(h: string?) {
 }
 
 main2: fn(h: string?) {
-    print h + ", hello";
+    print *h + ", hello";
 }
 
 main(null);

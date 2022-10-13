@@ -68,7 +68,7 @@ pub fn spit_line(file: &SourceFile, lines: &CodeSpan)
 
 pub fn report_compiler_bug(message: &str, file: &str, line: u32, problematic_string: &str)
 {
-        println!("{:-<50}", "\x1b[31m[Isekai]\x1b[0m :: コンパイラーバグ ");
+        println!("{:-<50}", "\x1b[31m[Kai]\x1b[0m :: コンパイラーバグ ");
         println!("{}\n", message);
 
         println!("このエラーはユーザ側で解決の出来ないバグです。");
@@ -79,12 +79,12 @@ pub fn report(title: &str, message: &str)
 {
     if title == "internal"
     {
-        println!("{:-<50}", "\x1b[31m[Isekai]\x1b[0m :: 内部エラー ");
+        println!("{:-<50}", "\x1b[31m[Kai]\x1b[0m :: 内部エラー ");
         println!("{}\n", message);
         return;
     }
 
-    println!("{:-<50}", format!("\x1b[31m[Isekai]\x1b[0m :: {} ", title));
+    println!("{:-<50}", format!("\x1b[31m[Kai]\x1b[0m :: {} ", title));
     println!("{}\n", message);
     ERROR_REPORTED.store(true, std::sync::atomic::Ordering::Relaxed);
 }

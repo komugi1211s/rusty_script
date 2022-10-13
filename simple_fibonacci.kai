@@ -1,6 +1,7 @@
 
 simple_fibonacci: fn(number: int) int {
     if number == 0 or number == 1 return number;
+
     return simple_fibonacci(number - 1) + simple_fibonacci(number - 2);
 }
 

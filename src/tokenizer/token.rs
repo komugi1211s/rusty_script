@@ -9,14 +9,12 @@ pub enum TokenType
     If,       // if expr {
     Else,     // else {
     While,    // while expr {
-    For,      // for int: i in 0..10 {
     Break,    // break;
     Continue, // continue;
 
-    Print,    // print "message"
+    Print,    // print "message"       // TODO Remove
     Return,   // return "";
-    Constant, // const int;
-    Public,   // public int;
+    Use,      // use element = "something";
 
     Struct,   // new_type: struct {
     Fn,   // new_type: fn(...
@@ -72,14 +70,12 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
         "if" => Some(If),
         "else" => Some(Else),
         "while" => Some(While),
-        "for" => Some(For),
         "print" => Some(Print),
         "break" => Some(Break),
         "continue" => Some(Continue),
         "return" => Some(Return),
-        "const" => Some(Constant),
-        "pub" => Some(Public),
         "fn"  => Some(Fn),
+        "use" => Some(Use),
         "struct" => Some(Struct),
 
         "and" => Some(And),
