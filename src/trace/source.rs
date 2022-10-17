@@ -1,9 +1,13 @@
 use std::fs;
 use std::io::{BufRead, BufReader, self};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FileId(pub usize);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceFile
 {
+    pub id: FileId,
     pub filename: String,
     pub code: String,
     pub line: usize,
@@ -29,9 +33,10 @@ impl SourceFile
         }
 
         Ok(SourceFile {
+            id: FileId(0), // must assign meaningful info by global
             filename: name.to_string(),
             code: string,
-            line: line,
+            line,
         })
     }
 }

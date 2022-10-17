@@ -1,7 +1,7 @@
 //#![feature(test)]
 //extern crate test;
 
-#[macro_use] extern crate bitflags;
+extern crate bitflags;
 #[macro_use] extern crate lazy_static;
 // extern crate llvm_sys;
 
@@ -38,8 +38,8 @@ mod global {
     pub struct Global
     {
         pub module_paths: Vec<PathBuf>,
-        pub modules: Vec<SourceFile>,
-        pub symtable: SymTable,
+        pub modules:      Vec<SourceFile>,
+        pub symtable:     SymTable,
     }
 
     impl Global
@@ -59,7 +59,11 @@ mod global {
             }
         }
 
-        pub fn open_and_add_module(&mut self, file_name: &str) -> Result<usize, ()>
+        pub fn get_module(&self, file: FileId) -> Option<&SourceFile> {
+            return self.modules.get(file.0)
+        }
+
+        pub fn open_and_add_module(&mut self, file_name: &str) -> Result<FileId, ()>
         {
             let filename_path = Path::new(file_name).with_extension("kai");
 
@@ -69,11 +73,12 @@ mod global {
                 if target_file_path.exists()
                 {
                     let filepath_str = expect!(target_file_path.to_str().ok_or(()), "ファイルパスに許されない文字列が含まれています。");
-                    let file = expect!(SourceFile::open(filepath_str), "ファイルを開けませんでした。");
+                    let mut file = expect!(SourceFile::open(filepath_str), "ファイルを開けませんでした。");
 
                     let next_idx = self.modules.len();
+                    file.id = FileId(next_idx);
                     self.modules.push(file);
-                    return Ok(next_idx);
+                    return Ok(FileId(next_idx));
                 }
             }
 
@@ -102,9 +107,7 @@ use tokenizer::Tokenizer;
 
 use trace::prelude::*;
 use global::Global;
-use std::{
-    env,
-};
+use std::env;
 
 fn main()
 {
@@ -121,13 +124,17 @@ fn main()
     let typecheck_only = arguments.get(2) == Some(&("check".into())); // TODO - @Cleanup
 
     if let Ok(file_index) = globals.open_and_add_module(&arguments[1]) {
-        let root_file = &globals.modules[file_index];
+        let root_file = &globals.modules[file_index.0];
         let tokens   = {
             match Tokenizer::new(root_file.code.len()).scan(root_file)
             {
                 Ok(x) => x,
-                Err(()) =>
+                Err(error) =>
                 {
+                    report(&error.title, &error.message);
+                    let file = globals.get_module(error.span.file).unwrap();
+                    spit_line(file, &error.span);
+
                     println!("コンパイルに失敗しました: Tokenizer エラー");
                     return;
                 }
@@ -138,8 +145,12 @@ fn main()
             match Parser::new(root_file, &tokens).parse()
             {
                 Ok(x) => x,
-                Err(()) =>
+                Err(error) =>
                 {
+                    report(&error.title, &error.message);
+                    let file = globals.get_module(error.span.file).unwrap();
+                    spit_line(file, &error.span);
+
                     println!("コンパイルに失敗しました: Parser エラー");
                     return;
                 }
@@ -150,8 +161,12 @@ fn main()
             match semantic::analysis(&mut globals.symtable, &mut ast)
             {
                 Ok(x) => x,
-                Err(()) =>
+                Err(error) =>
                 {
+                    report(&error.title, &error.message);
+                    let file = globals.get_module(error.span.file).unwrap();
+                    spit_line(file, &error.span);
+
                     println!("コンパイルに失敗しました: Semantic Analysis エラー");
                     return;
                 }
@@ -170,8 +185,12 @@ fn main()
                     match bytecode::generate_bytecode(&globals, &ast)
                     {
                         Ok(x) => x,
-                        Err(()) =>
+                        Err(error) =>
                         {
+                            report(&error.title, &error.message);
+                            let file = globals.get_module(error.span.file).unwrap();
+                            spit_line(file, &error.span);
+        
                             println!("コンパイルに失敗しました: Bytecode Generator エラー");
                             return;
                         }

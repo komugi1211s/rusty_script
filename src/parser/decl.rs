@@ -15,7 +15,7 @@ use crate::{
 
 impl<'m> Parser<'m>
 {
-    fn parse_type(&mut self) -> Result<ast::ParsedType, ()>
+    fn parse_type(&mut self) -> KaiResult<ast::ParsedType>
     {
         // Separate Array Consumption to other function
         if self.is(TokenType::OpenSquareBracket)
@@ -32,11 +32,11 @@ impl<'m> Parser<'m>
                 let number_inside = digit.lexeme.as_ref().unwrap();
                 if number_inside.contains('.')
                 {
-                    digit.report(
-                        "Invalid array declaration",
-                        "静的配列は現在定数でのみ長さを初期化出来ます。",
-                    );
-                    return Err(());
+                    return Err(KaiError {
+                        title:   "Invalid Array Declaration".to_owned(),
+                        message: "静的配列は現在定数でのみ長さを初期化出来ます。".to_owned(),
+                        span: digit.span
+                    });
                 }
 
                 // TODO: do not use unwrap
@@ -81,7 +81,7 @@ impl<'m> Parser<'m>
         Ok(core_type)
     }
 
-    fn parse_struct(&mut self, name: String, decl_span: CodeSpan) -> Result<ast::StmtId, ()>
+    fn parse_struct(&mut self, name: String, decl_span: CodeSpan) -> KaiResult<ast::StmtId>
     {
         self.consume(TokenType::Struct)?;
         self.consume(TokenType::OpenBrace)?;
@@ -125,7 +125,7 @@ impl<'m> Parser<'m>
         &mut self,
         name: String,
         decl_span: CodeSpan
-    ) -> Result<ast::StmtId, ()>
+    ) -> KaiResult<ast::StmtId>
     {
         self.consume(TokenType::Fn)?;
         let args = self.parse_arguments()?;
@@ -167,7 +167,7 @@ impl<'m> Parser<'m>
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn parse_function_body(&mut self, vec: &mut Vec<ast::StmtId>) -> Result<(), ()>
+    fn parse_function_body(&mut self, vec: &mut Vec<ast::StmtId>) -> KaiResult<()>
     {
         self.consume(TokenType::OpenBrace)?;
         self.block_count += 1;
@@ -182,7 +182,7 @@ impl<'m> Parser<'m>
         Ok(())
     }
 
-    pub(super) fn parse_arguments(&mut self) -> Result<Vec<ast::DeclarationData>, ()>
+    pub(super) fn parse_arguments(&mut self) -> KaiResult<Vec<ast::DeclarationData>>
     {
         let _span = self.consume(TokenType::OpenParen)?.span;
         let mut args = vec![];
@@ -214,9 +214,8 @@ impl<'m> Parser<'m>
 
             if self.is(TokenType::Equal)
             {
-                self.get_current()
-                    .report("Unimplemented", "デフォルト引数は未実装です。");
-                return Err(());
+                return KaiError::new("Unimplemented", "デフォルト引数は未実装です。",
+                                     self.get_current().span);
             }
             if self.is(TokenType::Comma)
             {
@@ -230,11 +229,9 @@ impl<'m> Parser<'m>
             }
             else
             {
-                self.get_current().report(
-                    "Invalid Token",
-                    "`)` を想定しましたが、それ以外のトークンを検知しました。",
-                );
-                return Err(());
+                return KaiError::new("Invalid Token",
+                              "`)` を想定しましたが、それ以外のトークンを検知しました。",
+                              self.get_current().span);
             }
         }
 
@@ -242,7 +239,7 @@ impl<'m> Parser<'m>
         Ok(args)
     }
 
-    pub(super) fn parse_variable(&mut self) -> Result<ast::StmtId, ()>
+    pub(super) fn parse_variable(&mut self) -> KaiResult<ast::StmtId>
     {
         self.assign_count += 1;
 
@@ -332,9 +329,8 @@ impl<'m> Parser<'m>
         }
         else
         {
-            self.get_current()
-                .report("Invalid Token", "'=', ';', '(' のうち一つを期待しました.");
-            Err(())
+            KaiError::new("Invalid Token", "'=', ';', '(' のうち一つを期待しました.",
+                          self.get_current().span)
         }
     }
 }

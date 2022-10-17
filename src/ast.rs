@@ -87,10 +87,8 @@ pub struct Statement<'m>
 
 impl<'m> Statement<'m>
 {
-    pub fn report(&self, title: &str, message: &str)
-    {
-        report(title, message);
-        spit_line(self.module, &self.span);
+    pub fn report<T>(&self, title: &str, message: &str) -> KaiResult<T> {
+        KaiError::new(title, message, self.span)
     }
 
     #[allow(dead_code)]
@@ -203,12 +201,9 @@ pub struct StructData
 
 impl<'m> Expression<'m>
 {
-    pub fn report(&self, title: &str, message: &str)
-    {
-        report(title, message);
-        spit_line(self.module, &self.span);
+    pub fn report<T>(&self, title: &str, message: &str) -> KaiResult<T> {
+        KaiError::new(title, message, self.span)
     }
-
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -401,6 +396,10 @@ pub struct DeclarationData
 
 impl DeclarationData
 {
+    pub fn report<T>(&self, title: &str, message: &str) -> KaiResult<T> {
+        KaiError::new(title, message, self.span)
+    }
+
     pub fn is_inferred(&self) -> bool
     {
         self.dectype == ParsedType::Unknown

@@ -1,16 +1,16 @@
 use std::cmp;
 use std::fmt;
 
-// ソースコード内で特定の範囲を指定するStruct
-// 誰も4,294,967,295行以上のコードなんて書くわけがないので
-// どっちもu32で固定
+use super::source::FileId;
+
 #[derive(Clone, Copy, PartialEq, Debug, Hash)]
 pub struct CodeSpan
 {
+    pub file: FileId,
     pub row_start: u32,
-    pub row_len: u32,
+    pub row_len:   u32,
     pub col_start: u32,
-    pub col_len: u32,
+    pub col_len:   u32,
 }
 
 impl fmt::Display for CodeSpan
@@ -30,9 +30,10 @@ impl fmt::Display for CodeSpan
 
 impl CodeSpan
 {
-    pub fn new(row_st: usize, row_len: usize, col_st: usize, col_len: usize) -> Self
+    pub fn new(file: FileId, row_st: usize, row_len: usize, col_st: usize, col_len: usize) -> Self
     {
         CodeSpan {
+            file,
             row_start: row_st as u32,
             row_len: row_len as u32,
             col_start: col_st as u32,
@@ -48,6 +49,7 @@ impl CodeSpan
             let new_col_len = (cmp::max(a.col_start, b.col_start) - new_colstart)
                 + cmp::max(a.col_len, b.col_len);
             Self {
+                file: a.file,
                 row_start: a.row_start,
                 row_len: cmp::max(a.row_len, b.row_len),
                 col_start: new_colstart,
@@ -59,6 +61,7 @@ impl CodeSpan
             let new_rowstart = cmp::min(a.row_start, b.row_start);
             let new_rowlen = cmp::max(a.row_len, b.row_len);
             Self {
+                file: a.file,
                 row_start: new_rowstart,
                 row_len: new_rowlen,
                 col_start: if new_rowstart == a.row_start
@@ -100,6 +103,13 @@ impl CodeSpan
     }
 
 }
+
+impl From<std::ops::Range<CodeSpan>> for CodeSpan {
+    fn from(frm: std::ops::Range<CodeSpan>) -> CodeSpan {
+        CodeSpan::combine(&frm.start, &frm.end)
+    }
+}
+
 // This test is old and it's kind of pointless
 // So i'm partially removing it
 // FIXME - @DumbCode: Come back and fix this.

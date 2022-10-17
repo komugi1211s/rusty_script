@@ -1,13 +1,13 @@
 use super::Parser;
 use crate::{
     ast::{Statement, Stmt, StmtId},
-    tokenizer::token::{TokenType},
+    tokenizer::token::TokenType,
     trace::prelude::*,
 };
 
 impl<'m> Parser<'m>
 {
-    pub(super) fn statement(&mut self) -> Result<StmtId, ()>
+    pub(super) fn statement(&mut self) -> KaiResult<StmtId>
     {
         let possible_stmt = self.get_current().tokentype.clone();
         let result = match possible_stmt
@@ -47,7 +47,7 @@ impl<'m> Parser<'m>
         result
     }
 
-    fn parse_print_stmt(&mut self) -> Result<StmtId, ()>
+    fn parse_print_stmt(&mut self) -> KaiResult<StmtId>
     {
         let stmt = Statement {
             module: self.module,
@@ -63,7 +63,7 @@ impl<'m> Parser<'m>
         Ok(id)
     }
 
-    fn parse_break_stmt(&mut self) -> Result<StmtId, ()>
+    fn parse_break_stmt(&mut self) -> KaiResult<StmtId>
     {
         let stmt = Statement {
             module: self.module,
@@ -75,7 +75,7 @@ impl<'m> Parser<'m>
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn parse_continue_stmt(&mut self) -> Result<StmtId, ()>
+    fn parse_continue_stmt(&mut self) -> KaiResult<StmtId>
     {
         let stmt = Statement {
             module: self.module,
@@ -87,7 +87,7 @@ impl<'m> Parser<'m>
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn parse_return_stmt(&mut self) -> Result<StmtId, ()>
+    fn parse_return_stmt(&mut self) -> KaiResult<StmtId>
     {
         let start = self.consume(TokenType::Return)?.span;
         let mut result = None;
@@ -108,7 +108,7 @@ impl<'m> Parser<'m>
         Ok(self.ast.add_stmt(stmt))
     }
 
-    fn if_statement(&mut self) -> Result<StmtId, ()>
+    fn if_statement(&mut self) -> KaiResult<StmtId>
     {
         let start = self.consume(TokenType::If)?.span;
         let condition = {
@@ -145,7 +145,7 @@ impl<'m> Parser<'m>
         Ok(parent)
     }
 
-    fn while_statement(&mut self) -> Result<StmtId, ()>
+    fn while_statement(&mut self) -> KaiResult<StmtId>
     {
         let start = self.consume(TokenType::While)?.span;
 
@@ -170,7 +170,7 @@ impl<'m> Parser<'m>
         Ok(parent)
     }
 
-    pub(super) fn block_statement(&mut self) -> Result<StmtId, ()>
+    pub(super) fn block_statement(&mut self) -> KaiResult<StmtId>
     {
         let start_span = self.consume(TokenType::OpenBrace)?.span;
         let mut block_body = Vec::new();
@@ -199,7 +199,7 @@ impl<'m> Parser<'m>
 
         let stmt = Statement {
             module: self.module,
-            span: CodeSpan::combine(&start_span, &end_span),
+            span: (start_span..end_span).into(),
             data: block,
             parent: None,
         };

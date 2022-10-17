@@ -13,7 +13,7 @@ pub fn traverse_statement(
     compiler: &mut Compiler,
     ast: &ASTree,
     statement_id: StmtId,
-) -> Result<(), ()>
+) -> KaiResult<()>
 {
     let statement = ast.get_stmt(statement_id);
 
@@ -23,14 +23,14 @@ pub fn traverse_statement(
         Expression(expr_id) =>
         {
             let expr = ast.get_expr(*expr_id);
-            traverse_expression(compiler, ast, expr);
+            traverse_expression(compiler, ast, expr)?;
             Ok(())
         }
 
         Print(expr_id) =>
         {
             let expr = ast.get_expr(*expr_id);
-            traverse_expression(compiler, ast, expr);
+            traverse_expression(compiler, ast, expr)?;
             compiler.emit_op(IRCode::DebugPrint);
             Ok(())
         }
@@ -38,7 +38,7 @@ pub fn traverse_statement(
         If(cond_expr, if_id, else_block) =>
         {
             let expr = ast.get_expr(*cond_expr);
-            traverse_expression(compiler, ast, expr);
+            traverse_expression(compiler, ast, expr)?;
 
             let jnt_position = compiler.reserve_one();
             traverse_statement(compiler, ast, *if_id)?;
@@ -66,7 +66,7 @@ pub fn traverse_statement(
             let expr = ast.get_expr(*expr_id);
 
             let conditional_expr = compiler.codes.len();
-            traverse_expression(compiler, ast, expr);
+            traverse_expression(compiler, ast, expr)?;
 
             let jnt_position = compiler.reserve_one();
             let mut reserve_patches = Vec::with_capacity(255);
@@ -92,7 +92,7 @@ pub fn traverse_statement(
         }
 
         Block(innerblock) => traverse_block(compiler, ast, innerblock),
-        Declaration(ref decl) => Ok(traverse_vardecl(compiler, ast, decl)),
+        Declaration(ref decl) => traverse_vardecl(compiler, ast, decl),
 
         Break =>
         {
@@ -111,7 +111,7 @@ pub fn traverse_statement(
                 Some(expr_id) =>
                 {
                     let expr = ast.get_expr(*expr_id);
-                    traverse_expression(compiler, ast, expr);
+                    traverse_expression(compiler, ast, expr)?;
                 }
                 None =>
                 {
@@ -125,13 +125,12 @@ pub fn traverse_statement(
         Function(_) => Ok(()),
         _ =>
         {
-            statement.report("Unimplemented", "実装前です");
-            Err(())
+            return statement.report("Unimplemented", "実装前です");
         }
     }
 }
 
-fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner_statement: &[StmtId]) -> Result<(), ()>
+fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner_statement: &[StmtId]) -> KaiResult<()>
 {
     for stmt_id in inner_statement
     {
@@ -140,12 +139,12 @@ fn traverse_block(compiler: &mut Compiler, ast: &ASTree, inner_statement: &[Stmt
     Ok(())
 }
 
-fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData)
+fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationData) -> KaiResult<()>
 {
     if let Some(expr) = decl.expr
     {
         let expr = ast.get_expr(expr);
-        traverse_expression(compiler, ast, expr);
+        traverse_expression(compiler, ast, expr)?;
         /*
         if let Some(local_idx) = expr.local_idx
         {
@@ -162,5 +161,6 @@ fn traverse_vardecl(compiler: &mut Compiler, ast: &ASTree, decl: &DeclarationDat
         }
         */
     }
+    Ok(())
 }
 

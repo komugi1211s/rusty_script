@@ -18,7 +18,7 @@ pub struct Parser<'m>
 {
     module: &'m SourceFile,
     ast: ASTree<'m>,
-    tokens: &'m [Token<'m>],
+    tokens: &'m [Token],
     current: usize,
     assign_count: usize,
     block_count: usize,
@@ -26,10 +26,10 @@ pub struct Parser<'m>
 
 impl<'m> Parser<'m>
 {
-    pub fn new(module: &'m SourceFile, tokens: &'m Vec<Token<'m>>) -> Self
+    pub fn new(module: &'m SourceFile, tokens: &'m Vec<Token>) -> Self
     {
         // FIXME - @DumbCode
-        assert!(module == tokens[0].file);
+        assert!(module.id == tokens[0].span.file);
         Self {
             ast: ASTree::new(),
             module,
@@ -40,7 +40,7 @@ impl<'m> Parser<'m>
         }
     }
 
-    pub fn parse(mut self) -> Result<ASTree<'m>, ()>
+    pub fn parse(mut self) -> KaiResult<ASTree<'m>>
     {
         while !self.is_at_end()
         {
@@ -70,15 +70,12 @@ impl<'m> Parser<'m>
         }
     }
 
-    fn declaration(&mut self) -> Result<StmtId, ()>
+    fn declaration(&mut self) -> KaiResult<StmtId>
     {
 
-        let res = if self.is(TokenType::Iden) && self.is_next(TokenType::Colon)
-        {
+        let res = if self.is(TokenType::Iden) && self.is_next(TokenType::Colon) {
             self.parse_variable()
-        }
-        else
-        {
+        } else {
             self.statement()
         };
 
@@ -86,18 +83,18 @@ impl<'m> Parser<'m>
     }
 
     #[allow(dead_code)]
-    fn directive(&mut self) -> Result<StmtId, ()>
+    fn directive(&mut self) -> KaiResult<StmtId>
     {
         unimplemented!()
     }
 
-    fn expression(&mut self) -> Result<Expression<'m>, ()>
+    fn expression(&mut self) -> KaiResult<Expression<'m>>
     {
         let x = self.assignment();
         x
     }
 
-    fn assignment(&mut self) -> Result<Expression<'m>, ()>
+    fn assignment(&mut self) -> KaiResult<Expression<'m>>
     {
         let left_hand = self.logical_or()?;
 
@@ -129,15 +126,14 @@ impl<'m> Parser<'m>
             }
             else
             {
-                left_hand.report("Invalid Assignment Target", "値の割当を行う対象が不正です.");
-                return Err(());
+                return left_hand.report("Invalid Assignment Target", "値の割当を行う対象が不正です.");
             }
         }
 
         Ok(left_hand)
     }
 
-    pub fn logical_or(&mut self) -> Result<Expression<'m>, ()>
+    pub fn logical_or(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.logical_and()?;
@@ -165,7 +161,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    pub fn logical_and(&mut self) -> Result<Expression<'m>, ()>
+    pub fn logical_and(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.equality()?;
@@ -192,7 +188,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expression<'m>, ()>
+    fn equality(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.comparison()?;
@@ -223,7 +219,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<Expression<'m>, ()>
+    fn comparison(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.addition()?;
@@ -259,7 +255,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<Expression<'m>, ()>
+    fn addition(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.multiplification()?;
@@ -292,7 +288,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn multiplification(&mut self) -> Result<Expression<'m>, ()>
+    fn multiplification(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let mut expr = self.unary()?;
@@ -326,7 +322,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expression<'m>, ()>
+    fn unary(&mut self) -> KaiResult<Expression<'m>>
     {
         let start_span = self.get_current().span;
         let operator = match self.get_current().tokentype
@@ -358,7 +354,7 @@ impl<'m> Parser<'m>
         self.postfix()
     }
 
-    fn postfix(&mut self) -> Result<Expression<'m>, ()>
+    fn postfix(&mut self) -> KaiResult<Expression<'m>>
     {
         let mut expr = self.primary()?;
 
@@ -376,7 +372,7 @@ impl<'m> Parser<'m>
         Ok(expr)
     }
 
-    fn parse_field(&mut self, variable: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_field(&mut self, variable: Expression<'m>) -> KaiResult<Expression<'m>>
     {
         self.consume(TokenType::Dot)?;
         let right_hand_expr = self.postfix()?;
@@ -394,14 +390,12 @@ impl<'m> Parser<'m>
         Ok(expr.init())
     }
 
-    fn parse_unwrap(&mut self, _e: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_unwrap(&mut self, e: Expression<'m>) -> KaiResult<Expression<'m>>
     {
-        self.get_current()
-            .report("Unimplemented Feature", "Unwrap機能は実装されていません。");
-        Err(())
+        e.report("Unimplemented Feature", "Unwrap機能は実装されていません。")
     }
 
-    fn parse_array_ref(&mut self, var: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_array_ref(&mut self, var: Expression<'m>) -> KaiResult<Expression<'m>>
     {
         let mut expr = ExprInit {
             kind: ExprKind::ArrayRef,
@@ -418,7 +412,7 @@ impl<'m> Parser<'m>
         Ok(expr.init())
     }
 
-    fn parse_func_call(&mut self, var: Expression<'m>) -> Result<Expression<'m>, ()>
+    fn parse_func_call(&mut self, var: Expression<'m>) -> KaiResult<Expression<'m>>
     {
         let mut expr = ExprInit {
             kind: ExprKind::FunctionCall,
@@ -469,20 +463,20 @@ impl<'m> Parser<'m>
         !self.is_at_end() && self.get_previous().tokentype == _type
     }
 
-    fn get_current(&self) -> &Token<'m>
+    fn get_current(&self) -> &Token
     {
         let x = self.tokens.get(self.current).unwrap();
         x
     }
 
     #[allow(dead_code)]
-    fn get_previous(&self) -> &Token<'m>
+    fn get_previous(&self) -> &Token
     {
         let x = self.tokens.get(self.current - 1).unwrap();
         x
     }
 
-    fn get_next(&self) -> &Token<'m>
+    fn get_next(&self) -> &Token
     {
         if self.current + 1 >= self.tokens.len()
         {
@@ -492,14 +486,14 @@ impl<'m> Parser<'m>
         x
     }
 
-    fn advance(&mut self) -> &Token<'m>
+    fn advance(&mut self) -> &Token
     {
         self.current += 1;
         let x = self.tokens.get(self.current - 1).unwrap();
         x
     }
 
-    fn primary(&mut self) -> Result<Expression<'m>, ()>
+    fn primary(&mut self) -> KaiResult<Expression<'m>>
     {
         let inside = self.advance().clone();
 
@@ -521,9 +515,8 @@ impl<'m> Parser<'m>
                     if let Ok(n) = inside_lexeme.parse() {
                         Value::Float(n)
                     } else {
-                        inside.report("Broken Float Literal",
-                                      "実数を期待しましたがパースに失敗しました。");
-                        return Err(());
+                        return inside.report("Broken Float Literal",
+                                             "実数を期待しましたがパースに失敗しました。")
                     }
                 }
                 else
@@ -531,9 +524,8 @@ impl<'m> Parser<'m>
                     if let Ok(n) = inside_lexeme.parse() {
                         Value::Int(n)
                     } else {
-                        inside.report("Broken Integer Literal",
-                                      "整数を期待しましたがパースに失敗しました。");
-                        return Err(());
+                        return inside.report("Broken Integer Literal",
+                                             "整数を期待しましたがパースに失敗しました。");
                     }
                 };
 
@@ -580,8 +572,7 @@ impl<'m> Parser<'m>
                                     inside_lexeme.len(),
                                     MAX_IDENTIFIER_LENGTH
                                 );
-                                inside.report("Maximum Identifier Length Exceeded", &msg);
-                                Err(())
+                                return inside.report("Maximum Identifier Length Exceeded", &msg);
                             }
                             else
                             {
@@ -633,15 +624,14 @@ impl<'m> Parser<'m>
                              \n未知のトークン: {:?}",
                     inside
                 );
-                inside.report("Unknown Token", &formatted);
-                Err(())
+                return inside.report("Unknown Token", &formatted);
             }
         };
 
         result
     }
 
-    fn consume(&mut self, expected: TokenType) -> Result<&Token, ()>
+    fn consume(&mut self, expected: TokenType) -> KaiResult<&Token>
     {
         // TODO - @DumbCode: 無駄なクローンを許すな
         if self.is(expected)
@@ -649,12 +639,14 @@ impl<'m> Parser<'m>
             return Ok(self.advance());
         }
         let actual = self.get_current();
-        let message = format!(
-            "想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
-            expected, actual.tokentype
-        );
 
-        actual.report("Invalid Token", &message);
-        Err(())
+        Err(KaiError {
+            title: "Invalid Token".to_owned(),
+            message: format!(
+                "想定していたトークン ({:?}) と違うもの ({:?}) が検知されました。",
+                expected, actual.tokentype
+            ),
+            span: actual.span
+        })
     }
 }

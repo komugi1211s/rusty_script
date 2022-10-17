@@ -3,10 +3,11 @@ pub mod token;
 use token::{match_identity, Token, TokenType};
 use super::trace::prelude::*;
 
-pub struct Tokenizer<'m>
+pub struct Tokenizer
 {
+    id: FileId,
     source: Vec<char>,
-    tokens: Vec<Token<'m>>,
+    tokens: Vec<Token>,
     start: usize,
     current: usize,
 
@@ -16,13 +17,14 @@ pub struct Tokenizer<'m>
     current_column: usize,
 }
 
-type TResult = Result<(), ()>;
+type TResult = KaiResult<()>;
 
-impl<'m> Tokenizer<'m>
+impl Tokenizer
 {
     pub fn new(reserve_length: usize) -> Self
     {
         Tokenizer {
+            id: FileId(0),
             source: Vec::with_capacity(reserve_length),
             tokens: Vec::with_capacity(reserve_length),
             start: 0,
@@ -43,61 +45,62 @@ impl<'m> Tokenizer<'m>
         self.start_column = self.current_column;
     }
 
-    pub fn scan(&mut self, modu: &'m SourceFile) -> Result<Vec<Token<'m>>, ()>
+    pub fn scan(&mut self, modu: &SourceFile) -> KaiResult<Vec<Token>>
     {
+        self.id = modu.id;
         self.source.extend(modu.code.chars());
         while !self.is_at_end()
         {
             self.set_start_index();
-            self.scan_next_token(modu)?;
+            self.scan_next_token()?;
         }
 
         let span = self.create_current_span();
-        self.tokens.push(Token::simple(modu, TokenType::EOF, span));
+        self.tokens.push(Token::simple(TokenType::EOF, span));
         Ok(self.tokens.to_owned())
     }
 
-    fn scan_next_token(&mut self, module: &'m SourceFile) -> TResult
+    fn scan_next_token(&mut self) -> TResult
     {
         let c: char = self.advance();
         match c
         {
-            '(' => self.add_simple(module, TokenType::OpenParen),
-            ')' => self.add_simple(module, TokenType::CloseParen),
-            '{' => self.add_simple(module, TokenType::OpenBrace),
-            '}' => self.add_simple(module, TokenType::CloseBrace),
-            '[' => self.add_simple(module, TokenType::OpenSquareBracket),
-            ']' => self.add_simple(module, TokenType::CloseSquareBracket),
-            '@' => self.add_simple(module, TokenType::AtMark),
-            ':' => self.add_simple(module, TokenType::Colon),
-            ';' => self.add_simple(module, TokenType::SemiColon),
-            '.' => self.add_simple(module, TokenType::Dot),
-            ',' => self.add_simple(module, TokenType::Comma),
-            '+' => self.add_simple(module, TokenType::Plus),
-            '-' => self.add_simple(module, TokenType::Minus),
-            '*' => self.add_simple(module, TokenType::Asterisk),
-            '%' => self.add_simple(module, TokenType::Percent),
-            '?' => self.add_simple(module, TokenType::Question),
-            '^' => self.add_simple(module, TokenType::Caret),
+            '(' => self.add_simple(TokenType::OpenParen),
+            ')' => self.add_simple(TokenType::CloseParen),
+            '{' => self.add_simple(TokenType::OpenBrace),
+            '}' => self.add_simple(TokenType::CloseBrace),
+            '[' => self.add_simple(TokenType::OpenSquareBracket),
+            ']' => self.add_simple(TokenType::CloseSquareBracket),
+            '@' => self.add_simple(TokenType::AtMark),
+            ':' => self.add_simple(TokenType::Colon),
+            ';' => self.add_simple(TokenType::SemiColon),
+            '.' => self.add_simple(TokenType::Dot),
+            ',' => self.add_simple(TokenType::Comma),
+            '+' => self.add_simple(TokenType::Plus),
+            '-' => self.add_simple(TokenType::Minus),
+            '*' => self.add_simple(TokenType::Asterisk),
+            '%' => self.add_simple(TokenType::Percent),
+            '?' => self.add_simple(TokenType::Question),
+            '^' => self.add_simple(TokenType::Caret),
             '=' => match self.next_is('=')
             {
-                true => self.add_simple(module, TokenType::EqualEqual),
-                false => self.add_simple(module, TokenType::Equal),
+                true => self.add_simple(TokenType::EqualEqual),
+                false => self.add_simple(TokenType::Equal),
             },
             '>' => match self.next_is('=')
             {
-                true => self.add_simple(module, TokenType::MoreEqual),
-                false => self.add_simple(module, TokenType::More),
+                true => self.add_simple(TokenType::MoreEqual),
+                false => self.add_simple(TokenType::More),
             },
             '<' => match self.next_is('=')
             {
-                true => self.add_simple(module, TokenType::LessEqual),
-                false => self.add_simple(module, TokenType::Less),
+                true => self.add_simple(TokenType::LessEqual),
+                false => self.add_simple(TokenType::Less),
             },
             '!' => match self.next_is('=')
             {
-                true => self.add_simple(module, TokenType::NotEqual),
-                false => self.add_simple(module, TokenType::Bang),
+                true => self.add_simple(TokenType::NotEqual),
+                false => self.add_simple(TokenType::Bang),
             },
             '/' =>
             {
@@ -135,7 +138,7 @@ impl<'m> Tokenizer<'m>
                         Ok(())
                     }
 
-                    _ => self.add_simple(module, TokenType::Slash),
+                    _ => self.add_simple(TokenType::Slash),
                 }
             }
 
@@ -146,19 +149,22 @@ impl<'m> Tokenizer<'m>
             '\n' => self.add_newline(),
 
             // 文字列を追加
-            '"' => self.add_string(module),
+            '"' => self.add_string(),
 
             // 数字全般を単発で判定
-            '0'..='9' => self.add_digit(module),
-            'A'..='z' => self.add_possible_iden(module),
+            '0'..='9' => self.add_digit(),
+            'A'..='z' => self.add_possible_iden(),
 
             // Default
             def =>
             {
                 let span = self.create_current_span();
-                report("Unknown Token", &format!("未知のトークン {} を発見しました。", def));
-                spit_line(module, &span);
-                Err(())
+
+                Err(KaiError {
+                    title: String::from("Unknown Token"),
+                    message: format!("未知のトークン {} を発見しました。", def),
+                    span
+                })
             }
         }
     }
@@ -181,7 +187,7 @@ impl<'m> Tokenizer<'m>
         Ok(())
     }
 
-    fn add_string(&mut self, module: &'m SourceFile) -> TResult
+    fn add_string(&mut self) -> TResult
     {
         while !self.is_at_end() && self.peek() != '"'
         {
@@ -195,16 +201,18 @@ impl<'m> Tokenizer<'m>
         // Unterminated String
         if self.is_at_end()
         {
-            report("Unterminated String", "\n文字列が閉じられていません。\n");
-            spit_line(module, &self.create_current_span());
-            return Err(());
+            return Err(KaiError {
+                title: "Unterminated String".to_owned(),
+                message: "\n文字列が閉じられていません。\n".to_owned(),
+                span: self.create_current_span()
+            });
         }
 
         self.advance();
         // start + 1 & current - 1 は "" ←これを削る
         self.start += 1;
         self.current -= 1;
-        let z = self.add_lexed(module, TokenType::Str);
+        let z = self.add_lexed(TokenType::Str);
         // もとに戻す
         self.start -= 1;
         self.current += 1;
@@ -241,7 +249,7 @@ impl<'m> Tokenizer<'m>
         }
     }
 
-    fn add_digit(&mut self, module: &'m SourceFile) -> TResult
+    fn add_digit(&mut self) -> TResult
     {
         // Advance while it's numeric
         loop
@@ -265,10 +273,10 @@ impl<'m> Tokenizer<'m>
             }
         }
 
-        self.add_lexed(module, TokenType::Digit)
+        self.add_lexed(TokenType::Digit)
     }
 
-    fn add_possible_iden(&mut self, module: &'m SourceFile) -> TResult
+    fn add_possible_iden(&mut self) -> TResult
     {
         while self.peek().is_ascii_alphanumeric() || self.peek() == '_'
         {
@@ -279,11 +287,11 @@ impl<'m> Tokenizer<'m>
         let possible_result = match_identity(&stri);
         if possible_result.is_none()
         {
-            self.add_lexed(module, TokenType::Iden)
+            self.add_lexed(TokenType::Iden)
         }
         else
         {
-            self.add_simple(module, possible_result.unwrap())
+            self.add_simple(possible_result.unwrap())
         }
     }
 
@@ -297,6 +305,7 @@ impl<'m> Tokenizer<'m>
     fn create_current_span(&self) -> CodeSpan
     {
         CodeSpan::new(
+            self.id,
             self.start_line,
             self.current_line.saturating_sub(self.start_line),
             self.start_column,
@@ -304,19 +313,18 @@ impl<'m> Tokenizer<'m>
         )
     }
 
-    fn add_simple(&mut self, module: &'m SourceFile, tokentype: TokenType) -> TResult
+    fn add_simple(&mut self, tokentype: TokenType) -> TResult
     {
         self.tokens
-            .push(Token::simple(module, tokentype, self.create_current_span()));
+            .push(Token::simple(tokentype, self.create_current_span()));
         Ok(())
     }
 
-    fn add_lexed(&mut self, module: &'m SourceFile, tokentype: TokenType) -> TResult
+    fn add_lexed(&mut self, tokentype: TokenType) -> TResult
     {
         let string: String = self.source[self.start..self.current].iter().collect();
 
         self.tokens.push(Token::lexed(
-            module,
             tokentype,
             self.create_current_span(),
             string,

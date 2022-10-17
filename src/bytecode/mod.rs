@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use super::{
+    trace::prelude::*,
     global::Global,
     ast::*,
     semantic::{ SymTable },
@@ -117,7 +118,7 @@ pub struct Patch
     position: usize,
 }
 
-fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionData) -> Result<(), ()>
+fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionData) -> KaiResult<()>
 {
     if compiler.function_idx.contains_key(&func_node.it.name) 
     {
@@ -142,7 +143,7 @@ fn prepare_function(compiler: &mut Compiler, ast: &ASTree, func_node: &FunctionD
 }
 
 
-pub fn generate_bytecode(global: &Global, ast: &ASTree) -> Result<CompiledCode, ()>
+pub fn generate_bytecode(global: &Global, ast: &ASTree) -> KaiResult<CompiledCode>
 {
     let mut compiler = Compiler::new(&global.symtable);
     for func_node in ast.functions.iter()

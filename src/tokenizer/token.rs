@@ -85,44 +85,38 @@ pub fn match_identity(keywords: &str) -> Option<TokenType>
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token<'m>
-{
-    pub file: &'m SourceFile,
+pub struct Token {
     pub tokentype: TokenType,
-    pub span: CodeSpan,
     pub lexeme: Option<String>,
+    pub span: CodeSpan,
 }
 
-impl<'m> Token<'m>
+impl Token
 {
-    pub fn simple(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan) -> Self
+    pub fn simple(tokentype: TokenType, span: CodeSpan) -> Self
     {
         Token {
-            file,
             tokentype,
             span,
             lexeme: None,
         }
     }
-    pub fn lexed(file: &'m SourceFile, tokentype: TokenType, span: CodeSpan, lexeme: String)
+    pub fn lexed(tokentype: TokenType, span: CodeSpan, lexeme: String)
         -> Self
     {
         Token {
-            file,
             tokentype,
             span,
             lexeme: Some(lexeme),
         }
     }
 
-    pub fn report(&self, title: &str, message: &str)
-    {
-        report(title, message);
-        spit_line(self.file, &self.span);
+    pub fn report<T>(&self, title: &str, message: &str) -> KaiResult<T> {
+        KaiError::new(title, message, self.span)
     }
 }
 
-impl fmt::Display for Token<'_>
+impl fmt::Display for Token
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
