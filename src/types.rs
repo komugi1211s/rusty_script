@@ -14,7 +14,6 @@ pub enum TypeKind
     Float,
     Str,
     Boolean,
-    Null,
 
     // Non-Primitives.
     Array,
@@ -33,7 +32,7 @@ impl Default for TypeKind
 {
     fn default() -> Self
     {
-        TypeKind::Null
+        TypeKind::Optional
     }
 }
 
@@ -129,7 +128,7 @@ impl Type
     pub fn null() -> Self
     {
         Self {
-            kind: TypeKind::Null,
+            kind: TypeKind::Optional,
             ..Default::default()
         }
     }
@@ -154,7 +153,7 @@ impl Type
 
     pub fn is_null(&self) -> bool
     {
-        self.kind == TypeKind::Null
+        self.kind == TypeKind::Optional && self.contained_type.is_none()
     }
 
     pub fn typevar(id: usize) -> Self
@@ -200,7 +199,7 @@ impl std::fmt::Display for Type
                     }
                     else
                     {
-                        unreachable!();
+                        format!("null")
                     }
                 }
                 Function =>
@@ -232,7 +231,6 @@ impl std::fmt::Display for Type
 
                     format!("{:?} {{ {} }}", self.kind, members)
                 }
-                Null => "null".into(),
                 TypeVar => "<T>".into() // Should be safe, don't quote me
             }
         )

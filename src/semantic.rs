@@ -476,6 +476,7 @@ fn resolve_statement(table: &mut SymTable, sema: &mut Sema, ast: &mut ASTree, st
                 (Some(mut x), Some(mut y)) =>
                 {
                     unify_type(&mut x, &mut y);
+
                     if type_match(&x, &y) {
                         symbol.types = Some(x);
                     }
@@ -730,15 +731,24 @@ fn type_match(lhs: &Type, rhs: &Type) -> bool
         }
         (Optional, Optional) =>
         {
-            let lhs_ref = expect_opt!(lhs.contained_type.as_ref(),
-                                      "Optional型が正常に解決されませんでした。");
-            let rhs_ref = expect_opt!(rhs.contained_type.as_ref(),
-                                      "Optional型が正常に解決されませんでした。");
-
-            lhs.kind == TypeKind::Null
-            || rhs.kind == TypeKind::Null
-            || type_match(&*lhs_ref, &*rhs_ref)
+            lhs.is_null() || rhs.is_null() || {
+                let lhs_ref = expect_opt!(lhs.contained_type.as_ref(),
+                                          "Optional型が正常に解決されませんでした。");
+                let rhs_ref = expect_opt!(rhs.contained_type.as_ref(),
+                                          "Optional型が正常に解決されませんでした。");
+                type_match(&*lhs_ref, &*rhs_ref)
+            }
         }
+        (Optional, _) => if let Some(inner) = lhs.contained_type.as_ref() {
+            type_match(inner, rhs)
+        } else {
+            false
+        },
+        (_, Optional) => if let Some(inner) = rhs.contained_type.as_ref() {
+            type_match(inner, rhs)
+        } else {
+            false
+        },
         (x, y) => x == y
     }
 }
@@ -817,7 +827,7 @@ fn resolve_expr(table: &mut SymTable, sema: &mut Sema, expr: &mut Expression<'_>
             let lhs_type = expect_opt!(lhs.end_type.as_ref(), "SolveTypeが正常にLHSの型を解決していません。");
             let rhs_type = expect_opt!(rhs.end_type.as_ref(), "SolveTypeが正常にRHSの型を解決していません。");
 
-            if type_match(lhs_type, rhs_type) && check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
+            if type_match(lhs_type, rhs_type) //&& check_operator_compatibility(expr.oper.as_ref().unwrap(), lhs_type)
             {
                 expr.end_type = lhs.end_type.clone();
                 Ok(())

@@ -6,13 +6,12 @@ pub mod prelude
 {
     pub use super::position::CodeSpan;
     pub use super::source::{ FileId, SourceFile };
-    pub use crate::{ err_fatal, expect, expect_opt };
-    pub use super::{ error_reported, report, spit_line, report_compiler_bug, KaiError, KaiResult };
+    pub use crate::{ expect, expect_opt };
+    pub use super::{ report, spit_line, report_compiler_bug, KaiError, KaiResult };
 }
 
 use std::sync::atomic::AtomicBool;
 pub use source::SourceFile;
-pub use source::FileId;
 pub use position::CodeSpan;
 
 pub static ERROR_REPORTED: AtomicBool = AtomicBool::new(false);
